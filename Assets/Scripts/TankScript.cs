@@ -12,7 +12,6 @@ public class TankController : MonoBehaviour
 
     private Rigidbody2D rb;
     private float lastShotTime;
-    private bool isTouchingWall = false; // Tracks if the tank is touching a wall
 
     private void Awake()
     {
@@ -39,12 +38,6 @@ public class TankController : MonoBehaviour
         if (moveInput != 0)
         {
             rb.constraints = RigidbodyConstraints2D.FreezeRotation;
-
-            // Stop movement completely if colliding with a wall
-            if (isTouchingWall)
-            {
-                moveVector = Vector2.zero;
-            }
         }
 
         rb.MovePosition(rb.position + moveVector);
@@ -58,12 +51,6 @@ public class TankController : MonoBehaviour
         if (rotationInput != 0)
         {
             rb.constraints = RigidbodyConstraints2D.None;
-
-            // Prevent movement caused by rotation if touching a wall
-            if (isTouchingWall)
-            {
-                rb.velocity = Vector2.zero; // Nullify any unintended movement
-            }
         }
 
         rb.MoveRotation(rb.rotation - rotation);
@@ -101,16 +88,7 @@ public class TankController : MonoBehaviour
     {
         if (collision.gameObject.CompareTag("Wall"))
         {
-            isTouchingWall = true; // Track wall contact
             rb.velocity = Vector2.zero; // Stop all motion
-        }
-    }
-
-    private void OnCollisionExit2D(Collision2D collision)
-    {
-        if (collision.gameObject.CompareTag("Wall"))
-        {
-            isTouchingWall = false; // No longer touching the wall
         }
     }
 }
