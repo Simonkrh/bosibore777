@@ -84,7 +84,7 @@ public class TankController : NetworkBehaviour
         Rigidbody2D projectileRb = projectile.GetComponent<Rigidbody2D>();
         if (projectileRb != null)
         {
-            projectileRb.velocity = transform.up * projectileSpeed;
+            projectileRb.linearVelocity = transform.up * projectileSpeed;
         }
         else
         {
@@ -108,7 +108,7 @@ public class TankController : NetworkBehaviour
     {
         if (collision.gameObject.CompareTag("Wall"))
         {
-            rb.velocity = Vector2.zero; // Stop all motion
+            rb.linearVelocity = Vector2.zero; // Stop all motion
         }
     }
 }
