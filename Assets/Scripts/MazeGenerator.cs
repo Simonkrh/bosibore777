@@ -2,15 +2,23 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class ThinWallMazeGenerator : MonoBehaviour
+public class Cell
 {
-    public int width = 15; // Number of cells horizontally
-    public int height = 15; // Number of cells vertically
-    public GameObject thinWallPrefab; // Prefab for thin walls
-    public GameObject floorPrefab; // Prefab for the floor
-    public float cellSize = 1.0f; // Size of each cell
+    public bool visited = false;
+    public bool[] walls = { true, true, true, true }; // North, East, South, West
+}
 
-    private int[,] maze; // The maze grid (1 = wall, 0 = path)
+public class MazeGenerator : MonoBehaviour
+{
+    public int width = 15;
+    public int height = 15;
+    public float cellSize = 1.0f;
+
+    public GameObject floorPrefab;
+    public GameObject wallPrefab;
+
+    private Cell[,] grid;
+    private Stack<Vector2Int> stack = new Stack<Vector2Int>();
 
     void Start()
     {
@@ -20,125 +28,158 @@ public class ThinWallMazeGenerator : MonoBehaviour
 
     void GenerateMaze()
     {
-        // Initialize maze grid
-        maze = new int[width * 2 + 1, height * 2 + 1];
+        grid = new Cell[width, height];
 
-        // Fill the maze with walls
-        for (int x = 0; x < maze.GetLength(0); x++)
+        for (int x = 0; x < width; x++)
         {
-            for (int y = 0; y < maze.GetLength(1); y++)
+            for (int y = 0; y < height; y++)
             {
-                maze[x, y] = 1; // 1 = Wall
+                grid[x, y] = new Cell();
             }
         }
 
-        // Carve the paths
-        CarvePath(1, 1);
+        // Start maze generation from the top-left cell
+        Vector2Int currentCell = new Vector2Int(0, 0);
+        grid[currentCell.x, currentCell.y].visited = true;
 
-        // Add additional openings if needed
-        AddOpenings();
-    }
+        // Begin the recursive backtracking algorithm
+        stack.Push(currentCell);
 
-    void CarvePath(int x, int y)
-    {
-        maze[x, y] = 0; // Mark the current cell as a path
-
-        // Randomized directions for carving
-        List<Vector2Int> directions = new List<Vector2Int> {
-            Vector2Int.up,
-            Vector2Int.down,
-            Vector2Int.left,
-            Vector2Int.right
-        };
-        Shuffle(directions);
-
-        foreach (var direction in directions)
+        while (stack.Count > 0)
         {
-            int nx = x + direction.x * 2; // Neighbor cell
-            int ny = y + direction.y * 2;
+            currentCell = stack.Pop();
+            List<Vector2Int> neighbors = GetUnvisitedNeighbors(currentCell);
 
-            if (nx > 0 && nx < maze.GetLength(0) - 1 && ny > 0 && ny < maze.GetLength(1) - 1 && maze[nx, ny] == 1)
+            if (neighbors.Count > 0)
             {
-                // Carve the wall between the current cell and the neighbor
-                maze[x + direction.x, y + direction.y] = 0;
-                // Recursively carve the neighbor
-                CarvePath(nx, ny);
+                stack.Push(currentCell);
+
+                // Choose a random neighbor
+                Vector2Int chosenNeighbor = neighbors[Random.Range(0, neighbors.Count)];
+
+                // Remove the wall between current cell and chosen neighbor
+                RemoveWall(currentCell, chosenNeighbor);
+
+                // Mark the neighbor as visited and push it to the stack
+                grid[chosenNeighbor.x, chosenNeighbor.y].visited = true;
+                stack.Push(chosenNeighbor);
             }
         }
     }
 
-    void AddOpenings()
+    List<Vector2Int> GetUnvisitedNeighbors(Vector2Int cell)
     {
-        // Add random openings around the edges of the maze
-        for (int i = 0; i < 2; i++)
+        List<Vector2Int> neighbors = new List<Vector2Int>();
+
+        // North neighbor
+        if (cell.y + 1 < height && !grid[cell.x, cell.y + 1].visited)
         {
-            int x = Random.Range(1, width * 2 - 1);
-            int y = (i == 0) ? 0 : height * 2; // Top or bottom edge
-            maze[x, y] = 0;
+            neighbors.Add(new Vector2Int(cell.x, cell.y + 1));
         }
-    }
 
-   void DrawMaze()
-{
-    // Clear existing children
-    foreach (Transform child in transform)
-    {
-        Destroy(child.gameObject);
-    }
-
-    // Draw the maze
-    for (int x = 0; x < maze.GetLength(0); x++)
-    {
-        for (int y = 0; y < maze.GetLength(1); y++)
+        // East neighbor
+        if (cell.x + 1 < width && !grid[cell.x + 1, cell.y].visited)
         {
-            // Determine the position in the world
-            float posX = (x / 2f) * cellSize;
-            float posY = (y / 2f) * cellSize;
-            Vector3 position = new Vector3(posX, posY, 0);
+            neighbors.Add(new Vector2Int(cell.x + 1, cell.y));
+        }
 
-            if (maze[x, y] == 1)
+        // South neighbor
+        if (cell.y - 1 >= 0 && !grid[cell.x, cell.y - 1].visited)
+        {
+            neighbors.Add(new Vector2Int(cell.x, cell.y - 1));
+        }
+
+        // West neighbor
+        if (cell.x - 1 >= 0 && !grid[cell.x - 1, cell.y].visited)
+        {
+            neighbors.Add(new Vector2Int(cell.x - 1, cell.y));
+        }
+
+        return neighbors;
+    }
+
+    void RemoveWall(Vector2Int current, Vector2Int neighbor)
+    {
+        if (current.x == neighbor.x)
+        {
+            if (current.y > neighbor.y)
             {
-                if (x % 2 == 1 && y % 2 == 1)
-                {
-                    // This is a cell center; do nothing.
-                }
-                else if (x % 2 == 0 && y % 2 == 0)
-                {
-                    // This is a corner; you can skip or place a small block if desired.
-                }
-                else if (x % 2 == 0 && y % 2 == 1)
-                {
-                    // Vertical wall
-                    Instantiate(thinWallPrefab, position, Quaternion.identity, transform);
-                }
-                else if (x % 2 == 1 && y % 2 == 0)
-                {
-                    // Horizontal wall (rotate 90 degrees)
-                    Instantiate(thinWallPrefab, position, Quaternion.Euler(0, 0, 90), transform);
-                }
+                // Neighbor is south
+                grid[current.x, current.y].walls[2] = false; // Remove south wall
+                grid[neighbor.x, neighbor.y].walls[0] = false; // Remove north wall
             }
             else
             {
-                if (x % 2 == 1 && y % 2 == 1)
-                {
-                    // This is a path cell; place a floor tile.
-                    Instantiate(floorPrefab, position, Quaternion.identity, transform);
-                }
-                // Open space (no wall); do nothing.
+                // Neighbor is north
+                grid[current.x, current.y].walls[0] = false; // Remove north wall
+                grid[neighbor.x, neighbor.y].walls[2] = false; // Remove south wall
+            }
+        }
+        else if (current.y == neighbor.y)
+        {
+            if (current.x > neighbor.x)
+            {
+                // Neighbor is west
+                grid[current.x, current.y].walls[3] = false; // Remove west wall
+                grid[neighbor.x, neighbor.y].walls[1] = false; // Remove east wall
+            }
+            else
+            {
+                // Neighbor is east
+                grid[current.x, current.y].walls[1] = false; // Remove east wall
+                grid[neighbor.x, neighbor.y].walls[3] = false; // Remove west wall
             }
         }
     }
-}
 
-
-    void Shuffle<T>(IList<T> list)
+    void DrawMaze()
     {
-        for (int i = list.Count - 1; i > 0; i--)
+        // Clear existing maze objects
+        foreach (Transform child in transform)
         {
-            int randomIndex = Random.Range(0, i + 1);
-            T temp = list[i];
-            list[i] = list[randomIndex];
-            list[randomIndex] = temp;
+            Destroy(child.gameObject);
+        }
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                Vector3 cellPosition = new Vector3(x * cellSize, y * cellSize, 0);
+
+                // Instantiate floor
+                Instantiate(floorPrefab, cellPosition, Quaternion.identity, transform);
+
+                // Instantiate walls based on the cell's walls
+                Cell cell = grid[x, y];
+
+                // North wall
+                if (cell.walls[0])
+                {
+                    Vector3 position = cellPosition + new Vector3(0, cellSize / 2, 0);
+                    Instantiate(wallPrefab, position, Quaternion.Euler(0, 0, 90), transform);
+                }
+
+                // East wall
+                if (cell.walls[1])
+                {
+                    Vector3 position = cellPosition + new Vector3(cellSize / 2, 0, 0);
+                    Instantiate(wallPrefab, position, Quaternion.identity, transform);
+                }
+
+                // South wall
+                if (cell.walls[2])
+                {
+                    Vector3 position = cellPosition + new Vector3(0, -cellSize / 2, 0);
+                    Instantiate(wallPrefab, position, Quaternion.Euler(0, 0, 90), transform);
+                }
+
+                // West wall
+                if (cell.walls[3])
+                {
+                    Vector3 position = cellPosition + new Vector3(-cellSize / 2, 0, 0);
+                    Instantiate(wallPrefab, position, Quaternion.identity, transform);
+                }
+            }
         }
     }
 }
