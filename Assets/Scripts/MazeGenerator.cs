@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Netcode;
 
 public class Cell
 {
@@ -8,7 +9,7 @@ public class Cell
     public bool[] walls = { true, true, true, true }; // North, East, South, West
 }
 
-public class MazeGenerator : MonoBehaviour
+public class MazeGenerator : NetworkBehaviour
 {
     public int width = 15;
     public int height = 15;
@@ -28,9 +29,14 @@ public class MazeGenerator : MonoBehaviour
 
     void Start()
     {
-        GenerateMaze();
-        DrawMaze();
-        AdjustCamera();
+        if (IsHost)
+        {
+            GenerateMaze();
+            DrawMaze();
+
+            // Send maze to clients
+            SyncMazeToClientsServerRpc();
+        }
     }
 
     void GenerateMaze()
@@ -205,6 +211,23 @@ public class MazeGenerator : MonoBehaviour
         }
     }
 
+    // ServerRpc to synchronize maze generation across all clients
+    [ServerRpc(RequireOwnership = false)]
+    private void SyncMazeToClientsServerRpc()
+    {
+        SyncMazeToClientsClientRpc();
+    }
+
+    // ClientRpc to execute maze synchronization on clients
+    [ClientRpc]
+    private void SyncMazeToClientsClientRpc()
+    {
+        if (!IsHost)
+        {
+            DrawMaze(); // Clients re-draw the maze using the host's generated data
+        }
+    }
+    
     void AdjustCamera()
     {
         // Calculate maze dimensions in world units
