@@ -74,7 +74,7 @@ public class TankController : NetworkBehaviour
     {
         Vector3 spawnPosition = transform.position + transform.up * 1.0f;
         GameObject projectile = Instantiate(projectilePrefab, spawnPosition, transform.rotation);
-        projectile.GetComponent<Rigidbody2D>().velocity = transform.up * projectileSpeed;
+        projectile.GetComponent<Rigidbody2D>().linearVelocity = transform.up * projectileSpeed;
 
         // Spawn the projectile across all clients
         projectile.GetComponent<NetworkObject>().Spawn();
@@ -84,7 +84,7 @@ public class TankController : NetworkBehaviour
     {
         if (collision.gameObject.CompareTag("Wall"))
         {
-            rb.velocity = Vector2.zero; // Stop all motion
+            rb.linearVelocity = Vector2.zero; // Stop all motion
         }
     }
 }
