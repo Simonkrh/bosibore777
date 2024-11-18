@@ -62,31 +62,21 @@ public class TankController : NetworkBehaviour
 
     private void HandleShooting()
     {
-        if (Input.GetKeyDown(KeyCode.Space) && Time.time >= lastShotTime + startShootCooldown)
+        if (Input.GetKeyDown(KeyCode.Space) && Time.time >= lastShotTime + shootCooldown)
         {
-            Shoot();
-            startShootCooldown = shootCooldown;
+            ShootServerRpc();
             lastShotTime = Time.time;
         }
     }
 
-     private void Shoot()
+    [ServerRpc]
+    private void ShootServerRpc()
     {
-        if (projectilePrefab == null) return;
-
         Vector3 spawnPosition = transform.position + transform.up * 1.0f;
         GameObject projectile = Instantiate(projectilePrefab, spawnPosition, transform.rotation);
-
         projectile.GetComponent<Rigidbody2D>().velocity = transform.up * projectileSpeed;
 
-        // Optionally, synchronize the projectile across clients
-        ShootServerRpc(spawnPosition, transform.rotation);
-    }
-
-    [ServerRpc]
-    private void ShootServerRpc(Vector3 position, Quaternion rotation)
-    {
-        GameObject projectile = Instantiate(projectilePrefab, position, rotation);
+        // Spawn the projectile across all clients
         projectile.GetComponent<NetworkObject>().Spawn();
     }
 
