@@ -45,7 +45,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 1350518362
+  GlobalObjectIdHash: 4206209868
   InScenePlacedSourceGlobalObjectIdHash: 745461878
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
@@ -66,13 +66,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 00457ddf9c2163a419dd387ed2daab43, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  width: 6
-  height: 4
+  width: 10
+  height: 10
   cellSize: 1
   floorPrefab: {fileID: 6917115700887593149, guid: 95eb1e67fb196434fbbe33fc4286b1e5, type: 3}
   wallPrefab: {fileID: 114839858060744285, guid: d909e24ef984adf40a6dc2f79b0e3dc7, type: 3}
   cornerPrefab: {fileID: 114839858060744285, guid: ab681b28d8edd874caae82cfa980a84e, type: 3}
-  paddingTop: 3
+  paddingTop: 10
   paddingBottom: 0.5
   paddingLeft: 1
   paddingRight: 1

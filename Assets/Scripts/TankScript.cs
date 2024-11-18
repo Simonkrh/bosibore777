@@ -72,13 +72,37 @@ public class TankController : NetworkBehaviour
     [ServerRpc]
     private void ShootServerRpc()
     {
-        Vector3 spawnPosition = transform.position + transform.up * 1.0f;
-        GameObject projectile = Instantiate(projectilePrefab, spawnPosition, transform.rotation);
-        projectile.GetComponent<Rigidbody2D>().velocity = transform.up * projectileSpeed;
+        if (projectilePrefab == null)
+        {
+            Debug.LogError("Projectile prefab is not assigned!");
+            return;
+        }
 
-        // Spawn the projectile across all clients
-        projectile.GetComponent<NetworkObject>().Spawn();
+        Vector3 spawnPosition = transform.position + transform.up * shootingOffsetDistance;
+        GameObject projectile = Instantiate(projectilePrefab, spawnPosition, transform.rotation);
+
+        Rigidbody2D projectileRb = projectile.GetComponent<Rigidbody2D>();
+        if (projectileRb != null)
+        {
+            projectileRb.velocity = transform.up * projectileSpeed;
+        }
+        else
+        {
+            Debug.LogError("Projectile prefab does not have a Rigidbody2D component!");
+        }
+
+        NetworkObject projectileNetworkObject = projectile.GetComponent<NetworkObject>();
+        if (projectileNetworkObject != null)
+        {
+            projectileNetworkObject.Spawn();
+        }
+        else
+        {
+            Debug.LogError("Projectile prefab does not have a NetworkObject component!");
+        }
     }
+
+
 
     private void OnCollisionStay2D(Collision2D collision)
     {
