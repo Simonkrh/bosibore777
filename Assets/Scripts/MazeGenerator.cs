@@ -27,16 +27,18 @@ public class MazeGenerator : NetworkBehaviour
     private Cell[,] grid;
     private Stack<Vector2Int> stack = new Stack<Vector2Int>();
 
-    void Start()
+    public override void OnNetworkSpawn()
     {
+        Debug.Log($"OnNetworkSpawn called. IsHost: {IsHost}");
         if (IsHost)
         {
             GenerateMaze();
             DrawMaze();
 
-            // Send maze to clients
+            // Send maze data to clients
             SyncMazeDataToClientsServerRpc(SerializeMazeData());
 
+            base.OnNetworkSpawn();
         }
     }
 
@@ -213,19 +215,20 @@ public class MazeGenerator : NetworkBehaviour
     }
 
    // Serialize maze data into a format that can be sent to clients
-    private List<int> SerializeMazeData()
+    private int[] SerializeMazeData()
     {
-        List<int> serializedData = new List<int>();
+        int[] serializedData = new int[width * height * 4];
+        int index = 0;
 
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
             {
                 Cell cell = grid[x, y];
-                serializedData.Add(cell.walls[0] ? 1 : 0); // North wall
-                serializedData.Add(cell.walls[1] ? 1 : 0); // East wall
-                serializedData.Add(cell.walls[2] ? 1 : 0); // South wall
-                serializedData.Add(cell.walls[3] ? 1 : 0); // West wall
+                serializedData[index++] = cell.walls[0] ? 1 : 0; // North wall
+                serializedData[index++] = cell.walls[1] ? 1 : 0; // East wall
+                serializedData[index++] = cell.walls[2] ? 1 : 0; // South wall
+                serializedData[index++] = cell.walls[3] ? 1 : 0; // West wall
             }
         }
 
@@ -233,7 +236,7 @@ public class MazeGenerator : NetworkBehaviour
     }
 
     // Deserialize maze data sent from the host
-    private void DeserializeMazeData(List<int> data)
+    private void DeserializeMazeData(int[] data)
     {
         grid = new Cell[width, height];
         int index = 0;
@@ -258,14 +261,14 @@ public class MazeGenerator : NetworkBehaviour
 
     // ServerRpc to sync maze data with clients
     [ServerRpc(RequireOwnership = false)]
-    private void SyncMazeDataToClientsServerRpc(List<int> serializedData)
+    private void SyncMazeDataToClientsServerRpc(int[] serializedData)
     {
         SyncMazeDataToClientsClientRpc(serializedData);
     }
 
     // ClientRpc to apply maze data on clients
     [ClientRpc]
-    private void SyncMazeDataToClientsClientRpc(List<int> serializedData)
+    private void SyncMazeDataToClientsClientRpc(int[] serializedData)
     {
         DeserializeMazeData(serializedData);
         DrawMaze(); // Draw the maze on clients
