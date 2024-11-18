@@ -291,7 +291,7 @@ public class MazeGenerator : NetworkBehaviour
                 float totalWidth = mazeWidth + paddingLeft + paddingRight;
                 float totalHeight = mazeHeight + paddingTop + paddingBottom;
 
-                // Determine the aspect ratios
+                // Determine the aspect ratio
                 float screenAspect = (float)Screen.width / (float)Screen.height;
                 float mazeAspect = totalWidth / totalHeight;
 
@@ -309,7 +309,7 @@ public class MazeGenerator : NetworkBehaviour
 
                 // Position the camera to center the maze with padding
                 float cameraX = (paddingLeft - paddingRight) / 2;
-                float cameraY = (paddingBottom - paddingTop) / 2;
+                float cameraY = (paddingTop - paddingBottom) / 2;
 
                 mainCamera.transform.position = new Vector3(cameraX, cameraY, -10); // Adjust Z as needed
             }
