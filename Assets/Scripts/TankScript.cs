@@ -1,6 +1,7 @@
+using Unity.Netcode;
 using UnityEngine;
 
-public class TankController : MonoBehaviour
+public class TankController : NetworkBehaviour
 {
     public float moveSpeed = 1.8f; // Speed of the tank's movement
     public float rotationSpeed = 300f; // Speed of the tank's rotation in degrees per second
@@ -21,11 +22,14 @@ public class TankController : MonoBehaviour
 
     private void Update()
     {
+        if (!IsOwner) return;
         HandleShooting();
     }
 
     private void FixedUpdate()
     {
+        if (!IsOwner) return;
+        
         HandleMovement();
         HandleRotation();
     }
@@ -66,22 +70,24 @@ public class TankController : MonoBehaviour
         }
     }
 
-    private void Shoot()
+     private void Shoot()
     {
-        if (projectilePrefab == null)
-        {
-            Debug.LogWarning("Projectile prefab is not assigned!");
-            return;
-        }
+        if (projectilePrefab == null) return;
 
-        Vector3 spawnPosition = transform.position + transform.up * shootingOffsetDistance;
+        Vector3 spawnPosition = transform.position + transform.up * 1.0f;
         GameObject projectile = Instantiate(projectilePrefab, spawnPosition, transform.rotation);
 
-        Rigidbody2D projectileRb = projectile.GetComponent<Rigidbody2D>();
-        if (projectileRb != null)
-        {
-            projectileRb.velocity = transform.up * projectileSpeed;
-        }
+        projectile.GetComponent<Rigidbody2D>().velocity = transform.up * projectileSpeed;
+
+        // Optionally, synchronize the projectile across clients
+        ShootServerRpc(spawnPosition, transform.rotation);
+    }
+
+    [ServerRpc]
+    private void ShootServerRpc(Vector3 position, Quaternion rotation)
+    {
+        GameObject projectile = Instantiate(projectilePrefab, position, rotation);
+        projectile.GetComponent<NetworkObject>().Spawn();
     }
 
     private void OnCollisionStay2D(Collision2D collision)
