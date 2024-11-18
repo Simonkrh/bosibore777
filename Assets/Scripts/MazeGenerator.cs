@@ -35,7 +35,8 @@ public class MazeGenerator : NetworkBehaviour
             DrawMaze();
 
             // Send maze to clients
-            SyncMazeToClientsServerRpc();
+            SyncMazeDataToClientsServerRpc(SerializeMazeData());
+
         }
     }
 
@@ -211,23 +212,65 @@ public class MazeGenerator : NetworkBehaviour
         }
     }
 
-    // ServerRpc to synchronize maze generation across all clients
-    [ServerRpc(RequireOwnership = false)]
-    private void SyncMazeToClientsServerRpc()
+   // Serialize maze data into a format that can be sent to clients
+    private List<int> SerializeMazeData()
     {
-        SyncMazeToClientsClientRpc();
+        List<int> serializedData = new List<int>();
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                Cell cell = grid[x, y];
+                serializedData.Add(cell.walls[0] ? 1 : 0); // North wall
+                serializedData.Add(cell.walls[1] ? 1 : 0); // East wall
+                serializedData.Add(cell.walls[2] ? 1 : 0); // South wall
+                serializedData.Add(cell.walls[3] ? 1 : 0); // West wall
+            }
+        }
+
+        return serializedData;
     }
 
-    // ClientRpc to execute maze synchronization on clients
-    [ClientRpc]
-    private void SyncMazeToClientsClientRpc()
+    // Deserialize maze data sent from the host
+    private void DeserializeMazeData(List<int> data)
     {
-        if (!IsHost)
+        grid = new Cell[width, height];
+        int index = 0;
+
+        for (int x = 0; x < width; x++)
         {
-            DrawMaze(); // Clients re-draw the maze using the host's generated data
+            for (int y = 0; y < height; y++)
+            {
+                grid[x, y] = new Cell
+                {
+                    walls = new bool[]
+                    {
+                        data[index++] == 1, // North wall
+                        data[index++] == 1, // East wall
+                        data[index++] == 1, // South wall
+                        data[index++] == 1  // West wall
+                    }
+                };
+            }
         }
     }
-    
+
+    // ServerRpc to sync maze data with clients
+    [ServerRpc(RequireOwnership = false)]
+    private void SyncMazeDataToClientsServerRpc(List<int> serializedData)
+    {
+        SyncMazeDataToClientsClientRpc(serializedData);
+    }
+
+    // ClientRpc to apply maze data on clients
+    [ClientRpc]
+    private void SyncMazeDataToClientsClientRpc(List<int> serializedData)
+    {
+        DeserializeMazeData(serializedData);
+        DrawMaze(); // Draw the maze on clients
+    }
+
     void AdjustCamera()
     {
         // Calculate maze dimensions in world units
