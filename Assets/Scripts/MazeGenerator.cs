@@ -30,15 +30,56 @@ public class MazeGenerator : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         Debug.Log($"OnNetworkSpawn called. IsHost: {IsHost}");
+
         if (IsHost)
         {
+            Debug.Log("[Host] Generating maze and syncing to clients...");
             GenerateMaze();
             DrawMaze();
 
-            // Send maze data to clients
-            Debug.Log("Host generating maze and syncing to clients...");
-            SyncMazeDataToClientsServerRpc(SerializeMazeData());
+            // Register callback for new client connections
+            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
         }
+        else
+        {
+            Debug.Log("[Client] Waiting for maze data from host...");
+        }
+    }
+    
+    private void OnDestroy()
+    {
+        // Unregister the callback when this object is destroyed
+        if (NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+        }
+    }
+    
+    private void OnClientConnected(ulong clientId)
+    {
+        Debug.Log($"[Host] Client {clientId} connected. Sending maze data...");
+        SyncMazeDataToClientServerRpc(clientId, SerializeMazeData());
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void SyncMazeDataToClientServerRpc(ulong clientId, int[] serializedData)
+    {
+        Debug.Log($"[Server] Sending maze data to client {clientId}. Data length: {serializedData.Length}");
+        SyncMazeDataToClientClientRpc(serializedData, new ClientRpcParams
+        {
+            Send = new ClientRpcSendParams
+            {
+                TargetClientIds = new[] { clientId }
+            }
+        });
+    }
+
+    [ClientRpc]
+    private void SyncMazeDataToClientClientRpc(int[] serializedData, ClientRpcParams clientRpcParams = default)
+    {
+        Debug.Log($"[Client {NetworkManager.Singleton.LocalClientId}] Received maze data. Deserializing...");
+        DeserializeMazeData(serializedData);
+        DrawMaze();
     }
 
     void GenerateMaze()
@@ -258,23 +299,7 @@ public class MazeGenerator : NetworkBehaviour
         }
     }
 
-    // ServerRpc to sync maze data with clients
-    [ServerRpc(RequireOwnership = false)]
-    private void SyncMazeDataToClientsServerRpc(int[] serializedData)
-    {
-        Debug.Log($"Server sending maze data to clients. Data length: {serializedData.Length}");
-        SyncMazeDataToClientsClientRpc(serializedData);
-    }
 
-    [ClientRpc]
-    private void SyncMazeDataToClientsClientRpc(int[] serializedData)
-    {
-        Debug.Log($"Client {NetworkManager.Singleton.LocalClientId} received maze data.");
-        DeserializeMazeData(serializedData);
-
-        Debug.Log("Deserialized maze data. Drawing maze now...");
-        DrawMaze();
-    }
 
     void AdjustCamera()
     {
