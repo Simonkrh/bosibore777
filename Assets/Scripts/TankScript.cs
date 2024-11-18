@@ -8,7 +8,6 @@ public class TankController : NetworkBehaviour
     public GameObject projectilePrefab; // Prefab of the projectile
     public float projectileSpeed = 10f; // Speed of the projectile
     public float shootCooldown = 0.5f; // Cooldown time between shots
-    public float startShootCooldown = 0.0f;
     public float shootingOffsetDistance = 1.0f; // Shooting offset in front of the tank
 
     private Rigidbody2D rb;
@@ -20,44 +19,67 @@ public class TankController : NetworkBehaviour
         rb.gravityScale = 0;
     }
 
+    private void Start()
+    {
+        if (IsOwner)
+        {
+            Debug.Log($"[Owner] Player {NetworkManager.Singleton.LocalClientId} owns this tank.");
+        }
+    }
+
     private void Update()
     {
-        if (!IsOwner) return;
+        if (!IsOwner) return; // Only the owner handles input locally.
+
         HandleShooting();
     }
 
     private void FixedUpdate()
     {
-        if (!IsOwner) return;
-        
-        HandleMovement();
-        HandleRotation();
+        if (!IsOwner) return; // Only the owner sends movement to the server.
+
+        float moveInput = Input.GetAxisRaw("Vertical");
+        float rotationInput = Input.GetAxisRaw("Horizontal");
+
+        if (moveInput != 0 || rotationInput != 0)
+        {
+            UpdateMovementServerRpc(moveInput, rotationInput);
+        }
     }
 
-    private void HandleMovement()
+    [ServerRpc]
+    private void UpdateMovementServerRpc(float moveInput, float rotationInput, ServerRpcParams rpcParams = default)
     {
-        float moveInput = Input.GetAxisRaw("Vertical"); // W = 1, S = -1
-        Vector2 moveVector = transform.up * moveInput * moveSpeed * Time.fixedDeltaTime;
+        Debug.Log($"[Server] Received movement from Client {rpcParams.Receive.SenderClientId}: MoveInput: {moveInput}, RotationInput: {rotationInput}");
 
-        if (moveInput != 0)
+        // Only process movement for the correct owner
+        if (rpcParams.Receive.SenderClientId != OwnerClientId)
         {
-            rb.constraints = RigidbodyConstraints2D.FreezeRotation;
+            Debug.LogWarning($"[Server] Ignored movement from Client {rpcParams.Receive.SenderClientId} (not the owner)");
+            return;
         }
 
-        rb.MovePosition(rb.position + moveVector);
-    }
-
-    private void HandleRotation()
-    {
-        float rotationInput = Input.GetAxisRaw("Horizontal"); // A = -1, D = 1
+        // Process movement
+        Vector2 moveVector = transform.up * moveInput * moveSpeed * Time.fixedDeltaTime;
         float rotation = rotationInput * rotationSpeed * Time.fixedDeltaTime;
 
-        if (rotationInput != 0)
-        {
-            rb.constraints = RigidbodyConstraints2D.None;
-        }
-
+        // Update Rigidbody position and rotation
+        rb.MovePosition(rb.position + moveVector);
         rb.MoveRotation(rb.rotation - rotation);
+
+        // Sync with clients
+        UpdateMovementClientRpc(rb.position, rb.rotation);
+    }
+
+
+    [ClientRpc]
+    private void UpdateMovementClientRpc(Vector2 position, float rotation)
+    {
+        if (IsOwner) return; // Skip the owner, as they already process movement locally.
+
+        // Synchronize position and rotation for non-owners
+        rb.position = position;
+        rb.rotation = rotation;
     }
 
     private void HandleShooting()
@@ -86,23 +108,13 @@ public class TankController : NetworkBehaviour
         {
             projectileRb.linearVelocity = transform.up * projectileSpeed;
         }
-        else
-        {
-            Debug.LogError("Projectile prefab does not have a Rigidbody2D component!");
-        }
 
         NetworkObject projectileNetworkObject = projectile.GetComponent<NetworkObject>();
         if (projectileNetworkObject != null)
         {
             projectileNetworkObject.Spawn();
         }
-        else
-        {
-            Debug.LogError("Projectile prefab does not have a NetworkObject component!");
-        }
     }
-
-
 
     private void OnCollisionStay2D(Collision2D collision)
     {
