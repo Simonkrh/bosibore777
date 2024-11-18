@@ -16,6 +16,12 @@ public class MazeGenerator : MonoBehaviour
 
     public GameObject floorPrefab;
     public GameObject wallPrefab;
+    public GameObject cornerPrefab;
+
+    public float paddingTop = 1.0f;
+    public float paddingBottom = 1.0f;
+    public float paddingLeft = 1.0f;
+    public float paddingRight = 1.0f;
 
     private Cell[,] grid;
     private Stack<Vector2Int> stack = new Stack<Vector2Int>();
@@ -24,6 +30,7 @@ public class MazeGenerator : MonoBehaviour
     {
         GenerateMaze();
         DrawMaze();
+        AdjustCamera();
     }
 
     void GenerateMaze()
@@ -140,17 +147,32 @@ public class MazeGenerator : MonoBehaviour
             Destroy(child.gameObject);
         }
 
+        // Calculate offsets to center the maze
+        float mazeWidth = width * cellSize;
+        float mazeHeight = height * cellSize;
+        float offsetX = -mazeWidth / 2 + cellSize / 2;
+        float offsetY = -mazeHeight / 2 + cellSize / 2;
+
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
             {
-                Vector3 cellPosition = new Vector3(x * cellSize, y * cellSize, 0);
+                // Adjust cell position to center the maze
+                Vector3 cellPosition = new Vector3(x * cellSize + offsetX, y * cellSize + offsetY, 0);
 
                 // Instantiate floor
                 Instantiate(floorPrefab, cellPosition, Quaternion.identity, transform);
 
                 // Instantiate walls based on the cell's walls
                 Cell cell = grid[x, y];
+                
+                // Instantiate corner blocks
+                Vector3 cornerPosition = new Vector3(
+                    (x * cellSize) + offsetX - (cellSize / 2),
+                    (y * cellSize) + offsetY - (cellSize / 2),
+                    0
+                );
+                Instantiate(cornerPrefab, cornerPosition, Quaternion.identity, transform);
 
                 // North wall
                 if (cell.walls[0])
@@ -180,6 +202,56 @@ public class MazeGenerator : MonoBehaviour
                     Instantiate(wallPrefab, position, Quaternion.identity, transform);
                 }
             }
+        }
+    }
+
+    void AdjustCamera()
+    {
+        // Calculate maze dimensions in world units
+        float mazeWidth = width * cellSize;
+        float mazeHeight = height * cellSize;
+
+        // Get the main camera
+        Camera mainCamera = Camera.main;
+
+        if (mainCamera != null)
+        {
+            if (mainCamera.orthographic)
+            {
+                // Calculate total width and height including padding
+                float totalWidth = mazeWidth + paddingLeft + paddingRight;
+                float totalHeight = mazeHeight + paddingTop + paddingBottom;
+
+                // Determine the aspect ratios
+                float screenAspect = (float)Screen.width / (float)Screen.height;
+                float mazeAspect = totalWidth / totalHeight;
+
+                // Adjust orthographic size to fit the maze with padding
+                if (screenAspect >= mazeAspect)
+                {
+                    // Screen is wider than the maze with padding
+                    mainCamera.orthographicSize = totalHeight / 2;
+                }
+                else
+                {
+                    // Screen is taller than the maze with padding
+                    mainCamera.orthographicSize = (totalWidth / 2) / screenAspect;
+                }
+
+                // Position the camera to center the maze with padding
+                float cameraX = (paddingLeft - paddingRight) / 2;
+                float cameraY = (paddingBottom - paddingTop) / 2;
+
+                mainCamera.transform.position = new Vector3(cameraX, cameraY, -10); // Adjust Z as needed
+            }
+            else
+            {
+                Debug.LogWarning("Camera is not orthographic. Adjustments may not work as intended.");
+            }
+        }
+        else
+        {
+            Debug.LogError("Main camera not found. Please tag your camera as 'MainCamera'.");
         }
     }
 }
