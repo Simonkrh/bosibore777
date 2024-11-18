@@ -612,16 +612,16 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 6465956145900489289, guid: 0631eced0d9ab024096154fcf82a10e6, type: 3}
-      propertyPath: width
-      value: 10
-      objectReference: {fileID: 0}
-    - target: {fileID: 6465956145900489289, guid: 0631eced0d9ab024096154fcf82a10e6, type: 3}
-      propertyPath: height
-      value: 10
-      objectReference: {fileID: 0}
-    - target: {fileID: 6465956145900489289, guid: 0631eced0d9ab024096154fcf82a10e6, type: 3}
       propertyPath: paddingTop
       value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 6465956145900489289, guid: 0631eced0d9ab024096154fcf82a10e6, type: 3}
+      propertyPath: paddingLeft
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6465956145900489289, guid: 0631eced0d9ab024096154fcf82a10e6, type: 3}
+      propertyPath: paddingRight
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 6684234062452913369, guid: 0631eced0d9ab024096154fcf82a10e6, type: 3}
       propertyPath: GlobalObjectIdHash
