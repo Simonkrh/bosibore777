@@ -36,9 +36,8 @@ public class MazeGenerator : NetworkBehaviour
             DrawMaze();
 
             // Send maze data to clients
+            Debug.Log("Host generating maze and syncing to clients...");
             SyncMazeDataToClientsServerRpc(SerializeMazeData());
-
-            base.OnNetworkSpawn();
         }
     }
 
@@ -263,15 +262,18 @@ public class MazeGenerator : NetworkBehaviour
     [ServerRpc(RequireOwnership = false)]
     private void SyncMazeDataToClientsServerRpc(int[] serializedData)
     {
+        Debug.Log($"Server sending maze data to clients. Data length: {serializedData.Length}");
         SyncMazeDataToClientsClientRpc(serializedData);
     }
 
-    // ClientRpc to apply maze data on clients
     [ClientRpc]
     private void SyncMazeDataToClientsClientRpc(int[] serializedData)
     {
+        Debug.Log($"Client {NetworkManager.Singleton.LocalClientId} received maze data.");
         DeserializeMazeData(serializedData);
-        DrawMaze(); // Draw the maze on clients
+
+        Debug.Log("Deserialized maze data. Drawing maze now...");
+        DrawMaze();
     }
 
     void AdjustCamera()
