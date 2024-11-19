@@ -38,13 +38,6 @@ public class CustomNetworkManager : NetworkManager
 
         if (IsServer)
         {
-            // Ensure the prefab is assigned
-            if (managerData.playerPrefab == null)
-            {
-                Debug.LogError("Player prefab is not assigned in NetworkManagerData!");
-                return;
-            }
-
             // Get a spawn point
             Transform spawnPoint = managerData.spawnPoints[(int)(clientId % (ulong)managerData.spawnPoints.Length)];
             if (spawnPoint == null)
@@ -59,7 +52,8 @@ public class CustomNetworkManager : NetworkManager
 
             if (networkObject != null)
             {
-                networkObject.SpawnWithOwnership(clientId); // Assign ownership to the connected client
+                // Assign ownership to the connected client
+                networkObject.SpawnWithOwnership(clientId);
                 Debug.Log($"Player {clientId} spawned at {spawnPoint.position}");
             }
             else
@@ -68,6 +62,7 @@ public class CustomNetworkManager : NetworkManager
             }
         }
     }
+
 
     private void OnClientDisconnected(ulong clientId)
     {
