@@ -38,7 +38,7 @@ public class MazeGenerator : NetworkBehaviour
             DrawMaze();
 
             // Register callback for new client connections
-            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
+            CustomNetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
         }
         else
         {
@@ -49,9 +49,9 @@ public class MazeGenerator : NetworkBehaviour
     private void OnDestroy()
     {
         // Unregister the callback when this object is destroyed
-        if (NetworkManager.Singleton != null)
+        if (CustomNetworkManager.Singleton != null)
         {
-            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+            CustomNetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
         }
     }
     

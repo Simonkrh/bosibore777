@@ -5,11 +5,11 @@ public class NetworkUI : MonoBehaviour
 {
     public void StartHost()
     {
-        NetworkManager.Singleton.StartHost();
+        CustomNetworkManager.Singleton.StartHost();
     }
 
     public void StartClient()
     {
-        NetworkManager.Singleton.StartClient();
+        CustomNetworkManager.Singleton.StartClient();
     }
 }

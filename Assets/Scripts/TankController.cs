@@ -13,73 +13,76 @@ public class TankController : NetworkBehaviour
     private Rigidbody2D rb;
     private float lastShotTime;
 
+    // Network variables for position and rotation
+    private NetworkVariable<Vector2> networkPosition = new NetworkVariable<Vector2>();
+    private NetworkVariable<float> networkRotation = new NetworkVariable<float>();
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
-        rb.gravityScale = 0;
+        rb.gravityScale = 0; // Ensure no gravity affects the tank
     }
 
     private void Start()
     {
         if (IsOwner)
         {
-            Debug.Log($"[Owner] Player {NetworkManager.Singleton.LocalClientId} owns this tank.");
+            Debug.Log($"[Owner] Player {CustomNetworkManager.Singleton.LocalClientId} owns this tank.");
         }
     }
 
     private void Update()
     {
-        if (!IsOwner) return; // Only the owner handles input locally.
-
-        HandleShooting();
+        if (IsOwner)
+        {
+            HandleShooting();
+        }
     }
 
     private void FixedUpdate()
     {
-        if (!IsOwner) return; // Only the owner sends movement to the server.
+        if (IsOwner)
+        {
+            HandleMovementAndRotation();
+        }
+        else
+        {
+            SyncNonOwnerPositionAndRotation();
+        }
+    }
 
+    private void HandleMovementAndRotation()
+    {
+        // Local movement and rotation input
         float moveInput = Input.GetAxisRaw("Vertical");
         float rotationInput = Input.GetAxisRaw("Horizontal");
 
-        if (moveInput != 0 || rotationInput != 0)
-        {
-            UpdateMovementServerRpc(moveInput, rotationInput);
-        }
-    }
-
-    [ServerRpc]
-    private void UpdateMovementServerRpc(float moveInput, float rotationInput, ServerRpcParams rpcParams = default)
-    {
-        Debug.Log($"[Server] Received movement from Client {rpcParams.Receive.SenderClientId}: MoveInput: {moveInput}, RotationInput: {rotationInput}");
-
-        // Only process movement for the correct owner
-        if (rpcParams.Receive.SenderClientId != OwnerClientId)
-        {
-            Debug.LogWarning($"[Server] Ignored movement from Client {rpcParams.Receive.SenderClientId} (not the owner)");
-            return;
-        }
-
-        // Process movement
         Vector2 moveVector = transform.up * moveInput * moveSpeed * Time.fixedDeltaTime;
         float rotation = rotationInput * rotationSpeed * Time.fixedDeltaTime;
 
-        // Update Rigidbody position and rotation
+        // Update local Rigidbody
         rb.MovePosition(rb.position + moveVector);
         rb.MoveRotation(rb.rotation - rotation);
 
-        // Sync with clients
-        UpdateMovementClientRpc(rb.position, rb.rotation);
+        // Update the server with new position and rotation
+        UpdateMovementServerRpc(rb.position, rb.rotation);
     }
 
-
-    [ClientRpc]
-    private void UpdateMovementClientRpc(Vector2 position, float rotation)
+    private void SyncNonOwnerPositionAndRotation()
     {
-        if (IsOwner) return; // Skip the owner, as they already process movement locally.
+        // Smoothly synchronize non-owner position and rotation
+        rb.position = Vector2.Lerp(rb.position, networkPosition.Value, Time.fixedDeltaTime * 10f);
+        rb.rotation = Mathf.LerpAngle(rb.rotation, networkRotation.Value, Time.fixedDeltaTime * 10f);
+    }
 
-        // Synchronize position and rotation for non-owners
-        rb.position = position;
-        rb.rotation = rotation;
+    [ServerRpc]
+    private void UpdateMovementServerRpc(Vector2 position, float rotation, ServerRpcParams rpcParams = default)
+    {
+        // Update position and rotation on the server
+        networkPosition.Value = position;
+        networkRotation.Value = rotation;
+
+        // Optional: Enforce constraints or validation logic here if needed
     }
 
     private void HandleShooting()
@@ -100,27 +103,22 @@ public class TankController : NetworkBehaviour
             return;
         }
 
+        // Create projectile at shooting offset position
         Vector3 spawnPosition = transform.position + transform.up * shootingOffsetDistance;
         GameObject projectile = Instantiate(projectilePrefab, spawnPosition, transform.rotation);
 
+        // Set projectile velocity
         Rigidbody2D projectileRb = projectile.GetComponent<Rigidbody2D>();
         if (projectileRb != null)
         {
             projectileRb.linearVelocity = transform.up * projectileSpeed;
         }
 
+        // Spawn projectile for all clients
         NetworkObject projectileNetworkObject = projectile.GetComponent<NetworkObject>();
         if (projectileNetworkObject != null)
         {
             projectileNetworkObject.Spawn();
-        }
-    }
-
-    private void OnCollisionStay2D(Collision2D collision)
-    {
-        if (collision.gameObject.CompareTag("Wall"))
-        {
-            rb.linearVelocity = Vector2.zero; // Stop all motion
         }
     }
 }
