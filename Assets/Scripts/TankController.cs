@@ -14,8 +14,10 @@ public class TankController : NetworkBehaviour
     private float lastShotTime;
 
     // Network variables for position and rotation
-    private NetworkVariable<Vector2> networkPosition = new NetworkVariable<Vector2>();
-    private NetworkVariable<float> networkRotation = new NetworkVariable<float>();
+    private NetworkVariable<Vector2> networkPosition = new NetworkVariable<Vector2>(
+        writePerm: NetworkVariableWritePermission.Server);
+    private NetworkVariable<float> networkRotation = new NetworkVariable<float>(
+        writePerm: NetworkVariableWritePermission.Server);
 
     private void Awake()
     {
@@ -51,7 +53,11 @@ public class TankController : NetworkBehaviour
 
     private void FixedUpdate()
     {
-        if (!IsOwner)
+        if (IsServer)
+        {
+            UpdateNetworkVariables();
+        }
+        else if (!IsOwner)
         {
             SmoothlyInterpolatePositionAndRotation();
         }
@@ -61,13 +67,18 @@ public class TankController : NetworkBehaviour
     {
         float moveInput = Input.GetAxisRaw("Vertical");
         float rotationInput = Input.GetAxisRaw("Horizontal");
-        MoveServerRpc(moveInput, rotationInput);
+
+        // Request the server to handle movement
+        RequestMovementServerRpc(moveInput, rotationInput);
     }
 
     [ServerRpc]
-    private void MoveServerRpc(float moveInput, float rotationInput)
+    private void RequestMovementServerRpc(float moveInput, float rotationInput, ServerRpcParams rpcParams = default)
     {
         HandleMovementAndRotation(moveInput, rotationInput);
+
+        // Update the network variables to ensure sync
+        UpdateNetworkVariables();
     }
 
     private void HandleMovementAndRotation(float moveInput, float rotationInput)
@@ -77,8 +88,6 @@ public class TankController : NetworkBehaviour
 
         rb.MovePosition(rb.position + moveVector);
         rb.MoveRotation(rb.rotation - rotation);
-
-        UpdateNetworkVariables();
     }
 
     private void UpdateNetworkVariables()
