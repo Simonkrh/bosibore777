@@ -17,22 +17,28 @@ public class CustomNetworkManager : NetworkManager
         }
 
         // Use the Singleton instance to access the callbacks
-        NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
-        NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
+        if (NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
+            NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
+        }
     }
 
     private void OnDestroy()
     {
-        // Unsubscribe from the callbacks to avoid memory leaks
-        NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
-        NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
+        // Unsubscribe from the callbacks only if NetworkManager is not null
+        if (NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+            NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
+        }
     }
 
     private void OnClientConnected(ulong clientId)
     {
-        if (managerData.playerPrefab == null)
+        if (managerData == null || managerData.playerPrefab == null)
         {
-            Debug.LogError("Player prefab is not assigned in NetworkManagerData!");
+            Debug.LogError("Player prefab or managerData is not assigned in NetworkManagerData!");
             return;
         }
 
@@ -59,21 +65,28 @@ public class CustomNetworkManager : NetworkManager
             else
             {
                 Debug.LogError("Player prefab does not have a NetworkObject component!");
+                Destroy(playerObject); // Clean up if the object is invalid
             }
         }
     }
-
 
     private void OnClientDisconnected(ulong clientId)
     {
         Debug.Log($"Client {clientId} disconnected");
 
+        if (NetworkManager.Singleton == null || NetworkManager.Singleton.SpawnManager == null)
+        {
+            Debug.LogWarning("SpawnManager is not available during client disconnection.");
+            return;
+        }
+
         // Find and destroy the player's object if it exists
         foreach (var obj in NetworkManager.Singleton.SpawnManager.SpawnedObjects.Values)
         {
-            if (obj.OwnerClientId == clientId)
+            if (obj != null && obj.OwnerClientId == clientId)
             {
                 Destroy(obj.gameObject);
+                Debug.Log($"Destroyed object owned by Client {clientId}");
                 break;
             }
         }
