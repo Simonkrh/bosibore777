@@ -7,6 +7,7 @@ public class CustomNetworkManager : NetworkManager
 
     private void Start()
     {
+        NetworkConfig.TickRate = 128;
         // Find and cache the NetworkManagerData component
         managerData = FindObjectOfType<NetworkManagerData>();
 
