@@ -2,10 +2,6 @@ using Unity.Netcode;
 using UnityEngine;
 using System.Collections.Generic;
 
-/// <summary>
-/// Controls a tank with client-side prediction for remote clients,
-/// and no double movement for the host.
-/// </summary>
 public class TankController : NetworkBehaviour
 {
     [Header("Movement Settings")]
@@ -47,8 +43,10 @@ public class TankController : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        // Changed debug info:
+        Debug.Log($"OnNetworkSpawn called. IsServer: {IsServer}, IsClient: {IsClient}");
+
         // Only the server does physics simulation on the rigidbody. Clients = kinematic
-        // so we don't fight the server's authoritative updates.
         if (!IsServer)
         {
             rb.isKinematic = true;
@@ -57,26 +55,24 @@ public class TankController : NetworkBehaviour
 
     private void Update()
     {
-        // Handle shooting for the owner (both host and remote client)
+        // Handle shooting for the owner (both host or remote client)
         if (IsOwner)
         {
             HandleShooting();
         }
 
-        // If we're not the owner, do nothing else here; just let interpolation handle movement visually.
+        // Non-owner doesn't process input or do movement logic
         if (!IsOwner)
-        {
             return;
-        }
 
-        // HOST PATH: (IsOwner && IsServer)
+        // HOST or DEDICATED SERVER + OWNER PATH
         if (IsServer && IsOwner)
         {
             // 1) Read input
             float moveInput = Input.GetAxisRaw("Vertical");
             float turnInput = Input.GetAxisRaw("Horizontal");
 
-            // 2) Send input to the server function (the host is the server, but no local prediction!)
+            // 2) Send input to the server function 
             MovementInput inputData = new MovementInput
             {
                 moveInput = moveInput,
@@ -89,11 +85,9 @@ public class TankController : NetworkBehaviour
 
         // REMOTE CLIENT PATH: (IsOwner && !IsServer)
         {
-            // 1) Gather raw input
             float moveInput = Input.GetAxisRaw("Vertical");
             float turnInput = Input.GetAxisRaw("Horizontal");
 
-            // 2) Build a MovementInput struct with a sequence number
             MovementInput newInput = new MovementInput
             {
                 moveInput = moveInput,
@@ -101,20 +95,20 @@ public class TankController : NetworkBehaviour
                 inputSequence = nextInputSequence++
             };
 
-            // 3) Immediately predict local movement (so it feels responsive)
+            // Immediate local prediction
             ApplyMovementInput(newInput);
 
-            // 4) Add to pending
+            // Add to pending
             pendingInputs.Add(newInput);
 
-            // 5) Send input to server for authoritative movement
+            // Send to server for authoritative movement
             SendInputToServerRpc(newInput);
         }
     }
 
     private void FixedUpdate()
     {
-        // The server updates the authoritative position & rotation here.
+        // The server updates the authoritative position & rotation
         if (IsServer)
         {
             networkPosition.Value = rb.position;
@@ -122,7 +116,7 @@ public class TankController : NetworkBehaviour
         }
         else
         {
-            // Non-owner clients smoothly interpolate from their local position to the server's position.
+            // Non-owner clients smoothly interpolate
             if (!IsOwner)
             {
                 SmoothlyInterpolatePositionAndRotation();
@@ -132,17 +126,11 @@ public class TankController : NetworkBehaviour
 
     #region Movement
 
-    /// <summary>
-    /// Called on the remote client to move the tank immediately
-    /// (local prediction) or during reconciliation.
-    /// </summary>
     private void ApplyMovementInput(MovementInput input)
     {
         float move = input.moveInput;
         float turn = input.rotationInput;
 
-        // We do local movement using direct position changes
-        // If you have complicated physics, you might do a separate "predicted" body.
         Vector2 moveVector = transform.up * move * moveSpeed * Time.fixedDeltaTime;
         float rotation = turn * rotationSpeed * Time.fixedDeltaTime;
 
@@ -150,15 +138,11 @@ public class TankController : NetworkBehaviour
         rb.rotation -= rotation;
     }
 
-    /// <summary>
-    /// Called on the server (or host as server) to perform the authoritative movement.
-    /// </summary>
     private void ApplyMovementOnServer(MovementInput input)
     {
         float move = input.moveInput;
         float turn = input.rotationInput;
 
-        // We do server-authoritative movement with MovePosition / MoveRotation
         Vector2 moveVector = transform.up * move * moveSpeed * Time.fixedDeltaTime;
         float rotation = turn * rotationSpeed * Time.fixedDeltaTime;
 
@@ -166,18 +150,9 @@ public class TankController : NetworkBehaviour
         rb.MoveRotation(rb.rotation - rotation);
     }
 
-    /// <summary>
-    /// For non-owner tanks, smoothly interpolate from local position to
-    /// the authoritative position stored in network variables.
-    /// Increase or decrease the '25f' to find a sweet spot.
-    /// </summary>
     private void SmoothlyInterpolatePositionAndRotation()
     {
-        // A higher multiplier means it snaps faster to the server's position,
-        // resulting in less apparent lag but more risk of jitter if the updates are large.
         float lerpSpeed = 25f;
-
-        // Use Time.deltaTime (not Time.fixedDeltaTime) so it interpolates smoothly each rendered frame.
         rb.position = Vector2.Lerp(rb.position, networkPosition.Value, Time.deltaTime * lerpSpeed);
         rb.rotation = Mathf.LerpAngle(rb.rotation, networkRotation.Value, Time.deltaTime * lerpSpeed);
     }
@@ -224,19 +199,12 @@ public class TankController : NetworkBehaviour
 
     #region Server RPCs & Reconciliation
 
-    /// <summary>
-    /// Client/Host -> Server: "Here is my new input (move/turn + sequence ID)"
-    /// </summary>
     [ServerRpc]
     private void SendInputToServerRpc(MovementInput input, ServerRpcParams serverRpcParams = default)
     {
-        // (A) Server applies the authoritative movement
         ApplyMovementOnServer(input);
-
-        // (B) Update last processed input
         lastProcessedInput = input.inputSequence;
 
-        // (C) Return authoritative state for reconciliation
         ServerState newState = new ServerState
         {
             position = rb.position,
@@ -244,27 +212,18 @@ public class TankController : NetworkBehaviour
             lastProcessedInput = lastProcessedInput
         };
 
-        // Broadcast so the client can reconcile
         ReceiveServerStateClientRpc(newState);
     }
 
-    /// <summary>
-    /// Server -> Client: "Here's the authoritative position/rotation after input #XYZ."
-    /// The owner client reconciles to fix prediction errors.
-    /// </summary>
     [ClientRpc]
     private void ReceiveServerStateClientRpc(ServerState state)
     {
-        // Only the owner needs reconciliation.
-        // The server/host doesn't need it (no local prediction).
         if (!IsOwner || IsServer) 
             return;
 
-        // 1) Snap to the server's authoritative position
         rb.position = state.position;
         rb.rotation = state.rotation;
 
-        // 2) Remove all inputs that the server already processed
         int i = 0;
         while (i < pendingInputs.Count)
         {
@@ -278,7 +237,6 @@ public class TankController : NetworkBehaviour
             }
         }
 
-        // 3) Replay any unacknowledged inputs
         for (int j = 0; j < pendingInputs.Count; j++)
         {
             ApplyMovementInput(pendingInputs[j]);

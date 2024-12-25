@@ -29,23 +29,25 @@ public class MazeGenerator : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        Debug.Log($"OnNetworkSpawn called. IsHost: {IsHost}");
+        Debug.Log($"OnNetworkSpawn called. IsServer: {IsServer}");
 
-        if (IsHost)
+        // Only the dedicated server or host will generate the maze and sync to clients
+        if (IsServer)
         {
-            Debug.Log("[Host] Generating maze and syncing to clients...");
+            Debug.Log("[Server] Generating maze and syncing to clients...");
             GenerateMaze();
             DrawMaze();
 
             // Register callback for new client connections
-            CustomNetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
+            if (CustomNetworkManager.Singleton != null)
+                CustomNetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
         }
         else
         {
-            Debug.Log("[Client] Waiting for maze data from host...");
+            Debug.Log("[Client] Waiting for maze data from server...");
         }
     }
-    
+
     private void OnDestroy()
     {
         // Unregister the callback when this object is destroyed
@@ -54,10 +56,10 @@ public class MazeGenerator : NetworkBehaviour
             CustomNetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
         }
     }
-    
+
     private void OnClientConnected(ulong clientId)
     {
-        Debug.Log($"[Host] Client {clientId} connected. Sending maze data...");
+        Debug.Log($"[Server] Client {clientId} connected. Sending maze data...");
         SyncMazeDataToClientServerRpc(clientId, SerializeMazeData());
     }
 
@@ -275,7 +277,7 @@ public class MazeGenerator : NetworkBehaviour
         return serializedData;
     }
 
-    // Deserialize maze data sent from the host
+    // Deserialize maze data sent from the server
     private void DeserializeMazeData(int[] data)
     {
         grid = new Cell[width, height];
@@ -299,46 +301,36 @@ public class MazeGenerator : NetworkBehaviour
         }
     }
 
-
-
     void AdjustCamera()
     {
-        // Calculate maze dimensions in world units
         float mazeWidth = width * cellSize;
         float mazeHeight = height * cellSize;
 
-        // Get the main camera
         Camera mainCamera = Camera.main;
 
         if (mainCamera != null)
         {
             if (mainCamera.orthographic)
             {
-                // Calculate total width and height including padding
                 float totalWidth = mazeWidth + paddingLeft + paddingRight;
                 float totalHeight = mazeHeight + paddingTop + paddingBottom;
 
-                // Determine the aspect ratio
                 float screenAspect = (float)Screen.width / (float)Screen.height;
                 float mazeAspect = totalWidth / totalHeight;
 
-                // Adjust orthographic size to fit the maze with padding
                 if (screenAspect >= mazeAspect)
                 {
-                    // Screen is wider than the maze with padding
                     mainCamera.orthographicSize = totalHeight / 2;
                 }
                 else
                 {
-                    // Screen is taller than the maze with padding
                     mainCamera.orthographicSize = (totalWidth / 2) / screenAspect;
                 }
 
-                // Position the camera to center the maze with padding
                 float cameraX = (paddingLeft - paddingRight) / 2;
                 float cameraY = (paddingTop - paddingBottom) / 2;
 
-                mainCamera.transform.position = new Vector3(cameraX, cameraY, -10); // Adjust Z as needed
+                mainCamera.transform.position = new Vector3(cameraX, cameraY, -10);
             }
             else
             {

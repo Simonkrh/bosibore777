@@ -43,6 +43,7 @@ public class CustomNetworkManager : NetworkManager
             return;
         }
 
+        // Only the server spawns player objects (dedicated or host)
         if (IsServer)
         {
             // Get a spawn point

@@ -3,11 +3,10 @@ using UnityEngine;
 
 public class NetworkUI : MonoBehaviour
 {
-    public void StartHost()
+    public void StartServer()
     {
-        CustomNetworkManager.Singleton.StartHost();
+        CustomNetworkManager.Singleton.StartServer();
     }
-
     public void StartClient()
     {
         CustomNetworkManager.Singleton.StartClient();

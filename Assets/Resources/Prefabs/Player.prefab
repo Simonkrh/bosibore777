@@ -267,9 +267,9 @@ MonoBehaviour:
   moveSpeed: 1.8
   rotationSpeed: 300
   projectilePrefab: {fileID: 6673431591696494813, guid: 1ba854297c771fe4db4d56b4f928c90b, type: 3}
-  projectileSpeed: 1
+  projectileSpeed: 2
   shootCooldown: 0.5
-  shootingOffsetDistance: 1
+  shootingOffsetDistance: 0.29
 --- !u!114 &-5522133927334071017
 MonoBehaviour:
   m_ObjectHideFlags: 0
