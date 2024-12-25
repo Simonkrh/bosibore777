@@ -43,9 +43,6 @@ public class TankController : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        // Changed debug info:
-        Debug.Log($"OnNetworkSpawn called. IsServer: {IsServer}, IsClient: {IsClient}");
-
         // Only the server does physics simulation on the rigidbody. Clients = kinematic
         if (!IsServer)
         {

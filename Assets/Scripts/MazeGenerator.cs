@@ -60,8 +60,21 @@ public class MazeGenerator : NetworkBehaviour
     private void OnClientConnected(ulong clientId)
     {
         Debug.Log($"[Server] Client {clientId} connected. Sending maze data...");
-        SyncMazeDataToClientServerRpc(clientId, SerializeMazeData());
+
+        int[] data = SerializeMazeData();
+
+        SyncMazeDataToClientClientRpc(
+            data, 
+            new ClientRpcParams
+            {
+                Send = new ClientRpcSendParams
+                {
+                    TargetClientIds = new[] { clientId }
+                }
+            }
+        );
     }
+
 
     [ServerRpc(RequireOwnership = false)]
     private void SyncMazeDataToClientServerRpc(ulong clientId, int[] serializedData)
@@ -132,7 +145,7 @@ public class MazeGenerator : NetworkBehaviour
         // North neighbor
         if (cell.y + 1 < height && !grid[cell.x, cell.y + 1].visited)
         {
-            neighbors.Add(new Vector2Int(cell.x, cell.y + 1));
+                   neighbors.Add(new Vector2Int(cell.x, cell.y + 1));
         }
 
         // East neighbor
