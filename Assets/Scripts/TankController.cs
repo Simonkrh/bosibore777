@@ -189,6 +189,12 @@ public class TankController : NetworkBehaviour
         if (projectileNetObj != null)
         {
             projectileNetObj.Spawn();
+
+            var projectileComponent = projectile.GetComponent<Projectile>();
+            if (projectileComponent != null)
+            {
+                projectileComponent.SetShooterId(OwnerClientId);
+            }
         }
     }
 

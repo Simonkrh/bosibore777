@@ -4,18 +4,18 @@ using UnityEngine;
 public class Projectile : NetworkBehaviour
 {
     public float lifetime = 10f;
-
+    private bool hasCollided = false;
+    private ulong shooterId;
     private void Start()
     {
         if (IsServer)
         {
             // Only the server schedules the destruction of the projectile
-            DestroyProjectileAfterLifetimeServerRpc();
+            DestroyProjectileAfterLifetime();
         }
     }
 
-    [ServerRpc]
-    private void DestroyProjectileAfterLifetimeServerRpc()
+    private void DestroyProjectileAfterLifetime()
     {
         StartCoroutine(DestroyAfterLifetime());
     }
@@ -28,25 +28,33 @@ public class Projectile : NetworkBehaviour
             NetworkObject.Despawn(true);
         }
     }
+    
+    public void SetShooterId(ulong id)
+    {
+        shooterId = id;
+    }
 
-     private void OnCollisionEnter2D(Collision2D collision)
+    private void OnCollisionEnter2D(Collision2D collision)
     {
         if (!IsServer) return; 
 
         if (collision.gameObject.CompareTag("Player"))
         {
             var playerController = collision.gameObject.GetComponent<PlayerController>();
-            if (playerController != null)
-            {
-                ulong killerId = this.OwnerClientId;
-                playerController.Die(killerId);
-            }
 
-            // Despawn the bullet after hitting a player
-            if (NetworkObject != null)
+            // Check if the player hit is the shooter and if the bullet has already collided
+            if (playerController != null && (hasCollided || playerController.OwnerClientId != shooterId))
             {
-                NetworkObject.Despawn(true);
+                ulong killerId = shooterId;
+                playerController.Die(killerId);
+
+                // Despawn the bullet after hitting a player
+                if (NetworkObject != null)
+                {
+                    NetworkObject.Despawn(true);
+                }
             }
         }
+        hasCollided = true;
     }
 }
