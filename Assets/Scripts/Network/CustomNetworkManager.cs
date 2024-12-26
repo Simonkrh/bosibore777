@@ -40,7 +40,7 @@ public class CustomNetworkManager : NetworkManager
         NetworkConfig.TickRate = 128;
 
         // Find and cache the NetworkManagerData component
-        managerData = FindObjectOfType<NetworkManagerData>();
+        managerData = FindFirstObjectByType<NetworkManagerData>();
         if (managerData == null)
         {
             Debug.LogError("NetworkManagerData is not found in the scene!");

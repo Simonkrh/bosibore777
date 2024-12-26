@@ -49,7 +49,6 @@ public class GameManager : NetworkBehaviour
 
         Debug.Log("[Server] Starting new round...");
 
-        // Clear old round data
         alivePlayers.Clear();
 
         // Reload the scene
@@ -99,16 +98,14 @@ public class GameManager : NetworkBehaviour
         Debug.Log("[Server] EndRound called. Winner: " + winnerId);
         AnnounceWinnerClientRpc(winnerId);
 
-        // Start a short pause so the winner can drive around
         StartCoroutine(RoundEndRoutine());
+
     }
     private IEnumerator RoundEndRoutine()
     {
-        // Wait 5 seconds while the winner roams
         Debug.Log("[Server] RoundEndRoutine waiting 5 seconds...");
         yield return new WaitForSeconds(5f);
 
-        // Now actually restart for the next round
         Debug.Log("[Server] Restarting round now!");
         StartNewRound();
     }

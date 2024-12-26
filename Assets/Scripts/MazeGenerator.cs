@@ -265,6 +265,8 @@ public class MazeGenerator : NetworkBehaviour
                 }
             }
         }
+
+        AdjustCamera();
     }
 
    // Serialize maze data into a format that can be sent to clients

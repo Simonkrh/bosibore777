@@ -10,7 +10,7 @@ public class PlayerController : NetworkBehaviour
         if (!IsServer) return;  // Only the server kills players
 
         // Grab the GameManager from the scene
-        var GameManager = FindObjectOfType<GameManager>();
+        var GameManager = FindFirstObjectByType<GameManager>();
         if (GameManager != null)
         {
             // Notify it that "this player" died, with the given killer
