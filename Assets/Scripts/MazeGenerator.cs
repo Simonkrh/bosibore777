@@ -29,8 +29,6 @@ public class MazeGenerator : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        Debug.Log($"OnNetworkSpawn called. IsServer: {IsServer}");
-
         // Only the dedicated server or host will generate the maze and sync to clients
         if (IsServer)
         {
@@ -92,7 +90,7 @@ public class MazeGenerator : NetworkBehaviour
     [ClientRpc]
     private void SyncMazeDataToClientClientRpc(int[] serializedData, ClientRpcParams clientRpcParams = default)
     {
-        Debug.Log($"[Client {NetworkManager.Singleton.LocalClientId}] Received maze data. Deserializing...");
+        Debug.Log($"[Client {CustomNetworkManager.Singleton.LocalClientId}] Received maze data. Deserializing...");
         DeserializeMazeData(serializedData);
         DrawMaze();
     }

@@ -25,20 +25,21 @@ public class Projectile : NetworkBehaviour
         yield return new WaitForSeconds(lifetime);
         if (IsServer && NetworkObject != null)
         {
-            NetworkObject.Despawn(true); // Despawn ensures proper destruction across the network
+            NetworkObject.Despawn(true);
         }
     }
 
      private void OnCollisionEnter2D(Collision2D collision)
     {
-        if (!IsServer) return; // Only handle collision logic on the server
+        if (!IsServer) return; 
 
         if (collision.gameObject.CompareTag("Player"))
         {
             var playerController = collision.gameObject.GetComponent<PlayerController>();
             if (playerController != null)
             {
-                playerController.Die(); // Handle the player's death
+                ulong killerId = this.OwnerClientId;
+                playerController.Die(killerId);
             }
 
             // Despawn the bullet after hitting a player

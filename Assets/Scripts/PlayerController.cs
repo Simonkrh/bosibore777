@@ -3,33 +3,21 @@ using UnityEngine;
 
 public class PlayerController : NetworkBehaviour
 {
-    public void Die()
-    {
-        if (IsServer)
-        {
-            HandleDie();
-        }
-        else
-        {
-            RequestDieServerRpc();
-        }
-    }
+    private ulong lastAttackerId = 0;
 
-    private void HandleDie()
+    public void Die(ulong killerId)
     {
-        if (NetworkObject != null)
-        {
-            NetworkObject.Despawn(true); // Despawn the object for all clients
-        }
-        else
-        {
-            Destroy(gameObject); // Fallback for non-networked scenarios
-        }
-    }
+        if (!IsServer) return;  // Only the server kills players
 
-    [ServerRpc]
-    private void RequestDieServerRpc(ServerRpcParams rpcParams = default)
-    {
-        HandleDie();
+        // Grab the GameManager from the scene
+        var GameManager = FindObjectOfType<GameManager>();
+        if (GameManager != null)
+        {
+            // Notify it that "this player" died, with the given killer
+            GameManager.PlayerDied(OwnerClientId, killerId);
+        }
+
+        // Despawn the player object
+        NetworkObject.Despawn(true);
     }
 }

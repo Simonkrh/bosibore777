@@ -1,42 +1,72 @@
 using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.SceneManagement;
+using System.Collections.Generic;
 
 public class CustomNetworkManager : NetworkManager
 {
     private NetworkManagerData managerData;
 
-    private void Start()
+    private void Awake()
     {
-        NetworkConfig.TickRate = 128;
-        // Find and cache the NetworkManagerData component
-        managerData = FindObjectOfType<NetworkManagerData>();
-
-        if (managerData == null)
+        if (Singleton != null && Singleton != this)
         {
-            Debug.LogError("NetworkManagerData is not found in the scene!");
+            Destroy(gameObject);
             return;
         }
 
-        // Use the Singleton instance to access the callbacks
-        if (NetworkManager.Singleton != null)
-        {
-            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
-            NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
-        }
+        DontDestroyOnLoad(gameObject);
+        Debug.Log("[CustomNetworkManager] Singleton is initialized by the NetworkManager base class.");
     }
 
-    private void OnDestroy()
+    private void Start()
     {
-        // Unsubscribe from the callbacks only if NetworkManager is not null
-        if (NetworkManager.Singleton != null)
+        // By Start(), NetworkManager has already initialized Singleton
+        // So we can safely subscribe to events here:
+
+        if (Singleton == this && Singleton.IsServer)
         {
-            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
-            NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
+            Singleton.OnClientConnectedCallback += OnClientConnected;
+            Singleton.OnClientDisconnectCallback += OnClientDisconnected;
+
+            if (Singleton.SceneManager != null)
+            {
+                Singleton.SceneManager.OnLoadEventCompleted += OnSceneLoadCompleted;
+                Singleton.SceneManager.OnSynchronizeComplete += OnSceneSynchronizeComplete;
+            }
+        }
+
+        // Set your TickRate
+        NetworkConfig.TickRate = 128;
+
+        // Find and cache the NetworkManagerData component
+        managerData = FindObjectOfType<NetworkManagerData>();
+        if (managerData == null)
+        {
+            Debug.LogError("NetworkManagerData is not found in the scene!");
+        }
+    }   
+
+    private void OnDisable()
+    {
+        // Unsubscribe if Singleton is still valid
+        if (Singleton != null)
+        {
+            Singleton.OnClientConnectedCallback -= OnClientConnected;
+            Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
+
+            if (Singleton.SceneManager != null)
+            {
+                Singleton.SceneManager.OnLoadEventCompleted -= OnSceneLoadCompleted;
+                Singleton.SceneManager.OnSynchronizeComplete -= OnSceneSynchronizeComplete;
+            }
         }
     }
-
+    
     private void OnClientConnected(ulong clientId)
     {
+        Debug.Log($"[Server] OnClientConnected: client {clientId}");
+        
         if (managerData == null || managerData.playerPrefab == null)
         {
             Debug.LogError("Player prefab or managerData is not assigned in NetworkManagerData!");
@@ -74,23 +104,37 @@ public class CustomNetworkManager : NetworkManager
 
     private void OnClientDisconnected(ulong clientId)
     {
-        Debug.Log($"Client {clientId} disconnected");
+        Debug.Log($"[Server] OnClientDisconnected: client {clientId}");
 
-        if (NetworkManager.Singleton == null || NetworkManager.Singleton.SpawnManager == null)
+        if (Singleton == null || Singleton.SpawnManager == null)
         {
             Debug.LogWarning("SpawnManager is not available during client disconnection.");
             return;
         }
 
         // Find and destroy the player's object if it exists
-        foreach (var obj in NetworkManager.Singleton.SpawnManager.SpawnedObjects.Values)
+        foreach (var obj in Singleton.SpawnManager.SpawnedObjects.Values)
         {
             if (obj != null && obj.OwnerClientId == clientId)
             {
                 Destroy(obj.gameObject);
-                Debug.Log($"Destroyed object owned by Client {clientId}");
+                Debug.Log($"[Server] Destroyed object owned by Client {clientId}");
                 break;
             }
         }
+    }
+
+    private void OnSceneLoadCompleted(
+        string sceneName,
+        LoadSceneMode loadSceneMode,
+        List<ulong> clientsCompleted,
+        List<ulong> clientsTimedOut)
+    {
+        Debug.Log($"[Netcode] Scene load completed for scene: {sceneName}");
+    }
+
+    private void OnSceneSynchronizeComplete(ulong clientId)
+    {
+        Debug.Log($"[Netcode] Scene synchronization completed for client {clientId}");
     }
 }

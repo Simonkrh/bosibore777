@@ -14,7 +14,7 @@ GameObject:
   - component: {fileID: 3637908231215881518}
   - component: {fileID: 6672848246500859264}
   m_Layer: 0
-  m_Name: NetworkManager
+  m_Name: CustomNetworkManager
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -47,9 +47,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a2e728ac0db5ddd46bfd277a9e565020, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  playerPrefab: {fileID: 6318536330381436049, guid: 254f7649be9f6b9439b6fa3b841b86f5, type: 3}
+  playerPrefab: {fileID: 6318536330381436049, guid: b07d8162f8a8d6f48ac20baa95e12b13, type: 3}
   spawnPoints:
-  - {fileID: 0}
+  - {fileID: 3426310996810922319, guid: a5e064d9a5919ca4c820f24d5b6fc776, type: 3}
 --- !u!114 &7666467182776857579
 MonoBehaviour:
   m_ObjectHideFlags: 0

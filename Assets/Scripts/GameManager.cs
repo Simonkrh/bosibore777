@@ -1,0 +1,128 @@
+using Unity.Netcode;
+using UnityEngine;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+
+public class GameManager : NetworkBehaviour
+{
+    public Transform[] someSpawnPoints;    
+    public GameObject playerPrefab;  
+
+    // Keep track of who is still alive.
+    private HashSet<ulong> alivePlayers = new HashSet<ulong>();
+
+    // Keep track of each player's score 
+    private Dictionary<ulong, int> playerScores = new Dictionary<ulong, int>();
+
+    public override void OnNetworkSpawn()
+    {
+        if (IsServer)
+        {
+            Debug.Log("[Server] Spawning players in GameScene...");
+
+            // For each connected client, spawn a player
+            foreach (var client in CustomNetworkManager.Singleton.ConnectedClientsList)
+            {
+                SpawnPlayer(client.ClientId);
+            }
+        }
+    }
+
+    private void SpawnPlayer(ulong clientId)
+    {
+        Transform spawnPoint = someSpawnPoints[clientId % (ulong)someSpawnPoints.Length];
+
+        GameObject player = Instantiate(playerPrefab, spawnPoint.position, spawnPoint.rotation);
+
+        player.GetComponent<NetworkObject>().SpawnWithOwnership(clientId);
+
+        alivePlayers.Add(clientId);
+
+        Debug.Log($"[Server] Spawned player {clientId} at {spawnPoint.position}");
+    }
+
+
+    private void StartNewRound()
+    {
+        if (!IsServer) return;
+
+        Debug.Log("[Server] Starting new round...");
+
+        // Clear old round data
+        alivePlayers.Clear();
+
+        // Reload the scene
+        CustomNetworkManager.Singleton.SceneManager.LoadScene("GameScene", UnityEngine.SceneManagement.LoadSceneMode.Single);
+
+        // Mark all connected players as alive
+        foreach (var client in CustomNetworkManager.Singleton.ConnectedClientsList)
+        {
+            alivePlayers.Add(client.ClientId);
+        }
+
+        Debug.Log("[Server] Round started. Players are now alive.");
+    }
+
+    public void PlayerDied(ulong victimId, ulong killerId)
+    {
+        if (!IsServer) return;
+
+        // Remove victim from alive list
+        alivePlayers.Remove(victimId);
+
+        Debug.Log($"[Server] Player {victimId} died. Killer: {killerId}");
+
+        // If killer != victim, give them a point
+        if (killerId != victimId)
+        {
+            if (!playerScores.ContainsKey(killerId))
+                playerScores[killerId] = 0;
+
+            playerScores[killerId]++;
+            Debug.Log($"[Server] Player {killerId} earned a point! Score: {playerScores[killerId]}");
+        }
+
+        // Check how many are still alive
+        if (alivePlayers.Count <= 1)
+        {
+            // The round ends. Let's find the "winner" (or none if 0 alive)
+            ulong winnerId = alivePlayers.Count == 1 ? alivePlayers.First() : 0;
+
+            Debug.Log($"[Server] Round has ended. Winner: {winnerId}");
+            EndRound(winnerId);
+        }
+    }
+
+    private void EndRound(ulong winnerId)
+    {
+        Debug.Log("[Server] EndRound called. Winner: " + winnerId);
+        AnnounceWinnerClientRpc(winnerId);
+
+        // Start a short pause so the winner can drive around
+        StartCoroutine(RoundEndRoutine());
+    }
+    private IEnumerator RoundEndRoutine()
+    {
+        // Wait 5 seconds while the winner roams
+        Debug.Log("[Server] RoundEndRoutine waiting 5 seconds...");
+        yield return new WaitForSeconds(5f);
+
+        // Now actually restart for the next round
+        Debug.Log("[Server] Restarting round now!");
+        StartNewRound();
+    }
+
+    [ClientRpc]
+    private void AnnounceWinnerClientRpc(ulong winnerId)
+    {
+        if (winnerId == 0)
+        {
+            Debug.Log("[Client] No players survived this round. It's a tie!");
+        }
+        else
+        {
+            Debug.Log($"[Client] Player {winnerId} is the winner of this round!");
+        }
+    }
+}
