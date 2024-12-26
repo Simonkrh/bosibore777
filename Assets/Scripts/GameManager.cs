@@ -42,6 +42,16 @@ public class GameManager : NetworkBehaviour
         Debug.Log($"[Server] Spawned player {clientId} at {spawnPoint.position}");
     }
 
+    public void RemovePlayer(ulong clientId)
+    {
+        if (!IsServer) return;
+
+        if (alivePlayers.Contains(clientId))
+        {
+            alivePlayers.Remove(clientId);
+            Debug.Log($"[Server] Player {clientId} removed from alivePlayers.");
+        }
+    }
 
     private void StartNewRound()
     {

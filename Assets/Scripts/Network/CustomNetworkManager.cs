@@ -112,7 +112,7 @@ public class CustomNetworkManager : NetworkManager
             return;
         }
 
-        // Find and kill the player's object if it exists
+        // Find and destroy the player's object if it exists
         foreach (var obj in Singleton.SpawnManager.SpawnedObjects.Values)
         {
             if (obj != null && obj.OwnerClientId == clientId)
@@ -120,16 +120,16 @@ public class CustomNetworkManager : NetworkManager
                 var playerController = obj.GetComponent<PlayerController>();
                 if (playerController != null)
                 {
-                    playerController.Die(clientId); //
+                    playerController.Die(clientId); 
                     Debug.Log($"[Server] Player {clientId} killed on disconnection.");
                 }
-                else
-                {
-                    Destroy(obj.gameObject);
-                    Debug.Log($"[Server] Destroyed object owned by Client {clientId}");
-                }
-                break;
             }
+        }
+
+        var gameManager = FindFirstObjectByType<GameManager>();
+        if (gameManager != null)
+        {
+            gameManager.RemovePlayer(clientId);
         }
     }
 
