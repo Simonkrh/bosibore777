@@ -19,11 +19,6 @@ public class MazeGenerator : NetworkBehaviour
     public GameObject wallPrefab;
     public GameObject cornerPrefab;
 
-    public float paddingTop = 1.0f;
-    public float paddingBottom = 1.0f;
-    public float paddingLeft = 1.0f;
-    public float paddingRight = 1.0f;
-
     private Cell[,] grid;
     private Stack<Vector2Int> stack = new Stack<Vector2Int>();
 
@@ -317,42 +312,22 @@ public class MazeGenerator : NetworkBehaviour
     void AdjustCamera()
     {
         float mazeWidth = width * cellSize;
-        float mazeHeight = height * cellSize;
+        float mazeHeight = height * cellSize; 
+        float bottomPadding = mazeHeight * 0.1f;
+        float mazeHeightWithPadding = mazeHeight + bottomPadding * 2f * 1.4f; // 1.2f padding at the top
+        
+        float centerX = (width - 1) * cellSize / 2f;
+        float centerY = (height - 1) * cellSize / 2f;
+        Vector3 mazeCenter = new Vector3(centerX, centerY, 0f);
 
-        Camera mainCamera = Camera.main;
+        Camera cam = Camera.main;
 
-        if (mainCamera != null)
-        {
-            if (mainCamera.orthographic)
-            {
-                float totalWidth = mazeWidth + paddingLeft + paddingRight;
-                float totalHeight = mazeHeight + paddingTop + paddingBottom;
+        float aspectRatio = cam.aspect;
+        float verticalSize = mazeHeightWithPadding / 2f;
+        float horizontalSize = mazeWidth / (2f * aspectRatio);
 
-                float screenAspect = (float)Screen.width / (float)Screen.height;
-                float mazeAspect = totalWidth / totalHeight;
+        cam.orthographicSize = Mathf.Max(verticalSize, horizontalSize);
 
-                if (screenAspect >= mazeAspect)
-                {
-                    mainCamera.orthographicSize = totalHeight / 2;
-                }
-                else
-                {
-                    mainCamera.orthographicSize = (totalWidth / 2) / screenAspect;
-                }
-
-                float cameraX = (paddingLeft - paddingRight) / 2;
-                float cameraY = (paddingTop - paddingBottom) / 2;
-
-                mainCamera.transform.position = new Vector3(cameraX, cameraY, -10);
-            }
-            else
-            {
-                Debug.LogWarning("Camera is not orthographic. Adjustments may not work as intended.");
-            }
-        }
-        else
-        {
-            Debug.LogError("Main camera not found. Please tag your camera as 'MainCamera'.");
-        }
+        cam.transform.position = new Vector3(0, 0 - bottomPadding, -10f);
     }
 }

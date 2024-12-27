@@ -5,8 +5,8 @@ public class DedicatedServerAutoStart : MonoBehaviour
 {
     void Start()
     {
-        if (Application.isBatchMode)
-        {
+        
+        
             Debug.Log("[DedicatedServerAutoStart] Batch mode detected. Starting server...");
 
             if (CustomNetworkManager.Singleton == null)
@@ -16,7 +16,7 @@ public class DedicatedServerAutoStart : MonoBehaviour
             }
 
             StartServer();
-        }
+        
     }
     private void StartServer()
     {
