@@ -33,6 +33,8 @@ public class GameManager : NetworkBehaviour
         GameObject player = Instantiate(playerPrefab, spawnPosition, Quaternion.identity);
         player.GetComponent<NetworkObject>().SpawnWithOwnership(clientId);
 
+        alivePlayers.Add(clientId);
+
         Debug.Log($"[Server] Spawned player {clientId} at cell {cell} (world position {spawnPosition})");
     }
 
