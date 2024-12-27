@@ -5,7 +5,8 @@ public class DedicatedServerAutoStart : MonoBehaviour
 {
     void Start()
     {
-        
+        if (Application.isBatchMode)
+        {
         
             Debug.Log("[DedicatedServerAutoStart] Batch mode detected. Starting server...");
 
@@ -14,9 +15,8 @@ public class DedicatedServerAutoStart : MonoBehaviour
                 Debug.LogError("[DedicatedServerAutoStart] CustomNetworkManager instance is null!");
                 return;
             }
-
             StartServer();
-        
+        }
     }
     private void StartServer()
     {

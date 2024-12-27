@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 
+
 public class Cell
 {
     public bool visited = false;
@@ -19,17 +20,24 @@ public class MazeGenerator : NetworkBehaviour
     public GameObject wallPrefab;
     public GameObject cornerPrefab;
 
+    private GameManager gameManager;
     private Cell[,] grid;
     private Stack<Vector2Int> stack = new Stack<Vector2Int>();
+    public List<Vector2Int> availableCells;
+
 
     public override void OnNetworkSpawn()
     {
         // Only the dedicated server or host will generate the maze and sync to clients
         if (IsServer)
         {
-            Debug.Log("[Server] Generating maze and syncing to clients...");
+            Debug.Log("[Server] Generating maze...");
             GenerateMaze();
             DrawMaze();
+            InitializeAvailableCells();
+            Shuffle(availableCells);
+            
+            NotifyAvailableCellsReady();
 
             // Register callback for new client connections
             if (CustomNetworkManager.Singleton != null)
@@ -38,6 +46,40 @@ public class MazeGenerator : NetworkBehaviour
         else
         {
             Debug.Log("[Client] Waiting for maze data from server...");
+        }
+    }
+
+    private void InitializeAvailableCells()
+    {
+        availableCells = new List<Vector2Int>();
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                availableCells.Add(new Vector2Int(x, y));
+            }
+        }
+    }
+    
+    private void Shuffle(List<Vector2Int> list)
+    {
+        for (int i = list.Count - 1; i > 0; i--)
+        {
+            int randomIndex = Random.Range(0, i + 1);
+            Vector2Int temp = list[i];
+            list[i] = list[randomIndex];
+            list[randomIndex] = temp;
+        }
+    }
+
+    public void NotifyAvailableCellsReady()
+    {
+        Debug.Log($"[MazeGenerator] Notifying available cells ready: {availableCells.Count}");
+        var gameManager = FindFirstObjectByType<GameManager>();
+        if (gameManager != null)
+        {
+            gameManager.SetAvailableCells(new List<Vector2Int>(availableCells));
         }
     }
 
@@ -68,7 +110,6 @@ public class MazeGenerator : NetworkBehaviour
         );
     }
 
-
     [ServerRpc(RequireOwnership = false)]
     private void SyncMazeDataToClientServerRpc(ulong clientId, int[] serializedData)
     {
@@ -88,6 +129,23 @@ public class MazeGenerator : NetworkBehaviour
         Debug.Log($"[Client {CustomNetworkManager.Singleton.LocalClientId}] Received maze data. Deserializing...");
         DeserializeMazeData(serializedData);
         DrawMaze();
+    }
+
+    public Vector3 CellToWorldPosition(Vector2Int cell)
+    {
+        // Calculate the maze's dimensions in world units
+        float mazeWidth = width * cellSize;
+        float mazeHeight = height * cellSize;
+
+        // Calculate offsets to center the maze
+        float offsetX = -mazeWidth / 2 + cellSize / 2;
+        float offsetY = -mazeHeight / 2 + cellSize / 2;
+
+        // Compute the world position based on cell coordinates and offsets
+        float x = cell.x * cellSize + offsetX;
+        float y = cell.y * cellSize + offsetY;
+
+        return new Vector3(x, y, 0);
     }
 
     void GenerateMaze()
@@ -119,7 +177,7 @@ public class MazeGenerator : NetworkBehaviour
                 stack.Push(currentCell);
 
                 // Choose a random neighbor
-                Vector2Int chosenNeighbor = neighbors[Random.Range(0, neighbors.Count)];
+                Vector2Int chosenNeighbor = neighbors[UnityEngine.Random.Range(0, neighbors.Count)];
 
                 // Remove the wall between current cell and chosen neighbor
                 RemoveWall(currentCell, chosenNeighbor);

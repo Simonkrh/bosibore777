@@ -66,41 +66,18 @@ public class CustomNetworkManager : NetworkManager
     private void OnClientConnected(ulong clientId)
     {
         Debug.Log($"[Server] OnClientConnected: client {clientId}");
-        
-        if (managerData == null || managerData.playerPrefab == null)
+
+        var gameManager = FindFirstObjectByType<GameManager>();
+        if (gameManager != null)
         {
-            Debug.LogError("Player prefab or managerData is not assigned in NetworkManagerData!");
-            return;
+            gameManager.SpawnPlayer(clientId);
         }
-
-        // Only the server spawns player objects (dedicated or host)
-        if (IsServer)
+        else
         {
-            // Get a spawn point
-            Transform spawnPoint = managerData.spawnPoints[(int)(clientId % (ulong)managerData.spawnPoints.Length)];
-            if (spawnPoint == null)
-            {
-                Debug.LogError("No spawn points are available in NetworkManagerData!");
-                return;
-            }
-
-            // Instantiate and spawn the player
-            GameObject playerObject = Instantiate(managerData.playerPrefab, spawnPoint.position, spawnPoint.rotation);
-            NetworkObject networkObject = playerObject.GetComponent<NetworkObject>();
-
-            if (networkObject != null)
-            {
-                // Assign ownership to the connected client
-                networkObject.SpawnWithOwnership(clientId);
-                Debug.Log($"Player {clientId} spawned at {spawnPoint.position}");
-            }
-            else
-            {
-                Debug.LogError("Player prefab does not have a NetworkObject component!");
-                Destroy(playerObject); // Clean up if the object is invalid
-            }
+            Debug.LogError("GameManager not found. Cannot spawn player.");
         }
     }
+
 
     private void OnClientDisconnected(ulong clientId)
     {

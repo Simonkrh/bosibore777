@@ -6,8 +6,8 @@ using System.Linq;
 
 public class GameManager : NetworkBehaviour
 {
-    public Transform[] someSpawnPoints;    
     public GameObject playerPrefab;  
+    public MazeGenerator mazeGenerator; 
 
     // Keep track of who is still alive.
     private HashSet<ulong> alivePlayers = new HashSet<ulong>();
@@ -15,31 +15,31 @@ public class GameManager : NetworkBehaviour
     // Keep track of each player's score 
     private Dictionary<ulong, int> playerScores = new Dictionary<ulong, int>();
 
-    public override void OnNetworkSpawn()
+    public void SpawnPlayer(ulong clientId)
     {
-        if (IsServer)
+        Debug.Log("Client availableCells: " + mazeGenerator.availableCells.Count);
+        if (mazeGenerator.availableCells == null || mazeGenerator.availableCells.Count == 0)
         {
-            Debug.Log("[Server] Spawning players in GameScene...");
-
-            // For each connected client, spawn a player
-            foreach (var client in CustomNetworkManager.Singleton.ConnectedClientsList)
-            {
-                SpawnPlayer(client.ClientId);
-            }
+            Debug.LogWarning("No available cells for spawning players.");
+            return;
         }
-    }
 
-    private void SpawnPlayer(ulong clientId)
-    {
-        Transform spawnPoint = someSpawnPoints[clientId % (ulong)someSpawnPoints.Length];
+        // Select a random cell or the next available cell
+        Vector2Int cell = mazeGenerator.availableCells[Random.Range(0, mazeGenerator.availableCells.Count)];
+        mazeGenerator.availableCells.Remove(cell); // Ensure no duplicates
 
-        GameObject player = Instantiate(playerPrefab, spawnPoint.position, spawnPoint.rotation);
+        Vector3 spawnPosition = mazeGenerator.CellToWorldPosition(cell);
 
+        GameObject player = Instantiate(playerPrefab, spawnPosition, Quaternion.identity);
         player.GetComponent<NetworkObject>().SpawnWithOwnership(clientId);
 
-        alivePlayers.Add(clientId);
+        Debug.Log($"[Server] Spawned player {clientId} at cell {cell} (world position {spawnPosition})");
+    }
 
-        Debug.Log($"[Server] Spawned player {clientId} at {spawnPoint.position}");
+    public void SetAvailableCells(List<Vector2Int> cells)
+    {
+        mazeGenerator.availableCells = cells;
+        Debug.Log($"[GameManager] Received available cells: {cells.Count}");
     }
 
     public void RemovePlayer(ulong clientId)

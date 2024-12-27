@@ -45,7 +45,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 745461878
+  GlobalObjectIdHash: 4206209868
   InScenePlacedSourceGlobalObjectIdHash: 745461878
   DeferredDespawnTick: 0
   Ownership: 1
@@ -71,6 +71,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
+  gameManager: {fileID: 0}
   width: 4
   height: 4
   cellSize: 1
