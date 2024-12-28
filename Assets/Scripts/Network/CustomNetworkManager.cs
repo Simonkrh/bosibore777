@@ -36,9 +36,6 @@ public class CustomNetworkManager : NetworkManager
             }
         }
 
-        // Set your TickRate
-        NetworkConfig.TickRate = 128;
-
         // Find and cache the NetworkManagerData component
         managerData = FindFirstObjectByType<NetworkManagerData>();
         if (managerData == null)

@@ -24,8 +24,7 @@ public class MazeGenerator : NetworkBehaviour
     private GameManager gameManager;
     private Cell[,] grid;
     private Stack<Vector2Int> stack = new Stack<Vector2Int>();
-    public List<Vector2Int> availableCells;
-
+    private List<Vector2Int> availableCellsList;
 
     public override void OnNetworkSpawn()
     {
@@ -51,13 +50,26 @@ public class MazeGenerator : NetworkBehaviour
         GenerateMaze();
         DrawMaze();
         InitializeAvailableCells();
-        Shuffle(availableCells);
+        Shuffle(availableCellsList);
         NotifyAvailableCellsReady();
 
         // Sync the new maze to all clients
-        SyncMazeToAllClients();
+        if (NetworkObject != null && NetworkObject.IsSpawned)
+        {
+            StartCoroutine(SyncMazeAfterDelay());
+        }
+        else
+        {
+            Debug.LogError("[MazeGenerator] NetworkObject is not spawned. Cannot send ClientRpc.");
+        }
     }
     
+    IEnumerator SyncMazeAfterDelay()
+    {
+        yield return new WaitForSeconds(0.5f); // Adjust delay as needed
+        SyncMazeToAllClients();
+    }
+
     private void SyncMazeToAllClients()
     {
         int[] data = SerializeMazeData();
@@ -66,13 +78,13 @@ public class MazeGenerator : NetworkBehaviour
 
     private void InitializeAvailableCells()
     {
-        availableCells = new List<Vector2Int>();
+        availableCellsList = new List<Vector2Int>();
 
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
             {
-                availableCells.Add(new Vector2Int(x, y));
+                availableCellsList.Add(new Vector2Int(x, y));
             }
         }
     }
@@ -90,11 +102,15 @@ public class MazeGenerator : NetworkBehaviour
 
     public void NotifyAvailableCellsReady()
     {
-        Debug.Log($"[MazeGenerator] Notifying available cells ready: {availableCells.Count}");
+        Debug.Log($"[MazeGenerator] Notifying available cells ready: {availableCellsList.Count}");
         var gameManager = FindFirstObjectByType<GameManager>();
         if (gameManager != null)
         {
-            gameManager.SetAvailableCells(new List<Vector2Int>(availableCells));
+            gameManager.SetAvailableCells(new List<Vector2Int>(availableCellsList));
+        }
+        else
+        {
+            Debug.LogError("[MazeGenerator] GameManager not found. Cannot set available cells.");
         }
     }
 
@@ -125,24 +141,13 @@ public class MazeGenerator : NetworkBehaviour
         );
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    private void SyncMazeDataToClientServerRpc(ulong clientId, int[] serializedData)
-    {
-        Debug.Log($"[Server] Sending maze data to client {clientId}. Data length: {serializedData.Length}");
-        SyncMazeDataToClientClientRpc(serializedData, new ClientRpcParams
-        {
-            Send = new ClientRpcSendParams
-            {
-                TargetClientIds = new[] { clientId }
-            }
-        });
-    }
-
     [ClientRpc]
     private void SyncMazeDataToClientClientRpc(int[] serializedData, ClientRpcParams clientRpcParams = default)
     {
+        if (!IsClient) return;
         Debug.Log($"[Client {CustomNetworkManager.Singleton.LocalClientId}] Received maze data. Deserializing...");
         DeserializeMazeData(serializedData);
+
         DrawMaze();
     }
 
@@ -271,6 +276,14 @@ public class MazeGenerator : NetworkBehaviour
 
     void DrawMaze()
 {
+    Debug.Log("Drawing maze...");
+
+    if (mazeParent == null)
+    {
+        GameObject mazeParentObj = new GameObject("MazeParent");
+        mazeParent = mazeParentObj.transform;
+    }
+
     // Clear existing maze objects
     foreach (Transform child in mazeParent)
     {

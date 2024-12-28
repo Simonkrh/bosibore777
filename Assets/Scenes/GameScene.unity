@@ -138,7 +138,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
   playerPrefab: {fileID: 6318536330381436049, guid: b07d8162f8a8d6f48ac20baa95e12b13, type: 3}
-  mazeGenerator: {fileID: 6465956145900489289, guid: 0631eced0d9ab024096154fcf82a10e6, type: 3}
+  mazeGenerator: {fileID: 6465956146593022757}
 --- !u!1 &496905826
 GameObject:
   m_ObjectHideFlags: 0
@@ -306,7 +306,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1001 &994658668
+--- !u!1001 &569677153
 PrefabInstance:
   m_ObjectHideFlags: 0
   serializedVersion: 2
@@ -359,12 +359,12 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 6465956145900489289, guid: 0631eced0d9ab024096154fcf82a10e6, type: 3}
-      propertyPath: gameManager
+      propertyPath: mazeParent
       value: 
-      objectReference: {fileID: 238337801}
+      objectReference: {fileID: 6431561655234337018}
     - target: {fileID: 6684234062452913369, guid: 0631eced0d9ab024096154fcf82a10e6, type: 3}
       propertyPath: GlobalObjectIdHash
-      value: 4206209868
+      value: 790418545
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -617,6 +617,48 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2492958477331840603
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6431561655234337018}
+  m_Layer: 0
+  m_Name: MazeParent
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6431561655234337018
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2492958477331840603}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &6465956146593022757 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 6465956145900489289, guid: 0631eced0d9ab024096154fcf82a10e6, type: 3}
+  m_PrefabInstance: {fileID: 569677153}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 00457ddf9c2163a419dd387ed2daab43, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1001 &6610057492376058931
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -674,6 +716,10 @@ PrefabInstance:
       value: 1716872533
       objectReference: {fileID: 0}
     - target: {fileID: 8351468527027829580, guid: 46f2546b5c1f8a340b66bfbf8d697ff7, type: 3}
+      propertyPath: ActiveSceneSynchronization
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8351468527027829580, guid: 46f2546b5c1f8a340b66bfbf8d697ff7, type: 3}
       propertyPath: InScenePlacedSourceGlobalObjectIdHash
       value: 1886518399
       objectReference: {fileID: 0}
@@ -692,5 +738,6 @@ SceneRoots:
   - {fileID: 519420032}
   - {fileID: 1748358496}
   - {fileID: 1111985461}
+  - {fileID: 6431561655234337018}
   - {fileID: 6610057492376058931}
-  - {fileID: 994658668}
+  - {fileID: 569677153}

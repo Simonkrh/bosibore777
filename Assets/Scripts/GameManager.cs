@@ -17,19 +17,22 @@ public class GameManager : NetworkBehaviour
 
     // Mapping from clientId to player GameObject
     private Dictionary<ulong, GameObject> clientIdToPlayer = new Dictionary<ulong, GameObject>();
+    
+    // Independent list for available spawn cells
+    private List<Vector2Int> availableCells = new List<Vector2Int>();
 
     public void SpawnPlayer(ulong clientId)
     {
-        Debug.Log("Client availableCells: " + mazeGenerator.availableCells.Count);
-        if (mazeGenerator.availableCells == null || mazeGenerator.availableCells.Count == 0)
+        Debug.Log("Client availableCells: " + (availableCells != null ? availableCells.Count.ToString() : "null"));
+        if (availableCells == null || availableCells.Count == 0)
         {
             Debug.LogWarning("No available cells for spawning players.");
             return;
         }
 
         // Select a random cell or the next available cell
-        Vector2Int cell = mazeGenerator.availableCells[Random.Range(0, mazeGenerator.availableCells.Count)];
-        mazeGenerator.availableCells.Remove(cell); // Ensure no duplicates
+        Vector2Int cell = availableCells[Random.Range(0, availableCells.Count)];
+        availableCells.Remove(cell); // Ensure no duplicates
 
         Vector3 spawnPosition = mazeGenerator.CellToWorldPosition(cell);
 
@@ -40,6 +43,12 @@ public class GameManager : NetworkBehaviour
         clientIdToPlayer[clientId] = player;
 
         Debug.Log($"[Server] Spawned player {clientId} at cell {cell} (world position {spawnPosition})");
+    }
+
+    public void SetAvailableCells(List<Vector2Int> cells)
+    {
+        availableCells = cells;
+        Debug.Log($"[GameManager] Received available cells: {availableCells.Count}");
     }
 
     public void DespawnPlayer(ulong clientId)
@@ -60,12 +69,6 @@ public class GameManager : NetworkBehaviour
         }
     }
 
-    public void SetAvailableCells(List<Vector2Int> cells)
-    {
-        mazeGenerator.availableCells = cells;
-        Debug.Log($"[GameManager] Received available cells: {cells.Count}");
-    }
-
     public void RemovePlayer(ulong clientId)
     {
         if (!IsServer) return;
@@ -81,6 +84,11 @@ public class GameManager : NetworkBehaviour
     {
         if (!IsServer) return;
 
+        StartCoroutine(StartNewRoundCoroutine());
+    }
+
+    private IEnumerator StartNewRoundCoroutine()
+    {
         Debug.Log("[Server] Starting new round...");
 
         // Remove the last player standing if any
@@ -96,6 +104,9 @@ public class GameManager : NetworkBehaviour
 
         // Regenerate and sync the maze
         mazeGenerator.RegenerateMaze();
+
+        // Wait for the maze to sync
+        yield return new WaitForSeconds(1f); // Adjust based on synchronization speed
 
         // Spawn players after the maze has been regenerated and synced
         foreach (var client in CustomNetworkManager.Singleton.ConnectedClientsList)

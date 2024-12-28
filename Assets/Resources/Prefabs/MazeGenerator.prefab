@@ -45,7 +45,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 4206209868
+  GlobalObjectIdHash: 745461878
   InScenePlacedSourceGlobalObjectIdHash: 745461878
   DeferredDespawnTick: 0
   Ownership: 1
@@ -71,10 +71,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
-  gameManager: {fileID: 0}
   width: 4
   height: 4
   cellSize: 1
   floorPrefab: {fileID: 6917115700887593149, guid: 95eb1e67fb196434fbbe33fc4286b1e5, type: 3}
   wallPrefab: {fileID: 114839858060744285, guid: d909e24ef984adf40a6dc2f79b0e3dc7, type: 3}
   cornerPrefab: {fileID: 114839858060744285, guid: ab681b28d8edd874caae82cfa980a84e, type: 3}
+  mazeParent: {fileID: 1960455654824676203, guid: b7723658d1956604fb4af997565464c7, type: 3}
