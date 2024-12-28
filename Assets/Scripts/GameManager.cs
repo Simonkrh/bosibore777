@@ -15,6 +15,9 @@ public class GameManager : NetworkBehaviour
     // Keep track of each player's score 
     private Dictionary<ulong, int> playerScores = new Dictionary<ulong, int>();
 
+    // Mapping from clientId to player GameObject
+    private Dictionary<ulong, GameObject> clientIdToPlayer = new Dictionary<ulong, GameObject>();
+
     public void SpawnPlayer(ulong clientId)
     {
         Debug.Log("Client availableCells: " + mazeGenerator.availableCells.Count);
@@ -34,8 +37,27 @@ public class GameManager : NetworkBehaviour
         player.GetComponent<NetworkObject>().SpawnWithOwnership(clientId);
 
         alivePlayers.Add(clientId);
+        clientIdToPlayer[clientId] = player;
 
         Debug.Log($"[Server] Spawned player {clientId} at cell {cell} (world position {spawnPosition})");
+    }
+
+    public void DespawnPlayer(ulong clientId)
+    {
+        if (clientIdToPlayer.TryGetValue(clientId, out GameObject player))
+        {
+            if (player != null)
+            {
+                player.GetComponent<NetworkObject>().Despawn(true);
+                Destroy(player);
+                Debug.Log($"[Server] Despawned player {clientId}");
+            }
+            clientIdToPlayer.Remove(clientId);
+        }
+        else
+        {
+            Debug.LogWarning($"[Server] Attempted to despawn player {clientId}, but no such player was found.");
+        }
     }
 
     public void SetAvailableCells(List<Vector2Int> cells)
@@ -61,15 +83,24 @@ public class GameManager : NetworkBehaviour
 
         Debug.Log("[Server] Starting new round...");
 
+        // Remove the last player standing if any
+        if (alivePlayers.Count == 1)
+        {
+            ulong lastPlayerId = alivePlayers.First();
+            RemovePlayer(lastPlayerId);
+            DespawnPlayer(lastPlayerId);
+            Debug.Log($"[Server] Removed last player standing: {lastPlayerId}");
+        }
+
         alivePlayers.Clear();
 
-        // Reload the scene
-        CustomNetworkManager.Singleton.SceneManager.LoadScene("GameScene", UnityEngine.SceneManagement.LoadSceneMode.Single);
+        // Regenerate and sync the maze
+        mazeGenerator.RegenerateMaze();
 
-        // Mark all connected players as alive
+        // Spawn players after the maze has been regenerated and synced
         foreach (var client in CustomNetworkManager.Singleton.ConnectedClientsList)
         {
-            alivePlayers.Add(client.ClientId);
+            SpawnPlayer(client.ClientId);
         }
 
         Debug.Log("[Server] Round started. Players are now alive.");

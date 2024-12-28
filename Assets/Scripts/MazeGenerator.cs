@@ -19,6 +19,7 @@ public class MazeGenerator : NetworkBehaviour
     public GameObject floorPrefab;
     public GameObject wallPrefab;
     public GameObject cornerPrefab;
+    public Transform mazeParent;
 
     private GameManager gameManager;
     private Cell[,] grid;
@@ -31,13 +32,8 @@ public class MazeGenerator : NetworkBehaviour
         // Only the dedicated server or host will generate the maze and sync to clients
         if (IsServer)
         {
-            Debug.Log("[Server] Generating maze...");
-            GenerateMaze();
-            DrawMaze();
-            InitializeAvailableCells();
-            Shuffle(availableCells);
-            
-            NotifyAvailableCellsReady();
+            Debug.Log("[Server] Generating initial maze...");
+            RegenerateMaze();
 
             // Register callback for new client connections
             if (CustomNetworkManager.Singleton != null)
@@ -47,6 +43,25 @@ public class MazeGenerator : NetworkBehaviour
         {
             Debug.Log("[Client] Waiting for maze data from server...");
         }
+    }
+
+    public void RegenerateMaze()
+    {
+        Debug.Log("[MazeGenerator] Regenerating maze...");
+        GenerateMaze();
+        DrawMaze();
+        InitializeAvailableCells();
+        Shuffle(availableCells);
+        NotifyAvailableCellsReady();
+
+        // Sync the new maze to all clients
+        SyncMazeToAllClients();
+    }
+    
+    private void SyncMazeToAllClients()
+    {
+        int[] data = SerializeMazeData();
+        SyncMazeDataToClientClientRpc(data);
     }
 
     private void InitializeAvailableCells()
@@ -255,72 +270,72 @@ public class MazeGenerator : NetworkBehaviour
     }
 
     void DrawMaze()
+{
+    // Clear existing maze objects
+    foreach (Transform child in mazeParent)
     {
-        // Clear existing maze objects
-        foreach (Transform child in transform)
-        {
-            Destroy(child.gameObject);
-        }
+        Destroy(child.gameObject);
+    }
 
-        // Calculate offsets to center the maze
-        float mazeWidth = width * cellSize;
-        float mazeHeight = height * cellSize;
-        float offsetX = -mazeWidth / 2 + cellSize / 2;
-        float offsetY = -mazeHeight / 2 + cellSize / 2;
+    // Calculate offsets to center the maze
+    float mazeWidth = width * cellSize;
+    float mazeHeight = height * cellSize;
+    float offsetX = -mazeWidth / 2 + cellSize / 2;
+    float offsetY = -mazeHeight / 2 + cellSize / 2;
 
-        for (int x = 0; x < width; x++)
+    for (int x = 0; x < width; x++)
+    {
+        for (int y = 0; y < height; y++)
         {
-            for (int y = 0; y < height; y++)
+            // Adjust cell position to center the maze
+            Vector3 cellPosition = new Vector3(x * cellSize + offsetX, y * cellSize + offsetY, 0);
+
+            // Instantiate floor
+            Instantiate(floorPrefab, cellPosition, Quaternion.identity, mazeParent);
+
+            // Instantiate walls based on the cell's walls
+            Cell cell = grid[x, y];
+            
+            // Instantiate corner blocks
+            Vector3 cornerPosition = new Vector3(
+                (x * cellSize) + offsetX - (cellSize / 2),
+                (y * cellSize) + offsetY - (cellSize / 2),
+                0
+            );
+            Instantiate(cornerPrefab, cornerPosition, Quaternion.identity, mazeParent);
+
+            // North wall
+            if (cell.walls[0])
             {
-                // Adjust cell position to center the maze
-                Vector3 cellPosition = new Vector3(x * cellSize + offsetX, y * cellSize + offsetY, 0);
+                Vector3 position = cellPosition + new Vector3(0, cellSize / 2, 0);
+                Instantiate(wallPrefab, position, Quaternion.Euler(0, 0, 90), mazeParent);
+            }
 
-                // Instantiate floor
-                Instantiate(floorPrefab, cellPosition, Quaternion.identity, transform);
+            // East wall
+            if (cell.walls[1])
+            {
+                Vector3 position = cellPosition + new Vector3(cellSize / 2, 0, 0);
+                Instantiate(wallPrefab, position, Quaternion.identity, mazeParent);
+            }
 
-                // Instantiate walls based on the cell's walls
-                Cell cell = grid[x, y];
-                
-                // Instantiate corner blocks
-                Vector3 cornerPosition = new Vector3(
-                    (x * cellSize) + offsetX - (cellSize / 2),
-                    (y * cellSize) + offsetY - (cellSize / 2),
-                    0
-                );
-                Instantiate(cornerPrefab, cornerPosition, Quaternion.identity, transform);
+            // South wall
+            if (cell.walls[2])
+            {
+                Vector3 position = cellPosition + new Vector3(0, -cellSize / 2, 0);
+                Instantiate(wallPrefab, position, Quaternion.Euler(0, 0, 90), mazeParent);
+            }
 
-                // North wall
-                if (cell.walls[0])
-                {
-                    Vector3 position = cellPosition + new Vector3(0, cellSize / 2, 0);
-                    Instantiate(wallPrefab, position, Quaternion.Euler(0, 0, 90), transform);
-                }
-
-                // East wall
-                if (cell.walls[1])
-                {
-                    Vector3 position = cellPosition + new Vector3(cellSize / 2, 0, 0);
-                    Instantiate(wallPrefab, position, Quaternion.identity, transform);
-                }
-
-                // South wall
-                if (cell.walls[2])
-                {
-                    Vector3 position = cellPosition + new Vector3(0, -cellSize / 2, 0);
-                    Instantiate(wallPrefab, position, Quaternion.Euler(0, 0, 90), transform);
-                }
-
-                // West wall
-                if (cell.walls[3])
-                {
-                    Vector3 position = cellPosition + new Vector3(-cellSize / 2, 0, 0);
-                    Instantiate(wallPrefab, position, Quaternion.identity, transform);
-                }
+            // West wall
+            if (cell.walls[3])
+            {
+                Vector3 position = cellPosition + new Vector3(-cellSize / 2, 0, 0);
+                Instantiate(wallPrefab, position, Quaternion.identity, mazeParent);
             }
         }
-
-        AdjustCamera();
     }
+
+    AdjustCamera();
+}
 
    // Serialize maze data into a format that can be sent to clients
     private int[] SerializeMazeData()
