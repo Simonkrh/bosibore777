@@ -12,8 +12,8 @@ public class Cell
 
 public class MazeGenerator : NetworkBehaviour
 {
-    public int width = 15;
-    public int height = 15;
+    public int minSize = 4; // 4x4
+    public int maxSize = 12; // 12x12
     public float cellSize = 1.0f;
 
     public GameObject floorPrefab;
@@ -22,6 +22,8 @@ public class MazeGenerator : NetworkBehaviour
     public Transform mazeParent;
 
     private GameManager gameManager;
+    private int width;
+    private int height;
     private Cell[,] grid;
     private Stack<Vector2Int> stack = new Stack<Vector2Int>();
     private List<Vector2Int> availableCellsList;
@@ -47,6 +49,7 @@ public class MazeGenerator : NetworkBehaviour
     public void RegenerateMaze()
     {
         Debug.Log("[MazeGenerator] Regenerating maze...");
+        GenerateRandomDimensions();
         GenerateMaze();
         DrawMaze();
         InitializeAvailableCells();
@@ -64,6 +67,41 @@ public class MazeGenerator : NetworkBehaviour
         }
     }
     
+    void GenerateRandomDimensions()
+    {
+        int newWidth, newHeight;
+        int attempt = 0;
+        int maxAttempts = 100; // Prevents potential infinite loops
+
+        do
+        {
+            newWidth = Random.Range(minSize, maxSize + 1);
+            newHeight = Random.Range(minSize, maxSize + 1);
+            attempt++;
+
+            // Prevent width and height from being at extreme opposites
+            if (!((newWidth == maxSize && newHeight == minSize) ||
+                  (newWidth == minSize && newHeight == maxSize)))
+            {
+                break;
+            }
+
+        } while (attempt < maxAttempts);
+
+        // Fallback in case no valid dimensions are found within the attempts
+        if (attempt == maxAttempts)
+        {
+            Debug.LogWarning("[MazeGenerator] Failed to generate valid dimensions within attempts. Using default values.");
+            newWidth = Mathf.Clamp(newWidth, minSize, maxSize);
+            newHeight = Mathf.Clamp(newHeight, minSize, maxSize);
+        }
+
+        width = newWidth;
+        height = newHeight;
+
+        Debug.Log($"[MazeGenerator] Generated maze dimensions: {width}x{height}");
+    }
+
     IEnumerator SyncMazeAfterDelay()
     {
         yield return new WaitForSeconds(0.5f); // Adjust delay as needed
@@ -147,8 +185,6 @@ public class MazeGenerator : NetworkBehaviour
         if (!IsClient) return;
         Debug.Log($"[Client {CustomNetworkManager.Singleton.LocalClientId}] Received maze data. Deserializing...");
         DeserializeMazeData(serializedData);
-
-        DrawMaze();
     }
 
     public Vector3 CellToWorldPosition(Vector2Int cell)
@@ -275,85 +311,91 @@ public class MazeGenerator : NetworkBehaviour
     }
 
     void DrawMaze()
-{
-    if (mazeParent == null)
     {
-        GameObject mazeParentObj = new GameObject("MazeParent");
-        mazeParent = mazeParentObj.transform;
-    }
-
-    // Clear existing maze objects
-    foreach (Transform child in mazeParent)
-    {
-        Destroy(child.gameObject);
-    }
-
-    // Calculate offsets to center the maze
-    float mazeWidth = width * cellSize;
-    float mazeHeight = height * cellSize;
-    float offsetX = -mazeWidth / 2 + cellSize / 2;
-    float offsetY = -mazeHeight / 2 + cellSize / 2;
-
-    for (int x = 0; x < width; x++)
-    {
-        for (int y = 0; y < height; y++)
+        if (mazeParent == null)
         {
-            // Adjust cell position to center the maze
-            Vector3 cellPosition = new Vector3(x * cellSize + offsetX, y * cellSize + offsetY, 0);
+            GameObject mazeParentObj = new GameObject("MazeParent");
+            mazeParent = mazeParentObj.transform;
+        }
 
-            // Instantiate floor
-            Instantiate(floorPrefab, cellPosition, Quaternion.identity, mazeParent);
+        // Clear existing maze objects
+        foreach (Transform child in mazeParent)
+        {
+            Destroy(child.gameObject);
+        }
 
-            // Instantiate walls based on the cell's walls
-            Cell cell = grid[x, y];
-            
-            // Instantiate corner blocks
-            Vector3 cornerPosition = new Vector3(
-                (x * cellSize) + offsetX - (cellSize / 2),
-                (y * cellSize) + offsetY - (cellSize / 2),
-                0
-            );
-            Instantiate(cornerPrefab, cornerPosition, Quaternion.identity, mazeParent);
+        // Calculate offsets to center the maze
+        float mazeWidth = width * cellSize;
+        float mazeHeight = height * cellSize;
+        float offsetX = -mazeWidth / 2 + cellSize / 2;
+        float offsetY = -mazeHeight / 2 + cellSize / 2;
 
-            // North wall
-            if (cell.walls[0])
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
             {
-                Vector3 position = cellPosition + new Vector3(0, cellSize / 2, 0);
-                Instantiate(wallPrefab, position, Quaternion.Euler(0, 0, 90), mazeParent);
-            }
+                // Adjust cell position to center the maze
+                Vector3 cellPosition = new Vector3(x * cellSize + offsetX, y * cellSize + offsetY, 0);
 
-            // East wall
-            if (cell.walls[1])
-            {
-                Vector3 position = cellPosition + new Vector3(cellSize / 2, 0, 0);
-                Instantiate(wallPrefab, position, Quaternion.identity, mazeParent);
-            }
+                // Instantiate floor
+                Instantiate(floorPrefab, cellPosition, Quaternion.identity, mazeParent);
 
-            // South wall
-            if (cell.walls[2])
-            {
-                Vector3 position = cellPosition + new Vector3(0, -cellSize / 2, 0);
-                Instantiate(wallPrefab, position, Quaternion.Euler(0, 0, 90), mazeParent);
-            }
+                // Instantiate walls based on the cell's walls
+                Cell cell = grid[x, y];
+                
+                // Instantiate corner blocks
+                Vector3 cornerPosition = new Vector3(
+                    (x * cellSize) + offsetX - (cellSize / 2),
+                    (y * cellSize) + offsetY - (cellSize / 2),
+                    0
+                );
+                Instantiate(cornerPrefab, cornerPosition, Quaternion.identity, mazeParent);
 
-            // West wall
-            if (cell.walls[3])
-            {
-                Vector3 position = cellPosition + new Vector3(-cellSize / 2, 0, 0);
-                Instantiate(wallPrefab, position, Quaternion.identity, mazeParent);
+                // North wall
+                if (cell.walls[0])
+                {
+                    Vector3 position = cellPosition + new Vector3(0, cellSize / 2, 0);
+                    Instantiate(wallPrefab, position, Quaternion.Euler(0, 0, 90), mazeParent);
+                }
+
+                // East wall
+                if (cell.walls[1])
+                {
+                    Vector3 position = cellPosition + new Vector3(cellSize / 2, 0, 0);
+                    Instantiate(wallPrefab, position, Quaternion.identity, mazeParent);
+                }
+
+                // South wall
+                if (cell.walls[2])
+                {
+                    Vector3 position = cellPosition + new Vector3(0, -cellSize / 2, 0);
+                    Instantiate(wallPrefab, position, Quaternion.Euler(0, 0, 90), mazeParent);
+                }
+
+                // West wall
+                if (cell.walls[3])
+                {
+                    Vector3 position = cellPosition + new Vector3(-cellSize / 2, 0, 0);
+                    Instantiate(wallPrefab, position, Quaternion.identity, mazeParent);
+                }
             }
         }
-    }
 
-    AdjustCamera();
-}
+        AdjustCamera();
+    }
 
    // Serialize maze data into a format that can be sent to clients
     private int[] SerializeMazeData()
     {
-        int[] serializedData = new int[width * height * 4];
-        int index = 0;
-
+        // Total elements: 2 for width and height + 4 for each cell's walls
+        int[] serializedData = new int[2 + width * height * 4];
+        
+        // First two elements are width and height
+        serializedData[0] = width;
+        serializedData[1] = height;
+        
+        int index = 2; // Start after width and height
+        
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
@@ -369,16 +411,34 @@ public class MazeGenerator : NetworkBehaviour
         return serializedData;
     }
 
+
     // Deserialize maze data sent from the server
     private void DeserializeMazeData(int[] data)
     {
+        if (data.Length < 2)
+        {
+            Debug.LogError("[MazeGenerator] Serialized data is too short to contain width and height.");
+            return;
+        }
+
+        // Extract width and height
+        width = data[0];
+        height = data[1];
+
+        // Initialize the grid with the new dimensions
         grid = new Cell[width, height];
-        int index = 0;
+        int index = 2; // Start after width and height
 
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
             {
+                if (index + 4 > data.Length)
+                {
+                    Debug.LogError("[MazeGenerator] Serialized data is too short to contain all wall information.");
+                    return;
+                }
+
                 grid[x, y] = new Cell
                 {
                     walls = new bool[]
@@ -391,7 +451,11 @@ public class MazeGenerator : NetworkBehaviour
                 };
             }
         }
+
+        // After deserialization, draw the maze with the new dimensions
+        DrawMaze();
     }
+
 
     void AdjustCamera()
     {
