@@ -15,6 +15,7 @@ public class MazeGenerator : NetworkBehaviour
     public int minSize = 4; // 4x4
     public int maxSize = 12; // 12x12
     public float cellSize = 1.0f;
+    public float wallRemovalPercentage = 0.2f;
 
     public GameObject floorPrefab;
     public GameObject wallPrefab;
@@ -51,6 +52,7 @@ public class MazeGenerator : NetworkBehaviour
         Debug.Log("[MazeGenerator] Regenerating maze...");
         GenerateRandomDimensions();
         GenerateMaze();
+        RemoveRandomWalls();
         DrawMaze();
         InitializeAvailableCells();
         Shuffle(availableCellsList);
@@ -127,12 +129,12 @@ public class MazeGenerator : NetworkBehaviour
         }
     }
     
-    private void Shuffle(List<Vector2Int> list)
+    private void Shuffle<T>(List<T> list)
     {
         for (int i = list.Count - 1; i > 0; i--)
         {
             int randomIndex = Random.Range(0, i + 1);
-            Vector2Int temp = list[i];
+            T temp = list[i];
             list[i] = list[randomIndex];
             list[randomIndex] = temp;
         }
@@ -244,7 +246,7 @@ public class MazeGenerator : NetworkBehaviour
             }
         }
     }
-
+    
     List<Vector2Int> GetUnvisitedNeighbors(Vector2Int cell)
     {
         List<Vector2Int> neighbors = new List<Vector2Int>();
@@ -310,6 +312,81 @@ public class MazeGenerator : NetworkBehaviour
         }
     }
 
+    void RemoveRandomWalls()
+    {
+        // Step 1: Collect all internal walls
+        List<(Vector2Int cell, int direction)> internalWalls = new List<(Vector2Int, int)>();
+        
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                // Skip perimeter cells for outer walls
+                if (x == 0 || y == 0 || x == width - 1 || y == height - 1)
+                    continue;
+                
+                // East wall (1)
+                if (x < width - 1)
+                {
+                    internalWalls.Add((new Vector2Int(x, y), 1)); // 1: East
+                }
+                
+                // South wall (2)
+                if (y < height - 1)
+                {
+                    internalWalls.Add((new Vector2Int(x, y), 2)); // 2: South
+                }
+            }
+        }
+        
+        // Step 2: Shuffle the list to ensure randomness
+        Shuffle(internalWalls);
+        
+        // Step 3: Calculate the number of walls to remove
+        int totalInternalWalls = internalWalls.Count;
+        int wallsToRemove = Mathf.RoundToInt(totalInternalWalls * wallRemovalPercentage);
+        
+        Debug.Log($"[MazeGenerator] Removing {wallsToRemove} walls out of {totalInternalWalls} internal walls.");
+        
+        // Step 4: Remove the walls
+        for (int i = 0; i < wallsToRemove && i < internalWalls.Count; i++)
+        {
+            var (cell, direction) = internalWalls[i];
+            
+            Vector2Int neighbor = GetNeighbor(cell, direction);
+            
+            // Remove the wall in the current cell
+            grid[cell.x, cell.y].walls[direction] = false;
+            
+            // Remove the corresponding wall in the neighboring cell
+            int oppositeDirection = GetOppositeDirection(direction);
+            grid[neighbor.x, neighbor.y].walls[oppositeDirection] = false;
+        }
+    }
+
+    Vector2Int GetNeighbor(Vector2Int cell, int direction)
+    {
+        switch (direction)
+        {
+            case 0: // North
+                return new Vector2Int(cell.x, cell.y + 1);
+            case 1: // East
+                return new Vector2Int(cell.x + 1, cell.y);
+            case 2: // South
+                return new Vector2Int(cell.x, cell.y - 1);
+            case 3: // West
+                return new Vector2Int(cell.x - 1, cell.y);
+            default:
+                return cell;
+        }
+    }
+
+    int GetOppositeDirection(int direction)
+    {
+        return (direction + 2) % 4;
+    }
+
+
     void DrawMaze()
     {
         if (mazeParent == null)
@@ -342,14 +419,6 @@ public class MazeGenerator : NetworkBehaviour
 
                 // Instantiate walls based on the cell's walls
                 Cell cell = grid[x, y];
-                
-                // Instantiate corner blocks
-                Vector3 cornerPosition = new Vector3(
-                    (x * cellSize) + offsetX - (cellSize / 2),
-                    (y * cellSize) + offsetY - (cellSize / 2),
-                    0
-                );
-                Instantiate(cornerPrefab, cornerPosition, Quaternion.identity, mazeParent);
 
                 // North wall
                 if (cell.walls[0])
@@ -378,6 +447,8 @@ public class MazeGenerator : NetworkBehaviour
                     Vector3 position = cellPosition + new Vector3(-cellSize / 2, 0, 0);
                     Instantiate(wallPrefab, position, Quaternion.identity, mazeParent);
                 }
+
+                InstantiateCornerPrefabs(x, y, cell, offsetX, offsetY);
             }
         }
 
@@ -456,6 +527,46 @@ public class MazeGenerator : NetworkBehaviour
         DrawMaze();
     }
 
+    void InstantiateCornerPrefabs(int x, int y, Cell cell, float offsetX, float offsetY)
+    {
+        // Define the four corners and their adjacent walls
+        // Each tuple contains:
+        // (Corner Position Offset X, Corner Position Offset Y, Adjacent Wall Indices)
+
+        var corners = new List<(float, float, int, int)>
+        {
+            // Top-Left Corner
+            (-cellSize / 2, cellSize / 2, 0, 3), // North and West walls
+
+            // Top-Right Corner
+            (cellSize / 2, cellSize / 2, 0, 1),  // North and East walls
+
+            // Bottom-Left Corner
+            (-cellSize / 2, -cellSize / 2, 2, 3), // South and West walls
+
+            // Bottom-Right Corner
+            (cellSize / 2, -cellSize / 2, 2, 1)   // South and East walls
+        };
+
+        foreach (var corner in corners)
+        {
+            float cornerOffsetX = corner.Item1;
+            float cornerOffsetY = corner.Item2;
+            int wallIndex1 = corner.Item3;
+            int wallIndex2 = corner.Item4;
+
+            // Check if both adjacent walls are present
+            if (cell.walls[wallIndex1] && cell.walls[wallIndex2])
+            {
+                Vector3 cornerPosition = new Vector3(
+                    x * cellSize + offsetX + cornerOffsetX,
+                    y * cellSize + offsetY + cornerOffsetY,
+                    0
+                );
+                Instantiate(cornerPrefab, cornerPosition, Quaternion.identity, mazeParent);
+            }
+        }
+    }
 
     void AdjustCamera()
     {
