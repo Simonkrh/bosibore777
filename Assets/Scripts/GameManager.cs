@@ -81,10 +81,9 @@ public class GameManager : NetworkBehaviour
         }
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    public void DespawnAllProjectilesServerRpc()
+    public void DespawnAllProjectiles()
     {
-        Debug.Log("DespawnAllProjectilesServerRpc");
+        Debug.Log("DespawnAllProjectiles");
         if (projectilesContainer == null)
         {
             Debug.LogError("[GameManager] ProjectilesContainer is not assigned.");
@@ -127,7 +126,7 @@ public class GameManager : NetworkBehaviour
 
         alivePlayers.Clear();
 
-        DespawnAllProjectilesServerRpc();
+        DespawnAllProjectiles();
 
         // Regenerate and sync the maze
         mazeGenerator.RegenerateMaze();
