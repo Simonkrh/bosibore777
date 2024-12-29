@@ -229,6 +229,10 @@ PrefabInstance:
       value: CustomNetworkManager
       objectReference: {fileID: 0}
     - target: {fileID: 7666467182776857579, guid: 1511b9c02bd0e784aa39e47e15bff4fe, type: 3}
+      propertyPath: NetworkConfig.TickRate
+      value: 120
+      objectReference: {fileID: 0}
+    - target: {fileID: 7666467182776857579, guid: 1511b9c02bd0e784aa39e47e15bff4fe, type: 3}
       propertyPath: NetworkConfig.PlayerPrefab
       value: 
       objectReference: {fileID: 0}

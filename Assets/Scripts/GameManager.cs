@@ -83,7 +83,6 @@ public class GameManager : NetworkBehaviour
 
     public void DespawnAllProjectiles()
     {
-        Debug.Log("DespawnAllProjectiles");
         if (projectilesContainer == null)
         {
             Debug.LogError("[GameManager] ProjectilesContainer is not assigned.");

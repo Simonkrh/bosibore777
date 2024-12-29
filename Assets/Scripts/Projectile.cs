@@ -4,8 +4,20 @@ using UnityEngine;
 public class Projectile : NetworkBehaviour
 {
     public float lifetime = 10f;
+    private Rigidbody2D rb;
     private bool hasCollided = false;
     private ulong shooterId;
+    
+    private void Awake()
+    {
+        rb = GetComponent<Rigidbody2D>();
+        rb.gravityScale = 0; // 2D top-down, no gravity
+
+        if (IsServer)
+        {
+            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+        }
+    }
     private void Start()
     {
         if (IsServer)
