@@ -8,6 +8,7 @@ public class GameManager : NetworkBehaviour
 {
     public GameObject playerPrefab;  
     public MazeGenerator mazeGenerator; 
+    public GameObject projectilesContainer;
 
     // Keep track of who is still alive.
     private HashSet<ulong> alivePlayers = new HashSet<ulong>();
@@ -21,9 +22,9 @@ public class GameManager : NetworkBehaviour
     // Independent list for available spawn cells
     private List<Vector2Int> availableCells = new List<Vector2Int>();
 
+
     public void SpawnPlayer(ulong clientId)
     {
-        Debug.Log("Client availableCells: " + (availableCells != null ? availableCells.Count.ToString() : "null"));
         if (availableCells == null || availableCells.Count == 0)
         {
             Debug.LogWarning("No available cells for spawning players.");
@@ -48,7 +49,7 @@ public class GameManager : NetworkBehaviour
     public void SetAvailableCells(List<Vector2Int> cells)
     {
         availableCells = cells;
-        Debug.Log($"[GameManager] Received available cells: {availableCells.Count}");
+        // Debug.Log($"[GameManager] Received available cells: {availableCells.Count}");
     }
 
     public void DespawnPlayer(ulong clientId)
@@ -80,6 +81,30 @@ public class GameManager : NetworkBehaviour
         }
     }
 
+    [ServerRpc(RequireOwnership = false)]
+    public void DespawnAllProjectilesServerRpc()
+    {
+        Debug.Log("DespawnAllProjectilesServerRpc");
+        if (projectilesContainer == null)
+        {
+            Debug.LogError("[GameManager] ProjectilesContainer is not assigned.");
+            return;
+        }
+
+        foreach (Transform projectileTransform in projectilesContainer.transform)
+        {
+            NetworkObject projectileNetObj = projectileTransform.GetComponent<NetworkObject>();
+            if (projectileNetObj != null && projectileNetObj.IsSpawned)
+            {
+                projectileNetObj.Despawn(true); 
+            }
+            else
+            {
+                Debug.LogWarning($"[GameManager] Projectile {projectileTransform.name} has no NetworkObject or is already despawned.");
+            }
+        }
+    }
+
     private void StartNewRound()
     {
         if (!IsServer) return;
@@ -101,6 +126,8 @@ public class GameManager : NetworkBehaviour
         }
 
         alivePlayers.Clear();
+
+        DespawnAllProjectilesServerRpc();
 
         // Regenerate and sync the maze
         mazeGenerator.RegenerateMaze();
@@ -149,7 +176,6 @@ public class GameManager : NetworkBehaviour
 
     private void EndRound(ulong winnerId)
     {
-        Debug.Log("[Server] EndRound called. Winner: " + winnerId);
         AnnounceWinnerClientRpc(winnerId);
 
         StartCoroutine(RoundEndRoutine());
@@ -160,7 +186,6 @@ public class GameManager : NetworkBehaviour
         Debug.Log("[Server] RoundEndRoutine waiting 5 seconds...");
         yield return new WaitForSeconds(5f);
 
-        Debug.Log("[Server] Restarting round now!");
         StartNewRound();
     }
 

@@ -102,7 +102,7 @@ public class MazeGenerator : NetworkBehaviour
 
     public void NotifyAvailableCellsReady()
     {
-        Debug.Log($"[MazeGenerator] Notifying available cells ready: {availableCellsList.Count}");
+        // Debug.Log($"[MazeGenerator] Notifying available cells ready: {availableCellsList.Count}");
         var gameManager = FindFirstObjectByType<GameManager>();
         if (gameManager != null)
         {
@@ -276,8 +276,6 @@ public class MazeGenerator : NetworkBehaviour
 
     void DrawMaze()
 {
-    Debug.Log("Drawing maze...");
-
     if (mazeParent == null)
     {
         GameObject mazeParentObj = new GameObject("MazeParent");

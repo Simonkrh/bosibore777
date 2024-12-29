@@ -4,6 +4,7 @@ using System.Collections.Generic;
 
 public class TankController : NetworkBehaviour
 {
+
     [Header("Movement Settings")]
     public float moveSpeed = 1.8f;
     public float rotationSpeed = 300f;
@@ -16,6 +17,7 @@ public class TankController : NetworkBehaviour
 
     private Rigidbody2D rb;
     private float lastShotTime;
+    private GameManager gameManager;
 
     // --- Client-Side Prediction ---
     private int nextInputSequence = 0;  // ID for the next input
@@ -47,6 +49,16 @@ public class TankController : NetworkBehaviour
         if (!IsServer)
         {
             rb.isKinematic = true;
+        }
+
+         // Cache GameManager reference
+        if (IsServer)
+        {
+            gameManager = FindFirstObjectByType<GameManager>();
+            if (gameManager == null)
+            {
+                Debug.LogError("GameManager is not found in the scene!");
+            }
         }
     }
 
@@ -188,7 +200,18 @@ public class TankController : NetworkBehaviour
         NetworkObject projectileNetObj = projectile.GetComponent<NetworkObject>();
         if (projectileNetObj != null)
         {
+            // Spawn the NetworkObject first
             projectileNetObj.Spawn();
+
+            // Set the parent to ProjectilesContainer for easy management
+            if (gameManager != null && gameManager.projectilesContainer != null)
+            {
+                projectile.transform.SetParent(gameManager.projectilesContainer.transform);
+            }
+            else
+            {
+                Debug.LogWarning("[TankController] ProjectilesContainer reference is missing in GameManager.");
+            }
 
             var projectileComponent = projectile.GetComponent<Projectile>();
             if (projectileComponent != null)
@@ -197,6 +220,7 @@ public class TankController : NetworkBehaviour
             }
         }
     }
+
 
     #endregion
 

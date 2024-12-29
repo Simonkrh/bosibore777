@@ -62,8 +62,6 @@ public class CustomNetworkManager : NetworkManager
     
     private void OnClientConnected(ulong clientId)
     {
-        Debug.Log($"[Server] OnClientConnected: client {clientId}");
-
         var gameManager = FindFirstObjectByType<GameManager>();
         if (gameManager != null)
         {
