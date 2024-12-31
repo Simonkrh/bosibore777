@@ -12,18 +12,23 @@ public class GameManager : NetworkBehaviour
     public GameObject projectilesContainer;
     private PlayerDisplayManager displayManager;
 
-    // Keep track of who is still alive.
     private HashSet<ulong> alivePlayers = new HashSet<ulong>();
 
-    // Keep track of each player's score 
     private Dictionary<ulong, int> playerScores = new Dictionary<ulong, int>();
 
-    // Mapping from clientId to player GameObject
     private Dictionary<ulong, GameObject> clientIdToPlayer = new Dictionary<ulong, GameObject>();
     
-    // Independent list for available spawn cells
     private List<Vector2Int> availableCells = new List<Vector2Int>();
     private bool startingNewRound = false;
+    private readonly List<Color> primaryColors = new List<Color> { Color.green, Color.red, Color.blue };
+    private readonly List<Color> availablePrimaryColors = new List<Color>();
+    private readonly Dictionary<ulong, Color> playerColors = new Dictionary<ulong, Color>();
+    
+    private void Awake()
+    {
+        availablePrimaryColors.AddRange(primaryColors);
+    }
+
     private void Start()
     {
         displayManager = FindObjectOfType<PlayerDisplayManager>();
@@ -33,8 +38,68 @@ public class GameManager : NetworkBehaviour
         }
     }
 
-    public void SpawnPlayer(ulong clientId)
+    private Color AssignColor(ulong clientId)
     {
+
+        if (playerColors.TryGetValue(clientId, out Color existingColor))
+        {
+            return existingColor;
+        }
+
+        Color assignedColor;
+
+        if (availablePrimaryColors.Count > 0)
+        {
+            // Assign the first available primary color
+            assignedColor = availablePrimaryColors[0];
+            availablePrimaryColors.RemoveAt(0);
+        }
+        else
+        {
+            // Assign a random color
+            assignedColor = UnityEngine.Random.ColorHSV();
+        }
+
+        playerColors[clientId] = assignedColor;
+
+        return assignedColor;
+    }
+
+    private void ReleaseColor(ulong clientId)
+    {
+        if (playerColors.TryGetValue(clientId, out Color color))
+        {
+            if (primaryColors.Contains(color))
+            {
+                availablePrimaryColors.Add(color);
+            }
+
+            playerColors.Remove(clientId);
+        }
+    }
+
+    public void SpawnPlayerOnConnect(ulong clientId)
+    {
+        Color playerColor = AssignColor(clientId);
+        InitializePlayerDisplayAndColors(clientId);
+
+        spawnPlayer(clientId);
+
+        AssignIconColorClientRpc(clientId, playerColor);
+        AssignTankColor(clientId, playerColor);
+    }
+
+    public void SpawnPlayerOnNewRound(ulong clientId)
+    {
+        Color existingColor = playerColors[clientId];
+        
+        spawnPlayer(clientId);
+        
+        AssignIconColorClientRpc(clientId, existingColor);
+        AssignTankColor(clientId, existingColor);
+    }
+
+    private void spawnPlayer(ulong clientId) {
         if (availableCells == null || availableCells.Count == 0)
         {
             Debug.LogWarning("No available cells for spawning players.");
@@ -57,13 +122,38 @@ public class GameManager : NetworkBehaviour
 
     }
 
-    public void SetAvailableCells(List<Vector2Int> cells)
+    [ClientRpc]
+    private void AssignIconColorClientRpc(ulong clientId, Color color, ClientRpcParams clientRpcParams = default)
     {
-        availableCells = cells;
-        // Debug.Log($"[GameManager] Received available cells: {availableCells.Count}");
+        if (!IsClient) return; 
+
+        if (PlayerDisplayManager.Instance != null)
+        {
+            PlayerDisplayManager.Instance.SetIconColor(clientId, color);
+        }
+        else
+        {
+            Debug.LogError("PlayerDisplayManager instance not found on client.");
+        }
     }
 
-    public void InitializePlayerDisplay(ulong clientId)
+    private void AssignTankColor(ulong clientId, Color color) 
+    {
+        if (clientIdToPlayer.TryGetValue(clientId, out GameObject player))
+        {
+            TankController tank = player.GetComponent<TankController>();
+            if (tank != null)
+            {
+                tank.ServerSetColor(color);
+            }
+            else
+            {
+                Debug.LogWarning($"TankController not found on player {clientId}");
+            }
+        }
+    }
+
+    public void InitializePlayerDisplayAndColors(ulong clientId)
     {
         if (!playerScores.ContainsKey(clientId))
         {
@@ -74,6 +164,7 @@ public class GameManager : NetworkBehaviour
 
         List<ulong> existingClientIds = new List<ulong>();
         List<int> existingScores = new List<int>();
+        List<Color> existingColors = new List<Color>();
 
         foreach (var kvp in playerScores)
         {
@@ -81,12 +172,22 @@ public class GameManager : NetworkBehaviour
             {
                 existingClientIds.Add(kvp.Key);
                 existingScores.Add(kvp.Value);
+
+                if (playerColors.TryGetValue(kvp.Key, out Color color))
+                {
+                    existingColors.Add(color);
+                }
+                else
+                {
+                    existingColors.Add(Color.white); // Default color if not found
+                }
             }
         }
 
         // Convert lists to arrays for serialization
         ulong[] existingClientIdsArray = existingClientIds.ToArray();
         int[] existingScoresArray = existingScores.ToArray();
+        Color[] existingColorsArray = existingColors.ToArray();
 
         if (existingClientIdsArray.Length > 0)
         {
@@ -101,22 +202,7 @@ public class GameManager : NetworkBehaviour
 
             // Send existing players' data to the new client
             SendExistingPlayerDisplaysClientRpc(existingClientIdsArray, existingScoresArray, clientRpcParams);
-        }
-    }
-
-    
-    [ClientRpc]
-    private void CreatePlayerDisplayClientRpc(ulong clientId, int initialScore)
-    {
-        if (!IsClient) return; 
-
-        if (PlayerDisplayManager.Instance != null)
-        {
-            PlayerDisplayManager.Instance.CreatePlayerDisplay(clientId, initialScore);
-        }
-        else
-        {
-            Debug.LogError("PlayerDisplayManager instance not found on client.");
+            SendExistingPlayerIconColorsClientRpc(existingClientIdsArray, existingColorsArray, clientRpcParams);
         }
     }
 
@@ -131,6 +217,65 @@ public class GameManager : NetworkBehaviour
             {
                 PlayerDisplayManager.Instance.CreatePlayerDisplay(clientIds[i], scores[i]);
             }
+        }
+        else
+        {
+            Debug.LogError("PlayerDisplayManager instance not found on client.");
+        }
+    }
+
+    [ClientRpc]
+    private void SendExistingPlayerIconColorsClientRpc(ulong[] clientIds, Color[] colors, ClientRpcParams clientRpcParams = default)
+    {
+        if (!IsClient) return;
+
+        if (PlayerDisplayManager.Instance != null)
+        {
+            for (int i = 0; i < clientIds.Length; i++)
+            {
+                PlayerDisplayManager.Instance.SetIconColor(clientIds[i], colors[i]);
+            }
+        }
+        else
+        {
+            Debug.LogError("PlayerDisplayManager instance not found on client.");
+        }
+    }
+
+    /*
+    [ClientRpc]
+    private void SendExistingTankColorsClientRpc(ulong[] clientIds, Color[] colors, ClientRpcParams clientRpcParams = default)
+    {
+        if (!IsClient) return;
+
+        for (int i = 0; i < clientIds.Length; i++)
+        {
+            if (clientIdToPlayer.TryGetValue(clientIds[i], out GameObject player))
+            {
+                TankController tank = player.GetComponent<TankController>();
+                if (tank != null)
+                {
+                    Debug.Log(colors[i]);
+                    tank.SetColor(colors[i]);
+                }
+            }
+        }
+    }
+    */ 
+    public void SetAvailableCells(List<Vector2Int> cells)
+    {
+        availableCells = cells;
+        // Debug.Log($"[GameManager] Received available cells: {availableCells.Count}");
+    }
+
+    [ClientRpc]
+    private void CreatePlayerDisplayClientRpc(ulong clientId, int initialScore)
+    {
+        if (!IsClient) return; 
+
+        if (PlayerDisplayManager.Instance != null)
+        {
+            PlayerDisplayManager.Instance.CreatePlayerDisplay(clientId, initialScore);
         }
         else
         {
@@ -167,6 +312,22 @@ public class GameManager : NetworkBehaviour
             Debug.LogError("PlayerDisplayManager instance not found on client.");
         }
     }
+    private void RemovePlayerOnNewRound(ulong clientId)
+    {
+        if (!IsServer) return;
+
+        if (alivePlayers.Contains(clientId))
+        {
+            alivePlayers.Remove(clientId);
+        }
+
+        if (clientIdToPlayer.ContainsKey(clientId))
+        {
+            clientIdToPlayer.Remove(clientId);
+        }
+
+    }
+
     public void DespawnPlayer(ulong clientId)
     {
         if (clientIdToPlayer.TryGetValue(clientId, out GameObject player))
@@ -181,21 +342,6 @@ public class GameManager : NetworkBehaviour
         else
         {
             Debug.LogWarning($"[Server] Attempted to despawn player {clientId}, but no such player was found.");
-        }
-    }
-
-    private void RemovePlayer(ulong clientId)
-    {
-        if (!IsServer) return;
-
-        if (alivePlayers.Contains(clientId))
-        {
-            alivePlayers.Remove(clientId);
-        }
-
-        if (clientIdToPlayer.ContainsKey(clientId))
-        {
-            clientIdToPlayer.Remove(clientId);
         }
     }
 
@@ -217,6 +363,10 @@ public class GameManager : NetworkBehaviour
         {
             clientIdToPlayer.Remove(clientId);
         }
+
+        ReleaseColor(clientId);
+
+        RemovePlayerDisplayClientRpc(clientId);
     }
 
     public void DespawnAllProjectiles()
@@ -257,7 +407,7 @@ public class GameManager : NetworkBehaviour
         {
             ulong lastPlayerId = alivePlayers.First();
             DespawnPlayer(lastPlayerId);
-            RemovePlayer(lastPlayerId);
+            RemovePlayerOnNewRound(lastPlayerId);
         
             Debug.Log($"[Server] Removed last player standing: {lastPlayerId}");
         }
@@ -275,7 +425,7 @@ public class GameManager : NetworkBehaviour
         // Spawn players after the maze has been regenerated and synced
         foreach (var client in CustomNetworkManager.Singleton.ConnectedClientsList)
         {
-            SpawnPlayer(client.ClientId);
+            SpawnPlayerOnNewRound(client.ClientId);
         }
 
         startingNewRound = false;

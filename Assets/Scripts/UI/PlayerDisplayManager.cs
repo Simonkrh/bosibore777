@@ -69,4 +69,16 @@ public class PlayerDisplayManager : MonoBehaviour
             Debug.LogWarning($"PlayerDisplay for {clientId} not found.");
         }
     }
+
+    public void SetIconColor(ulong clientId, Color color)
+    {
+        if (playerDisplays.TryGetValue(clientId, out PlayerDisplay display))
+        {
+            display.SetColor(color);
+        }
+        else
+        {
+            Debug.LogWarning($"Player display for {clientId} not found.");
+        }
+    }
 }

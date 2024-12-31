@@ -261,5 +261,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6859e3cff0a59814f920fc3f5d937089, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  playerImage: {fileID: 4579233011247752769}
   scoreText: {fileID: 9001009378218575268}
+  playerIcon: {fileID: 4579233011247752769}

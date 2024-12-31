@@ -83,7 +83,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 100
-  m_Sprite: {fileID: 21300000, guid: 52124032ee5fe7c4d830c88318918279, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 1970c15d9e0689a4b9f66ae32eae3882, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -132,7 +132,7 @@ BoxCollider2D:
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 0.26, y: 0.4}
+    oldSize: {x: 0.57, y: 0.9}
     newSize: {x: 0.4, y: 0.26}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
@@ -218,6 +218,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
+  tankRenderer: {fileID: 237746871163483345}
   moveSpeed: 1.8
   rotationSpeed: 300
   projectilePrefab: {fileID: 6673431591696494813, guid: 1ba854297c771fe4db4d56b4f928c90b, type: 3}

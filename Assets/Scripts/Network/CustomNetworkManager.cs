@@ -56,15 +56,13 @@ public class CustomNetworkManager : NetworkManager
         var gameManager = FindFirstObjectByType<GameManager>();
         if (gameManager != null)
         {
-            gameManager.SpawnPlayer(clientId);
-            gameManager.InitializePlayerDisplay(clientId);
+            gameManager.SpawnPlayerOnConnect(clientId);
         }
         else
         {
             Debug.LogError("GameManager not found. Cannot spawn player.");
         }
     }
-
 
     private void OnClientDisconnected(ulong clientId)
     {

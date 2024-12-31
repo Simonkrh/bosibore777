@@ -4,6 +4,8 @@ using System.Collections.Generic;
 
 public class TankController : NetworkBehaviour
 {
+    public SpriteRenderer tankRenderer;
+
 
     [Header("Movement Settings")]
     public float moveSpeed = 1.8f;
@@ -37,6 +39,12 @@ public class TankController : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
+    public NetworkVariable<Color> tankColor = new NetworkVariable<Color>(
+        Color.white,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+    
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
@@ -45,6 +53,8 @@ public class TankController : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        tankColor.OnValueChanged += OnTankColorChanged;
+
         // Only the server does physics simulation on the rigidbody. Clients = kinematic
         if (!IsServer)
         {
@@ -59,6 +69,47 @@ public class TankController : NetworkBehaviour
             {
                 Debug.LogError("GameManager is not found in the scene!");
             }
+        }
+
+        SetColor(tankColor.Value);
+    }
+
+    private void OnDestroy()
+    {
+        tankColor.OnValueChanged -= OnTankColorChanged;
+    }
+
+    // Callback for when the tank color changes
+    private void OnTankColorChanged(Color oldColor, Color newColor)
+    {
+        SetColor(newColor);
+        if (IsOwner)
+        {
+            PlayerDisplayManager.Instance?.SetIconColor(OwnerClientId, newColor);
+        }
+    }
+
+    public void SetColor(Color color)
+    {
+        if (tankRenderer != null)
+        {
+            tankRenderer.color = color;
+        }
+        else
+        {
+            Debug.LogWarning("TankRenderer is not assigned.");
+        }
+    }
+
+    public void ServerSetColor(Color color)
+    {
+        if (IsServer)
+        {
+            tankColor.Value = color;
+        }
+        else
+        {
+            Debug.LogWarning("Only the server can set the tank color.");
         }
     }
 
