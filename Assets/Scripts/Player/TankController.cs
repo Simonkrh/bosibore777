@@ -114,7 +114,6 @@ public class TankController : NetworkBehaviour
             Debug.LogWarning("Only the server can set the tank color.");
         }
     }
-
     private void Update()
     {
         // Handle shooting for the owner (both host or remote client)
@@ -130,96 +129,54 @@ public class TankController : NetworkBehaviour
         // HOST or DEDICATED SERVER + OWNER PATH
         if (IsServer && IsOwner)
         {
-            // 1) Read input
-            float moveInput = Input.GetAxisRaw("Vertical");
-            float turnInput = 0f;
-
-            if (Input.GetKey(KeyCode.A))
-            {
-                rotationTimer += Time.deltaTime;
-                if (rotationTimer >= rotationInterval)
-                {
-                    turnInput = -1f;
-                    rotationTimer = 0f;
-                }
-            }
-            else if (Input.GetKey(KeyCode.D))
-            {
-                rotationTimer += Time.deltaTime;
-                if (rotationTimer >= rotationInterval)
-                {
-                    turnInput = 1f;
-                    rotationTimer = 0f;
-                }
-            }
-            else
-            {
-                rotationTimer = rotationInterval; 
-            }
-
-            // 2) Send input to the server function 
-             if (turnInput != 0f || moveInput != 0f)
-            {
-                MovementInput inputData = new MovementInput
-                {
-                    moveInput = moveInput,
-                    rotationInput = turnInput,
-                    inputSequence = nextInputSequence++
-                };
-                SendInputToServerRpc(inputData);
-            }
+            HandleInput();
             return;
         }
 
         // REMOTE CLIENT PATH: (IsOwner && !IsServer)
-        {
-            float moveInput = Input.GetAxisRaw("Vertical");
-            float turnInput = 0f;
-            
-            if (Input.GetKey(KeyCode.A))
-            {
-                rotationTimer += Time.deltaTime;
-                if (rotationTimer >= rotationInterval)
-                {
-                    turnInput = -1f;
-                    rotationTimer = 0f;
-                }
-            }
-            else if (Input.GetKey(KeyCode.D))
-            {
-                rotationTimer += Time.deltaTime;
-                if (rotationTimer >= rotationInterval)
-                {
-                    turnInput = 1f;
-                    rotationTimer = 0f;
-                }
-            }
-            else
-            {
-                rotationTimer = rotationInterval; // Reset timer when no key is pressed
-            }
+        HandleInput();
+    }
 
-            MovementInput newInput = new MovementInput
+    private void HandleInput()
+    {
+        float moveInput = Input.GetAxisRaw("Vertical");
+        float turnInput = 0f;
+
+        if (Input.GetKey(KeyCode.A))
+        {
+            rotationTimer += Time.deltaTime;
+            if (rotationTimer >= rotationInterval)
+            {
+                turnInput = -1f;
+                rotationTimer = 0f;
+            }
+        }
+        else if (Input.GetKey(KeyCode.D))
+        {
+            rotationTimer += Time.deltaTime;
+            if (rotationTimer >= rotationInterval)
+            {
+                turnInput = 1f;
+                rotationTimer = 0f;
+            }
+        }
+        else
+        {
+            rotationTimer = rotationInterval; 
+        }
+
+        if (turnInput != 0f || moveInput != 0f)
+        {
+            MovementInput inputData = new MovementInput
             {
                 moveInput = moveInput,
                 rotationInput = turnInput,
                 inputSequence = nextInputSequence++
             };
-
-            // Send to server for authoritative movement
-            if (turnInput != 0f)
-            {
-                // Immediate local prediction for rotation
-                ApplyMovementInput(newInput);
-                pendingInputs.Add(newInput);
-            }
-
-            // Send to server for authoritative movement
-            if (turnInput != 0f || moveInput != 0f)
-            {
-                SendInputToServerRpc(newInput);
-            }
+            SendInputToServerRpc(inputData);
         }
+        return;
+        
     }
 
     private void FixedUpdate()
