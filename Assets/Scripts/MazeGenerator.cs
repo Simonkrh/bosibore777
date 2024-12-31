@@ -346,8 +346,6 @@ public class MazeGenerator : NetworkBehaviour
         int totalInternalWalls = internalWalls.Count;
         int wallsToRemove = Mathf.RoundToInt(totalInternalWalls * wallRemovalPercentage);
         
-        Debug.Log($"[MazeGenerator] Removing {wallsToRemove} walls out of {totalInternalWalls} internal walls.");
-        
         // Step 4: Remove the walls
         for (int i = 0; i < wallsToRemove && i < internalWalls.Count; i++)
         {

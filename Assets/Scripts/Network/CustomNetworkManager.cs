@@ -5,8 +5,6 @@ using System.Collections.Generic;
 
 public class CustomNetworkManager : NetworkManager
 {
-    private NetworkManagerData managerData;
-
     private void Awake()
     {
         if (Singleton != null && Singleton != this)
@@ -35,13 +33,6 @@ public class CustomNetworkManager : NetworkManager
                 Singleton.SceneManager.OnSynchronizeComplete += OnSceneSynchronizeComplete;
             }
         }
-
-        // Find and cache the NetworkManagerData component
-        managerData = FindFirstObjectByType<NetworkManagerData>();
-        if (managerData == null)
-        {
-            Debug.LogError("NetworkManagerData is not found in the scene!");
-        }
     }   
 
     private void OnDisable()
@@ -66,6 +57,7 @@ public class CustomNetworkManager : NetworkManager
         if (gameManager != null)
         {
             gameManager.SpawnPlayer(clientId);
+            gameManager.InitializePlayerDisplay(clientId);
         }
         else
         {
@@ -101,7 +93,9 @@ public class CustomNetworkManager : NetworkManager
         var gameManager = FindFirstObjectByType<GameManager>();
         if (gameManager != null)
         {
-            gameManager.RemovePlayer(clientId);
+            gameManager.RemovePlayerOnDisconnect(clientId);
+            gameManager.RemovePlayerDisplayClientRpc(clientId);
+
         }
     }
 
