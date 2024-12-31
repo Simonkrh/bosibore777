@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 1969998780972525276}
   - component: {fileID: 237746871163483345}
   - component: {fileID: 7326643893979486677}
+  - component: {fileID: 4755549280535505069}
   - component: {fileID: 5520937707779334705}
   - component: {fileID: -5174645572279192862}
   - component: {fileID: 2135318119879454420}
@@ -132,13 +133,59 @@ BoxCollider2D:
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 0.57, y: 0.9}
+    oldSize: {x: 0.24782608, y: 0.39130434}
     newSize: {x: 0.4, y: 0.26}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
     adaptiveTiling: 0
   m_AutoTiling: 0
   m_Size: {x: 0.24208188, y: 0.30986202}
+  m_EdgeRadius: 0
+--- !u!61 &4755549280535505069
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6318536330381436049}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 0
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0.0008001104, y: 0.15762034}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0.5, y: 0.5}
+    oldSize: {x: 0.24782608, y: 0.39130434}
+    newSize: {x: 0.4, y: 0.26}
+    adaptiveTilingThreshold: 0.5
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  m_Size: {x: 0.059001684, y: 0.07446343}
   m_EdgeRadius: 0
 --- !u!50 &5520937707779334705
 Rigidbody2D:
@@ -220,11 +267,14 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   tankRenderer: {fileID: 237746871163483345}
   moveSpeed: 1.8
-  rotationSpeed: 300
+  rotationStep: 10
+  rotationInterval: 0.05
   projectilePrefab: {fileID: 6673431591696494813, guid: 1ba854297c771fe4db4d56b4f928c90b, type: 3}
   projectileSpeed: 2
   shootCooldown: 0.5
   shootingOffsetDistance: 0.23
+  tankColor:
+    m_InternalValue: {r: 1, g: 1, b: 1, a: 1}
 --- !u!114 &-5522133927334071017
 MonoBehaviour:
   m_ObjectHideFlags: 0

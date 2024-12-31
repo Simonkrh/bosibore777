@@ -9,7 +9,8 @@ public class TankController : NetworkBehaviour
 
     [Header("Movement Settings")]
     public float moveSpeed = 1.8f;
-    public float rotationSpeed = 300f;
+    public float rotationStep = 10f; 
+    public float rotationInterval = 0.05f; 
 
     [Header("Shooting Settings")]
     public GameObject projectilePrefab;
@@ -20,6 +21,7 @@ public class TankController : NetworkBehaviour
     private Rigidbody2D rb;
     private float lastShotTime;
     private GameManager gameManager;
+    private float rotationTimer = 0f; 
 
     // --- Client-Side Prediction ---
     private int nextInputSequence = 0;  // ID for the next input
@@ -130,23 +132,72 @@ public class TankController : NetworkBehaviour
         {
             // 1) Read input
             float moveInput = Input.GetAxisRaw("Vertical");
-            float turnInput = Input.GetAxisRaw("Horizontal");
+            float turnInput = 0f;
+
+            if (Input.GetKey(KeyCode.A))
+            {
+                rotationTimer += Time.deltaTime;
+                if (rotationTimer >= rotationInterval)
+                {
+                    turnInput = -1f;
+                    rotationTimer = 0f;
+                }
+            }
+            else if (Input.GetKey(KeyCode.D))
+            {
+                rotationTimer += Time.deltaTime;
+                if (rotationTimer >= rotationInterval)
+                {
+                    turnInput = 1f;
+                    rotationTimer = 0f;
+                }
+            }
+            else
+            {
+                rotationTimer = rotationInterval; 
+            }
 
             // 2) Send input to the server function 
-            MovementInput inputData = new MovementInput
+             if (turnInput != 0f || moveInput != 0f)
             {
-                moveInput = moveInput,
-                rotationInput = turnInput,
-                inputSequence = nextInputSequence++
-            };
-            SendInputToServerRpc(inputData);
+                MovementInput inputData = new MovementInput
+                {
+                    moveInput = moveInput,
+                    rotationInput = turnInput,
+                    inputSequence = nextInputSequence++
+                };
+                SendInputToServerRpc(inputData);
+            }
             return;
         }
 
         // REMOTE CLIENT PATH: (IsOwner && !IsServer)
         {
             float moveInput = Input.GetAxisRaw("Vertical");
-            float turnInput = Input.GetAxisRaw("Horizontal");
+            float turnInput = 0f;
+            
+            if (Input.GetKey(KeyCode.A))
+            {
+                rotationTimer += Time.deltaTime;
+                if (rotationTimer >= rotationInterval)
+                {
+                    turnInput = -1f;
+                    rotationTimer = 0f;
+                }
+            }
+            else if (Input.GetKey(KeyCode.D))
+            {
+                rotationTimer += Time.deltaTime;
+                if (rotationTimer >= rotationInterval)
+                {
+                    turnInput = 1f;
+                    rotationTimer = 0f;
+                }
+            }
+            else
+            {
+                rotationTimer = rotationInterval; // Reset timer when no key is pressed
+            }
 
             MovementInput newInput = new MovementInput
             {
@@ -155,14 +206,19 @@ public class TankController : NetworkBehaviour
                 inputSequence = nextInputSequence++
             };
 
-            // Immediate local prediction
-            ApplyMovementInput(newInput);
-
-            // Add to pending
-            pendingInputs.Add(newInput);
+            // Send to server for authoritative movement
+            if (turnInput != 0f)
+            {
+                // Immediate local prediction for rotation
+                ApplyMovementInput(newInput);
+                pendingInputs.Add(newInput);
+            }
 
             // Send to server for authoritative movement
-            SendInputToServerRpc(newInput);
+            if (turnInput != 0f || moveInput != 0f)
+            {
+                SendInputToServerRpc(newInput);
+            }
         }
     }
 
@@ -192,10 +248,14 @@ public class TankController : NetworkBehaviour
         float turn = input.rotationInput;
 
         Vector2 moveVector = transform.up * move * moveSpeed * Time.fixedDeltaTime;
-        float rotation = turn * rotationSpeed * Time.fixedDeltaTime;
+        rb.MovePosition(rb.position + moveVector);
 
-        rb.position += moveVector;
-        rb.rotation -= rotation;
+        // Handle rotation with fixed step
+        if (turn != 0f)
+        {
+            float rotationAmount = rotationStep * turn;
+            rb.MoveRotation(rb.rotation - rotationAmount);
+        }
     }
 
     private void ApplyMovementOnServer(MovementInput input)
@@ -203,11 +263,16 @@ public class TankController : NetworkBehaviour
         float move = input.moveInput;
         float turn = input.rotationInput;
 
+        // Handle movement
         Vector2 moveVector = transform.up * move * moveSpeed * Time.fixedDeltaTime;
-        float rotation = turn * rotationSpeed * Time.fixedDeltaTime;
-
         rb.MovePosition(rb.position + moveVector);
-        rb.MoveRotation(rb.rotation - rotation);
+
+        // Handle rotation with fixed step
+        if (turn != 0f)
+        {
+            float rotationAmount = rotationStep * turn;
+            rb.MoveRotation(rb.rotation - rotationAmount);
+        }
     }
 
     private void SmoothlyInterpolatePositionAndRotation()
