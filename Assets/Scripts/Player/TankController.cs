@@ -6,6 +6,8 @@ public class TankController : NetworkBehaviour
 {
     public SpriteRenderer tankRenderer;
 
+    [Tooltip("Assign the child Transform that handles rotation.")]
+    public Transform rotationChild;
 
     [Header("Movement Settings")]
     public float moveSpeed = 1.8f;
@@ -36,6 +38,12 @@ public class TankController : NetworkBehaviour
     );
 
     private NetworkVariable<float> networkRotation = new NetworkVariable<float>(
+        0f,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    private NetworkVariable<float> networkChildRotation = new NetworkVariable<float>(
         0f,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
@@ -181,11 +189,14 @@ public class TankController : NetworkBehaviour
 
     private void FixedUpdate()
     {
-        // The server updates the authoritative position & rotation
         if (IsServer)
         {
+            // Update authoritative position and rotation
             networkPosition.Value = rb.position;
-            networkRotation.Value = rb.rotation;
+            if (rotationChild != null)
+            {
+                networkChildRotation.Value = rotationChild.eulerAngles.z;
+            }
         }
         else
         {
@@ -204,14 +215,14 @@ public class TankController : NetworkBehaviour
         float move = input.moveInput;
         float turn = input.rotationInput;
 
-        Vector2 moveVector = transform.up * move * moveSpeed * Time.fixedDeltaTime;
+        Vector2 moveVector = rotationChild.up * move * moveSpeed * Time.fixedDeltaTime;
         rb.MovePosition(rb.position + moveVector);
 
         // Handle rotation with fixed step
-        if (turn != 0f)
+        if (turn != 0f && rotationChild != null)
         {
             float rotationAmount = rotationStep * turn;
-            rb.MoveRotation(rb.rotation - rotationAmount);
+            rotationChild.Rotate(0f, 0f, -rotationAmount);
         }
     }
 
@@ -221,14 +232,14 @@ public class TankController : NetworkBehaviour
         float turn = input.rotationInput;
 
         // Handle movement
-        Vector2 moveVector = transform.up * move * moveSpeed * Time.fixedDeltaTime;
+        Vector2 moveVector = rotationChild.up * move * moveSpeed * Time.fixedDeltaTime;
         rb.MovePosition(rb.position + moveVector);
 
         // Handle rotation with fixed step
-        if (turn != 0f)
+        if (turn != 0f && rotationChild != null)
         {
             float rotationAmount = rotationStep * turn;
-            rb.MoveRotation(rb.rotation - rotationAmount);
+            rotationChild.Rotate(0f, 0f, -rotationAmount);
         }
     }
 
@@ -236,7 +247,14 @@ public class TankController : NetworkBehaviour
     {
         float lerpSpeed = 25f;
         rb.position = Vector2.Lerp(rb.position, networkPosition.Value, Time.deltaTime * lerpSpeed);
-        rb.rotation = Mathf.LerpAngle(rb.rotation, networkRotation.Value, Time.deltaTime * lerpSpeed);
+        
+        if(rotationChild != null)
+        {
+            float targetRotation = networkChildRotation.Value;
+            float currentRotation = rotationChild.eulerAngles.z;
+            float newRotation = Mathf.LerpAngle(currentRotation, targetRotation, Time.deltaTime * lerpSpeed);
+            rotationChild.rotation = Quaternion.Euler(0f, 0f, newRotation);
+        }
     }
 
     #endregion
@@ -261,7 +279,13 @@ public class TankController : NetworkBehaviour
             return;
         }
 
-        Vector3 spawnPosition = transform.position + transform.up * shootingOffsetDistance;
+        Vector3 spawnPosition = rotationChild != null 
+            ? rotationChild.position + rotationChild.up * shootingOffsetDistance 
+            : transform.position + transform.up * shootingOffsetDistance;
+        Quaternion spawnRotation = rotationChild != null 
+            ? rotationChild.rotation 
+            : transform.rotation;
+        
         GameObject projectile = Instantiate(projectilePrefab, spawnPosition, transform.rotation);
 
         var projectileRb = projectile.GetComponent<Rigidbody2D>();
@@ -308,7 +332,7 @@ public class TankController : NetworkBehaviour
         ServerState newState = new ServerState
         {
             position = rb.position,
-            rotation = rb.rotation,
+            rotation = rotationChild != null ? rotationChild.eulerAngles.z : 0f,
             lastProcessedInput = lastProcessedInput
         };
 
@@ -322,7 +346,8 @@ public class TankController : NetworkBehaviour
             return;
 
         rb.position = state.position;
-        rb.rotation = state.rotation;
+        
+        
 
         int i = 0;
         while (i < pendingInputs.Count)
