@@ -286,12 +286,13 @@ public class TankController : NetworkBehaviour
             ? rotationChild.rotation 
             : transform.rotation;
         
-        GameObject projectile = Instantiate(projectilePrefab, spawnPosition, transform.rotation);
+        GameObject projectile = Instantiate(projectilePrefab, spawnPosition, spawnRotation);
 
         var projectileRb = projectile.GetComponent<Rigidbody2D>();
         if (projectileRb != null)
         {
-            projectileRb.linearVelocity = transform.up * projectileSpeed;
+            Vector2 shootDirection = rotationChild != null ? rotationChild.up : transform.up;
+            projectileRb.linearVelocity = shootDirection * projectileSpeed;
         }
 
         NetworkObject projectileNetObj = projectile.GetComponent<NetworkObject>();
