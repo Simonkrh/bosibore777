@@ -120,7 +120,7 @@ MonoBehaviour:
   rotationChild: {fileID: 7261323888119553708}
   moveSpeed: 1.8
   rotationStep: 10
-  rotationInterval: 0.05
+  rotationInterval: 0.04
   projectilePrefab: {fileID: 6673431591696494813, guid: 1ba854297c771fe4db4d56b4f928c90b, type: 3}
   projectileSpeed: 2
   shootCooldown: 0.5

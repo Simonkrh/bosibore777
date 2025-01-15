@@ -26,9 +26,9 @@ public class TankController : NetworkBehaviour
     private float rotationTimer = 0f; 
 
     // --- Client-Side Prediction ---
-    private int nextInputSequence = 0;  // ID for the next input
+    private int nextInputSequence = 0;            // ID for the next input
     private List<MovementInput> pendingInputs = new List<MovementInput>();
-    private int lastProcessedInput = 0; // last input ID processed by server
+    private int lastProcessedInput = 0;           // last input ID processed by server
 
     // --- Network sync for non-owner interpolation ---
     private NetworkVariable<Vector2> networkPosition = new NetworkVariable<Vector2>(
@@ -54,7 +54,7 @@ public class TankController : NetworkBehaviour
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
     );
-    
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
@@ -71,7 +71,7 @@ public class TankController : NetworkBehaviour
             rb.isKinematic = true;
         }
 
-         // Cache GameManager reference
+        // Cache GameManager reference
         if (IsServer)
         {
             gameManager = FindFirstObjectByType<GameManager>();
@@ -122,6 +122,7 @@ public class TankController : NetworkBehaviour
             Debug.LogWarning("Only the server can set the tank color.");
         }
     }
+
     private void Update()
     {
         // Handle shooting for the owner (both host or remote client)
@@ -145,11 +146,16 @@ public class TankController : NetworkBehaviour
         HandleInput();
     }
 
+    /// <summary>
+    /// Collect player inputs, immediately apply them (client-side prediction),
+    /// then send them to the server for authority.
+    /// </summary>
     private void HandleInput()
     {
         float moveInput = Input.GetAxisRaw("Vertical");
         float turnInput = 0f;
 
+        // Only rotate at discrete intervals
         if (Input.GetKey(KeyCode.A))
         {
             rotationTimer += Time.deltaTime;
@@ -173,7 +179,8 @@ public class TankController : NetworkBehaviour
             rotationTimer = rotationInterval; 
         }
 
-        if (turnInput != 0f || moveInput != 0f)
+        // If we have any movement (forward/back or rotation)
+        if (Mathf.Abs(turnInput) > 0.0f || Mathf.Abs(moveInput) > 0.0f)
         {
             MovementInput inputData = new MovementInput
             {
@@ -181,10 +188,16 @@ public class TankController : NetworkBehaviour
                 rotationInput = turnInput,
                 inputSequence = nextInputSequence++
             };
+
+            // 1) Immediately apply for client-side prediction
+            ApplyMovementInput(inputData);
+
+            // 2) Store this input so we can re-apply if the server corrects us
+            pendingInputs.Add(inputData);
+
+            // 3) Send this input to the server
             SendInputToServerRpc(inputData);
         }
-        return;
-        
     }
 
     private void FixedUpdate()
@@ -210,13 +223,17 @@ public class TankController : NetworkBehaviour
 
     #region Movement
 
+    /// <summary>
+    /// Apply movement input on the client side for prediction.
+    /// This modifies our local, temporary position/rotation.
+    /// </summary>
     private void ApplyMovementInput(MovementInput input)
     {
         float move = input.moveInput;
         float turn = input.rotationInput;
 
         Vector2 moveVector = rotationChild.up * move * moveSpeed * Time.fixedDeltaTime;
-        rb.MovePosition(rb.position + moveVector);
+        rb.position = rb.position + moveVector;
 
         // Handle rotation with fixed step
         if (turn != 0f && rotationChild != null)
@@ -226,6 +243,10 @@ public class TankController : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Only the server should modify its own authoritative Rigidbody2D
+    /// and then replicate state back out to clients.
+    /// </summary>
     private void ApplyMovementOnServer(MovementInput input)
     {
         float move = input.moveInput;
@@ -248,7 +269,7 @@ public class TankController : NetworkBehaviour
         float lerpSpeed = 25f;
         rb.position = Vector2.Lerp(rb.position, networkPosition.Value, Time.deltaTime * lerpSpeed);
         
-        if(rotationChild != null)
+        if (rotationChild != null)
         {
             float targetRotation = networkChildRotation.Value;
             float currentRotation = rotationChild.eulerAngles.z;
@@ -265,13 +286,25 @@ public class TankController : NetworkBehaviour
     {
         if (Input.GetKeyDown(KeyCode.Space) && Time.time >= lastShotTime + shootCooldown)
         {
-            ShootServerRpc();
+            // 1) Grab local/predicted position & rotation on the client
+            Vector3 localSpawnPos = (rotationChild != null) 
+                ? rotationChild.position + rotationChild.up * shootingOffsetDistance 
+                : transform.position + transform.up * shootingOffsetDistance;
+
+            Quaternion localSpawnRot = (rotationChild != null)
+                ? rotationChild.rotation
+                : transform.rotation;
+
+            // 2) Send to server to spawn the real projectile from this transform
+            ShootServerRpc(localSpawnPos, localSpawnRot);
+
             lastShotTime = Time.time;
         }
     }
 
+    // 3) Modified ServerRpc that accepts client-provided position & rotation
     [ServerRpc]
-    private void ShootServerRpc()
+    private void ShootServerRpc(Vector3 spawnPosition, Quaternion spawnRotation)
     {
         if (projectilePrefab == null)
         {
@@ -279,26 +312,21 @@ public class TankController : NetworkBehaviour
             return;
         }
 
-        Vector3 spawnPosition = rotationChild != null 
-            ? rotationChild.position + rotationChild.up * shootingOffsetDistance 
-            : transform.position + transform.up * shootingOffsetDistance;
-        Quaternion spawnRotation = rotationChild != null 
-            ? rotationChild.rotation 
-            : transform.rotation;
-        
+
         GameObject projectile = Instantiate(projectilePrefab, spawnPosition, spawnRotation);
+        projectile.layer = LayerMask.NameToLayer("Bullet");
 
         var projectileRb = projectile.GetComponent<Rigidbody2D>();
         if (projectileRb != null)
         {
-            Vector2 shootDirection = rotationChild != null ? rotationChild.up : transform.up;
+            Vector2 shootDirection = spawnRotation * Vector2.up; 
             projectileRb.linearVelocity = shootDirection * projectileSpeed;
         }
 
         NetworkObject projectileNetObj = projectile.GetComponent<NetworkObject>();
         if (projectileNetObj != null)
         {
-            // Spawn the NetworkObject first
+            // Spawn the NetworkObject
             projectileNetObj.Spawn();
 
             // Set the parent to ProjectilesContainer for easy management
@@ -319,7 +347,6 @@ public class TankController : NetworkBehaviour
         }
     }
 
-
     #endregion
 
     #region Server RPCs & Reconciliation
@@ -327,9 +354,11 @@ public class TankController : NetworkBehaviour
     [ServerRpc]
     private void SendInputToServerRpc(MovementInput input, ServerRpcParams serverRpcParams = default)
     {
+        // 1) Apply on server
         ApplyMovementOnServer(input);
         lastProcessedInput = input.inputSequence;
 
+        // 2) Build new authoritative ServerState
         ServerState newState = new ServerState
         {
             position = rb.position,
@@ -337,19 +366,25 @@ public class TankController : NetworkBehaviour
             lastProcessedInput = lastProcessedInput
         };
 
+        // 3) Send back to *all* clients (but only the owner will use it)
         ReceiveServerStateClientRpc(newState);
     }
 
     [ClientRpc]
     private void ReceiveServerStateClientRpc(ServerState state)
     {
-        if (!IsOwner || IsServer) 
+        // Only the owning client needs reconciliation
+        if (!IsOwner || IsServer)
             return;
 
+        // Correct our position/rotation to the authoritative state
         rb.position = state.position;
-        
-        
+        if (rotationChild != null)
+        {
+            rotationChild.rotation = Quaternion.Euler(0, 0, state.rotation);
+        }
 
+        // Remove all inputs up to the last processed by the server
         int i = 0;
         while (i < pendingInputs.Count)
         {
@@ -363,6 +398,7 @@ public class TankController : NetworkBehaviour
             }
         }
 
+        // Re-apply all unacknowledged inputs so that we "catch up"
         for (int j = 0; j < pendingInputs.Count; j++)
         {
             ApplyMovementInput(pendingInputs[j]);

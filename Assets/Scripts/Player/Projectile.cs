@@ -1,28 +1,30 @@
 using Unity.Netcode;
 using UnityEngine;
 
+[RequireComponent(typeof(Rigidbody2D))]
 public class Projectile : NetworkBehaviour
 {
     public float lifetime = 10f;
     private Rigidbody2D rb;
     private bool hasCollided = false;
     private ulong shooterId;
-    
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
-        rb.gravityScale = 0; // 2D top-down, no gravity
+        rb.gravityScale = 0f; // top-down, no gravity
 
         if (IsServer)
         {
+            // For continuous collision detection with walls
             rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         }
     }
+
     private void Start()
     {
         if (IsServer)
         {
-            // Only the server schedules the destruction of the projectile
             DestroyProjectileAfterLifetime();
         }
     }
@@ -40,33 +42,36 @@ public class Projectile : NetworkBehaviour
             NetworkObject.Despawn(true);
         }
     }
-    
+
     public void SetShooterId(ulong id)
     {
         shooterId = id;
     }
 
-    private void OnCollisionEnter2D(Collision2D collision)
+    private void OnTriggerEnter2D(Collider2D collision)
     {
-        if (!IsServer) return; 
+        // Only the server handles the hit logic
+        if (!IsServer) return;
+   
+        var playerController = collision.GetComponentInParent<PlayerController>();
 
-        if (collision.gameObject.CompareTag("Player"))
+        // Make sure we haven't already collided & we don't kill the shooter themselves
+        if (playerController != null && (hasCollided || playerController.OwnerClientId != shooterId))
         {
-            var playerController = collision.gameObject.GetComponent<PlayerController>();
+            Debug.Log("killed");
+            ulong killerId = shooterId;
+            playerController.Die(killerId);
 
-            // Check if the player hit is the shooter and if the bullet has already collided
-            if (playerController != null && (hasCollided || playerController.OwnerClientId != shooterId))
+            // Despawn this projectile
+            if (NetworkObject != null)
             {
-                ulong killerId = shooterId;
-                playerController.Die(killerId);
-
-                // Despawn the bullet after hitting a player
-                if (NetworkObject != null)
-                {
-                    NetworkObject.Despawn(true);
-                }
+                NetworkObject.Despawn(true);
             }
+            hasCollided = true;
         }
+    }
+
+    private void OnCollisionEnter2D(Collision2D collision) {
         hasCollided = true;
     }
 }
