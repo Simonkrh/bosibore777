@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using System.Linq;
 
 public class PlayerDisplayManager : MonoBehaviour
 {
@@ -21,6 +22,21 @@ public class PlayerDisplayManager : MonoBehaviour
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
+    }
+
+    public bool IsReady()
+    {
+        return playerDisplayPrefab != null && displayPlane != null;
+    }
+
+    public bool HasPlayerDisplay(ulong clientId)
+    {
+        return playerDisplays.ContainsKey(clientId);
+    }
+
+    public List<ulong> GetDisplayedClientIds()
+    {
+        return playerDisplays.Keys.ToList();
     }
 
     public void CreatePlayerDisplay(ulong clientId, int initialScore)

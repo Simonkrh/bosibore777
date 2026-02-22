@@ -7,6 +7,13 @@ using System;
 
 public class GameManager : NetworkBehaviour
 {
+    private struct ClientDisplayState
+    {
+        public int Score;
+        public Color IconColor;
+        public bool HasIconColor;
+    }
+
     public GameObject playerPrefab;
     public MazeGenerator mazeGenerator;
     public GameObject projectilesContainer;
@@ -26,6 +33,8 @@ public class GameManager : NetworkBehaviour
     private float nextAutoSpawnCheckTime = 0f;
     private const float AutoSpawnCheckIntervalSeconds = 0.25f;
     private static bool collisionLayersConfigured;
+    private readonly Dictionary<ulong, ClientDisplayState> clientDisplayStates = new Dictionary<ulong, ClientDisplayState>();
+    private bool clientDisplayStateDirty;
 
     private void Awake()
     {
@@ -97,6 +106,11 @@ public class GameManager : NetworkBehaviour
 
     private void Update()
     {
+        if (IsClient)
+        {
+            TryApplyClientDisplayState();
+        }
+
         if (!IsServer || !IsSpawned || NetworkManager == null)
         {
             return;
@@ -114,6 +128,83 @@ public class GameManager : NetworkBehaviour
 
         nextAutoSpawnCheckTime = Time.unscaledTime + AutoSpawnCheckIntervalSeconds;
         TrySpawnMissingPlayers();
+    }
+
+    private void StageScoreForClientUi(ulong clientId, int score)
+    {
+        if (!clientDisplayStates.TryGetValue(clientId, out ClientDisplayState state))
+        {
+            state = new ClientDisplayState();
+        }
+
+        state.Score = score;
+        clientDisplayStates[clientId] = state;
+        clientDisplayStateDirty = true;
+    }
+
+    private void StageColorForClientUi(ulong clientId, Color color)
+    {
+        if (!clientDisplayStates.TryGetValue(clientId, out ClientDisplayState state))
+        {
+            state = new ClientDisplayState();
+        }
+
+        state.IconColor = color;
+        state.HasIconColor = true;
+        clientDisplayStates[clientId] = state;
+        clientDisplayStateDirty = true;
+    }
+
+    private void RemoveClientFromUiState(ulong clientId)
+    {
+        clientDisplayStates.Remove(clientId);
+        clientDisplayStateDirty = true;
+    }
+
+    private void TryApplyClientDisplayState()
+    {
+        if (!clientDisplayStateDirty)
+        {
+            return;
+        }
+
+        PlayerDisplayManager manager = PlayerDisplayManager.Instance;
+        if (manager == null || !manager.IsReady())
+        {
+            return;
+        }
+
+        List<ulong> displayedClientIds = manager.GetDisplayedClientIds();
+        for (int i = 0; i < displayedClientIds.Count; i++)
+        {
+            ulong displayedClientId = displayedClientIds[i];
+            if (!clientDisplayStates.ContainsKey(displayedClientId))
+            {
+                manager.RemovePlayerDisplay(displayedClientId);
+            }
+        }
+
+        foreach (var kvp in clientDisplayStates)
+        {
+            ulong clientId = kvp.Key;
+            ClientDisplayState state = kvp.Value;
+
+            if (manager.HasPlayerDisplay(clientId))
+            {
+                manager.UpdatePlayerScore(clientId, state.Score);
+            }
+            else
+            {
+                manager.CreatePlayerDisplay(clientId, state.Score);
+            }
+
+            if (state.HasIconColor)
+            {
+                manager.SetIconColor(clientId, state.IconColor);
+            }
+        }
+
+        clientDisplayStateDirty = false;
     }
 
     private void TrySpawnMissingPlayers()
@@ -387,14 +478,8 @@ public class GameManager : NetworkBehaviour
     {
         if (!IsClient) return;
 
-        if (PlayerDisplayManager.Instance != null)
-        {
-            PlayerDisplayManager.Instance.SetIconColor(clientId, color);
-        }
-        else
-        {
-            Debug.LogError("PlayerDisplayManager instance not found on client.");
-        }
+        StageColorForClientUi(clientId, color);
+        TryApplyClientDisplayState();
     }
 
     private void AssignTankColor(ulong clientId, Color color)
@@ -471,17 +556,13 @@ public class GameManager : NetworkBehaviour
     {
         if (!IsClient) return;
 
-        if (PlayerDisplayManager.Instance != null)
+        int count = Mathf.Min(clientIds.Length, scores.Length);
+        for (int i = 0; i < count; i++)
         {
-            for (int i = 0; i < clientIds.Length; i++)
-            {
-                PlayerDisplayManager.Instance.CreatePlayerDisplay(clientIds[i], scores[i]);
-            }
+            StageScoreForClientUi(clientIds[i], scores[i]);
         }
-        else
-        {
-            Debug.LogError("PlayerDisplayManager instance not found on client.");
-        }
+
+        TryApplyClientDisplayState();
     }
 
     [ClientRpc]
@@ -489,17 +570,13 @@ public class GameManager : NetworkBehaviour
     {
         if (!IsClient) return;
 
-        if (PlayerDisplayManager.Instance != null)
+        int count = Mathf.Min(clientIds.Length, colors.Length);
+        for (int i = 0; i < count; i++)
         {
-            for (int i = 0; i < clientIds.Length; i++)
-            {
-                PlayerDisplayManager.Instance.SetIconColor(clientIds[i], colors[i]);
-            }
+            StageColorForClientUi(clientIds[i], colors[i]);
         }
-        else
-        {
-            Debug.LogError("PlayerDisplayManager instance not found on client.");
-        }
+
+        TryApplyClientDisplayState();
     }
 
     /*
@@ -533,14 +610,8 @@ public class GameManager : NetworkBehaviour
     {
         if (!IsClient) return;
 
-        if (PlayerDisplayManager.Instance != null)
-        {
-            PlayerDisplayManager.Instance.CreatePlayerDisplay(clientId, initialScore);
-        }
-        else
-        {
-            Debug.LogError("PlayerDisplayManager instance not found on client.");
-        }
+        StageScoreForClientUi(clientId, initialScore);
+        TryApplyClientDisplayState();
     }
 
     [ClientRpc]
@@ -548,14 +619,8 @@ public class GameManager : NetworkBehaviour
     {
         if (!IsClient) return; // Server doesn't need to handle client-side UI
 
-        if (PlayerDisplayManager.Instance != null)
-        {
-            PlayerDisplayManager.Instance.UpdatePlayerScore(clientId, newScore);
-        }
-        else
-        {
-            Debug.LogError("PlayerDisplayManager instance not found on client.");
-        }
+        StageScoreForClientUi(clientId, newScore);
+        TryApplyClientDisplayState();
     }
 
     [ClientRpc]
@@ -563,14 +628,8 @@ public class GameManager : NetworkBehaviour
     {
         if (!IsClient) return;
 
-        if (PlayerDisplayManager.Instance != null)
-        {
-            PlayerDisplayManager.Instance.RemovePlayerDisplay(clientId);
-        }
-        else
-        {
-            Debug.LogError("PlayerDisplayManager instance not found on client.");
-        }
+        RemoveClientFromUiState(clientId);
+        TryApplyClientDisplayState();
     }
     private void RemovePlayerOnNewRound(ulong clientId)
     {
