@@ -10,12 +10,14 @@ public struct MovementInput : INetworkSerializable
 {
     public float moveInput;
     public float rotationInput;
+    public float deltaTime;
     public int inputSequence;
 
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
     {
         serializer.SerializeValue(ref moveInput);
         serializer.SerializeValue(ref rotationInput);
+        serializer.SerializeValue(ref deltaTime);
         serializer.SerializeValue(ref inputSequence);
     }
 }

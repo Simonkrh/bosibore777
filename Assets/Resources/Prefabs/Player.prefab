@@ -78,7 +78,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   GlobalObjectIdHash: 2215683096
-  InScenePlacedSourceGlobalObjectIdHash: 2215683096
+  InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
   AlwaysReplicateAsRoot: 0
@@ -124,7 +124,7 @@ MonoBehaviour:
   projectilePrefab: {fileID: 6673431591696494813, guid: 1ba854297c771fe4db4d56b4f928c90b, type: 3}
   projectileSpeed: 2
   shootCooldown: 0.5
-  shootingOffsetDistance: 0.23
+  shootingOffsetDistance: 0
   tankColor:
     m_InternalValue: {r: 1, g: 1, b: 1, a: 1}
 --- !u!114 &-5522133927334071017
@@ -193,7 +193,7 @@ GameObject:
   - component: {fileID: 7153533844121896160}
   - component: {fileID: 6382825401137245647}
   - component: {fileID: 5281745924003707373}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: PlayerBody
   m_TagString: Untagged
   m_Icon: {fileID: 0}

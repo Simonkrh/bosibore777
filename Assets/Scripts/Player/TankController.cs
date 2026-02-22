@@ -1,4 +1,5 @@
 using Unity.Netcode;
+using Unity.Netcode.Components;
 using UnityEngine;
 using System.Collections.Generic;
 
@@ -11,8 +12,8 @@ public class TankController : NetworkBehaviour
 
     [Header("Movement Settings")]
     public float moveSpeed = 1.8f;
-    public float rotationStep = 10f; 
-    public float rotationInterval = 0.05f; 
+    public float rotationStep = 10f;
+    public float rotationInterval = 0.05f;
 
     [Header("Shooting Settings")]
     public GameObject projectilePrefab;
@@ -23,27 +24,29 @@ public class TankController : NetworkBehaviour
     private Rigidbody2D rb;
     private float lastShotTime;
     private GameManager gameManager;
-    private float rotationTimer = 0f; 
 
-    // --- Client-Side Prediction ---
-    private int nextInputSequence = 0;            // ID for the next input
-    private List<MovementInput> pendingInputs = new List<MovementInput>();
-    private int lastProcessedInput = 0;           // last input ID processed by server
+    private float cachedMoveInput = 0f;
+    private float cachedTurnInput = 0f;
 
-    // --- Network sync for non-owner interpolation ---
-    private NetworkVariable<Vector2> networkPosition = new NetworkVariable<Vector2>(
+    private NetworkTransform[] networkTransforms;
+    private NetworkRigidbody2D networkRigidbody2D;
+
+    // Client prediction state
+    private int nextInputSequence = 0;
+    private readonly List<MovementInput> pendingInputs = new List<MovementInput>();
+
+    private const int MaxPendingInputs = 128;
+    private const float ReconciliationPositionThreshold = 0.06f;
+    private const float ReconciliationRotationThreshold = 3.0f;
+
+    // Server-authoritative state replicated for non-owner interpolation
+    private readonly NetworkVariable<Vector2> networkPosition = new NetworkVariable<Vector2>(
         default,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
     );
 
-    private NetworkVariable<float> networkRotation = new NetworkVariable<float>(
-        0f,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
-
-    private NetworkVariable<float> networkChildRotation = new NetworkVariable<float>(
+    private readonly NetworkVariable<float> networkChildRotation = new NetworkVariable<float>(
         0f,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
@@ -58,20 +61,29 @@ public class TankController : NetworkBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
-        rb.gravityScale = 0; // 2D top-down, no gravity
+        rb.gravityScale = 0f;
     }
 
     public override void OnNetworkSpawn()
     {
         tankColor.OnValueChanged += OnTankColorChanged;
 
-        // Only the server does physics simulation on the rigidbody. Clients = kinematic
-        if (!IsServer)
+        // This controller already implements prediction + reconciliation + remote interpolation.
+        // Disable built-in transform/rigidbody sync to avoid conflicting authority paths.
+        networkTransforms = GetComponentsInChildren<NetworkTransform>(true);
+        for (int i = 0; i < networkTransforms.Length; i++)
         {
-            rb.isKinematic = true;
+            networkTransforms[i].enabled = false;
         }
 
-        // Cache GameManager reference
+        networkRigidbody2D = GetComponent<NetworkRigidbody2D>();
+        if (networkRigidbody2D != null)
+        {
+            networkRigidbody2D.enabled = false;
+        }
+
+        rb.isKinematic = !IsServer && !IsOwner;
+
         if (IsServer)
         {
             gameManager = FindFirstObjectByType<GameManager>();
@@ -89,7 +101,6 @@ public class TankController : NetworkBehaviour
         tankColor.OnValueChanged -= OnTankColorChanged;
     }
 
-    // Callback for when the tank color changes
     private void OnTankColorChanged(Color oldColor, Color newColor)
     {
         SetColor(newColor);
@@ -125,141 +136,120 @@ public class TankController : NetworkBehaviour
 
     private void Update()
     {
-        // Handle shooting for the owner (both host or remote client)
-        if (IsOwner)
-        {
-            HandleShooting();
-        }
-
-        // Non-owner doesn't process input or do movement logic
         if (!IsOwner)
-            return;
-
-        // HOST or DEDICATED SERVER + OWNER PATH
-        if (IsServer && IsOwner)
         {
-            HandleInput();
             return;
         }
 
-        // REMOTE CLIENT PATH: (IsOwner && !IsServer)
-        HandleInput();
-    }
-
-    /// <summary>
-    /// Collect player inputs, immediately apply them (client-side prediction),
-    /// then send them to the server for authority.
-    /// </summary>
-    private void HandleInput()
-    {
-        float moveInput = Input.GetAxisRaw("Vertical");
-        float turnInput = 0f;
-
-        // Only rotate at discrete intervals
-        if (Input.GetKey(KeyCode.A))
-        {
-            rotationTimer += Time.deltaTime;
-            if (rotationTimer >= rotationInterval)
-            {
-                turnInput = -1f;
-                rotationTimer = 0f;
-            }
-        }
-        else if (Input.GetKey(KeyCode.D))
-        {
-            rotationTimer += Time.deltaTime;
-            if (rotationTimer >= rotationInterval)
-            {
-                turnInput = 1f;
-                rotationTimer = 0f;
-            }
-        }
-        else
-        {
-            rotationTimer = rotationInterval; 
-        }
-
-        // If we have any movement (forward/back or rotation)
-        if (Mathf.Abs(turnInput) > 0.0f || Mathf.Abs(moveInput) > 0.0f)
-        {
-            MovementInput inputData = new MovementInput
-            {
-                moveInput = moveInput,
-                rotationInput = turnInput,
-                inputSequence = nextInputSequence++
-            };
-
-            // 1) Immediately apply for client-side prediction
-            ApplyMovementInput(inputData);
-
-            // 2) Store this input so we can re-apply if the server corrects us
-            pendingInputs.Add(inputData);
-
-            // 3) Send this input to the server
-            SendInputToServerRpc(inputData);
-        }
+        HandleShooting();
+        CacheCurrentInput();
     }
 
     private void FixedUpdate()
     {
+        if (IsOwner)
+        {
+            if (IsServer)
+            {
+                ProcessOwnerInputOnServer();
+            }
+            else
+            {
+                ProcessOwnerInputOnClient();
+            }
+        }
+
         if (IsServer)
         {
-            // Update authoritative position and rotation
             networkPosition.Value = rb.position;
             if (rotationChild != null)
             {
                 networkChildRotation.Value = rotationChild.eulerAngles.z;
             }
         }
-        else
+        else if (!IsOwner)
         {
-            // Non-owner clients smoothly interpolate
-            if (!IsOwner)
-            {
-                SmoothlyInterpolatePositionAndRotation();
-            }
+            SmoothlyInterpolatePositionAndRotation();
         }
     }
 
     #region Movement
 
-    /// <summary>
-    /// Apply movement input on the client side for prediction.
-    /// This modifies our local, temporary position/rotation.
-    /// </summary>
-    private void ApplyMovementInput(MovementInput input)
+    private void CacheCurrentInput()
     {
-        float move = input.moveInput;
-        float turn = input.rotationInput;
-
-        Vector2 moveVector = rotationChild.up * move * moveSpeed * Time.fixedDeltaTime;
-        rb.position = rb.position + moveVector;
-
-        // Handle rotation with fixed step
-        if (turn != 0f && rotationChild != null)
-        {
-            float rotationAmount = rotationStep * turn;
-            rotationChild.Rotate(0f, 0f, -rotationAmount);
-        }
+        cachedMoveInput = Input.GetAxisRaw("Vertical");
+        cachedTurnInput = Input.GetAxisRaw("Horizontal");
     }
 
-    /// <summary>
-    /// Only the server should modify its own authoritative Rigidbody2D
-    /// and then replicate state back out to clients.
-    /// </summary>
-    private void ApplyMovementOnServer(MovementInput input)
+    private bool HasMovementInput()
+    {
+        return Mathf.Abs(cachedMoveInput) > 0.0f || Mathf.Abs(cachedTurnInput) > 0.0f;
+    }
+
+    private void ProcessOwnerInputOnServer()
+    {
+        if (!HasMovementInput())
+        {
+            return;
+        }
+
+        MovementInput inputData = new MovementInput
+        {
+            moveInput = cachedMoveInput,
+            rotationInput = cachedTurnInput,
+            deltaTime = Time.fixedDeltaTime,
+            inputSequence = 0
+        };
+
+        ApplyMovement(inputData);
+    }
+
+    private void ProcessOwnerInputOnClient()
+    {
+        if (!HasMovementInput())
+        {
+            return;
+        }
+
+        MovementInput inputData = new MovementInput
+        {
+            moveInput = cachedMoveInput,
+            rotationInput = cachedTurnInput,
+            deltaTime = Time.fixedDeltaTime,
+            inputSequence = nextInputSequence++
+        };
+
+        // Predict immediately on local client.
+        ApplyMovement(inputData);
+
+        pendingInputs.Add(inputData);
+        if (pendingInputs.Count > MaxPendingInputs)
+        {
+            pendingInputs.RemoveAt(0);
+        }
+
+        SendInputToServerRpc(inputData);
+    }
+
+    private void ApplyMovementInput(MovementInput input)
+    {
+        ApplyMovement(input);
+    }
+
+    private void ApplyMovement(MovementInput input)
     {
         float move = input.moveInput;
         float turn = input.rotationInput;
+        float deltaTime = input.deltaTime > 0f ? input.deltaTime : Time.fixedDeltaTime;
 
-        // Handle movement
-        Vector2 moveVector = rotationChild.up * move * moveSpeed * Time.fixedDeltaTime;
+        Transform movementTransform = rotationChild != null ? rotationChild : transform;
+        Vector2 moveVector = movementTransform.up * move * moveSpeed * deltaTime;
         rb.MovePosition(rb.position + moveVector);
 
-        // Handle rotation with fixed step
         if (turn != 0f && rotationChild != null)
         {
-            float rotationAmount = rotationStep * turn;
+            float rotationSpeed = rotationStep / Mathf.Max(0.001f, rotationInterval);
+            float rotationAmount = rotationSpeed * turn * deltaTime;
             rotationChild.Rotate(0f, 0f, -rotationAmount);
         }
     }
@@ -268,7 +258,7 @@ public class TankController : NetworkBehaviour
     {
         float lerpSpeed = 25f;
         rb.position = Vector2.Lerp(rb.position, networkPosition.Value, Time.deltaTime * lerpSpeed);
-        
+
         if (rotationChild != null)
         {
             float targetRotation = networkChildRotation.Value;
@@ -286,25 +276,13 @@ public class TankController : NetworkBehaviour
     {
         if (Input.GetKeyDown(KeyCode.Space) && Time.time >= lastShotTime + shootCooldown)
         {
-            // 1) Grab local/predicted position & rotation on the client
-            Vector3 localSpawnPos = (rotationChild != null) 
-                ? rotationChild.position + rotationChild.up * shootingOffsetDistance 
-                : transform.position + transform.up * shootingOffsetDistance;
-
-            Quaternion localSpawnRot = (rotationChild != null)
-                ? rotationChild.rotation
-                : transform.rotation;
-
-            // 2) Send to server to spawn the real projectile from this transform
-            ShootServerRpc(localSpawnPos, localSpawnRot);
-
+            ShootServerRpc();
             lastShotTime = Time.time;
         }
     }
 
-    // 3) Modified ServerRpc that accepts client-provided position & rotation
     [ServerRpc]
-    private void ShootServerRpc(Vector3 spawnPosition, Quaternion spawnRotation)
+    private void ShootServerRpc()
     {
         if (projectilePrefab == null)
         {
@@ -312,83 +290,222 @@ public class TankController : NetworkBehaviour
             return;
         }
 
+        NetworkManager manager = NetworkManager;
+        if (manager == null || !manager.IsServer || !manager.IsListening)
+        {
+            Debug.LogError("[TankController] Cannot spawn projectile: NetworkManager is not ready.");
+            return;
+        }
 
-        GameObject projectile = Instantiate(projectilePrefab, spawnPosition, spawnRotation);
+        Transform firingTransform = rotationChild != null ? rotationChild : transform;
+        Vector2 fireDirection = firingTransform.up.normalized;
+        float projectileRadius = GetProjectileRadius();
+
+        float shooterForwardExtent = GetShooterForwardExtent(fireDirection);
+        float minimumDistanceFromShooter = shooterForwardExtent + projectileRadius + 0.01f;
+        float requestedDistance = Mathf.Max(shootingOffsetDistance, minimumDistanceFromShooter);
+
+        Vector2 firingOrigin = firingTransform.position;
+        Vector2 spawnPosition2D = firingOrigin + fireDirection * requestedDistance;
+        int wallMask = LayerMask.GetMask("Wall");
+
+        if (wallMask != 0)
+        {
+            float castDistance = requestedDistance + projectileRadius + 0.01f;
+            RaycastHit2D wallHit = Physics2D.Raycast(firingOrigin, fireDirection, castDistance, wallMask);
+            if (wallHit.collider != null)
+            {
+                // Clamp spawn on the shooter's side of the wall so bullets never tunnel through it.
+                float clampedDistance = Mathf.Max(0f, wallHit.distance - projectileRadius - 0.01f);
+                spawnPosition2D = firingOrigin + fireDirection * clampedDistance;
+            }
+        }
+
+        Vector3 spawnPosition = new Vector3(spawnPosition2D.x, spawnPosition2D.y, 0f);
+        Quaternion spawnRotation = firingTransform.rotation;
+
+        NetworkObject projectileNetObj = NetworkObject.InstantiateAndSpawn(
+            projectilePrefab,
+            manager,
+            ownerClientId: Unity.Netcode.NetworkManager.ServerClientId,
+            destroyWithScene: false,
+            isPlayerObject: false,
+            forceOverride: false,
+            position: spawnPosition,
+            rotation: spawnRotation
+        );
+
+        if (projectileNetObj == null)
+        {
+            Debug.LogError("[TankController] InstantiateAndSpawn returned null for projectile.");
+            return;
+        }
+
+        GameObject projectile = projectileNetObj.gameObject;
         projectile.layer = LayerMask.NameToLayer("Bullet");
 
         var projectileRb = projectile.GetComponent<Rigidbody2D>();
         if (projectileRb != null)
         {
-            Vector2 shootDirection = spawnRotation * Vector2.up; 
+            Vector2 shootDirection = spawnRotation * Vector2.up;
             projectileRb.linearVelocity = shootDirection * projectileSpeed;
         }
 
-        NetworkObject projectileNetObj = projectile.GetComponent<NetworkObject>();
-        if (projectileNetObj != null)
+        if (gameManager != null && gameManager.projectilesContainer != null)
         {
-            // Spawn the NetworkObject
-            projectileNetObj.Spawn();
+            projectile.transform.SetParent(gameManager.projectilesContainer.transform, true);
+        }
+        else
+        {
+            Debug.LogWarning("[TankController] ProjectilesContainer reference is missing in GameManager.");
+        }
 
-            // Set the parent to ProjectilesContainer for easy management
-            if (gameManager != null && gameManager.projectilesContainer != null)
+        var projectileComponent = projectile.GetComponent<Projectile>();
+        if (projectileComponent != null)
+        {
+            float shooterUnlockRadius = GetShooterSelfHitUnlockRadius(projectileRadius);
+            Vector2 shooterPosition = rb != null ? rb.position : (Vector2)transform.position;
+            projectileComponent.ConfigureShooter(OwnerClientId, shooterPosition, shooterUnlockRadius);
+        }
+    }
+
+    private float GetProjectileRadius()
+    {
+        CircleCollider2D circleCollider = projectilePrefab != null ? projectilePrefab.GetComponent<CircleCollider2D>() : null;
+        if (circleCollider != null)
+        {
+            Vector3 scale = projectilePrefab.transform.localScale;
+            float scaleFactor = Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.y));
+            return Mathf.Max(0.005f, circleCollider.radius * scaleFactor);
+        }
+
+        return 0.05f;
+    }
+
+    private float GetShooterForwardExtent(Vector2 direction)
+    {
+        if (!TryGetCombinedSolidColliderBounds(out Bounds combinedBounds))
+        {
+            return 0.2f;
+        }
+
+        Vector2 extents = combinedBounds.extents;
+        return Mathf.Abs(direction.x) * extents.x + Mathf.Abs(direction.y) * extents.y;
+    }
+
+    private float GetShooterSelfHitUnlockRadius(float projectileRadius)
+    {
+        if (!TryGetCombinedSolidColliderBounds(out Bounds combinedBounds))
+        {
+            return 0.25f + projectileRadius;
+        }
+
+        return combinedBounds.extents.magnitude + projectileRadius + 0.02f;
+    }
+
+    private bool TryGetCombinedSolidColliderBounds(out Bounds combinedBounds)
+    {
+        Collider2D[] colliders = GetComponentsInChildren<Collider2D>();
+        bool foundBounds = false;
+        combinedBounds = new Bounds(transform.position, Vector3.zero);
+
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            Collider2D collider = colliders[i];
+            if (collider == null || !collider.enabled || collider.isTrigger)
             {
-                projectile.transform.SetParent(gameManager.projectilesContainer.transform);
+                continue;
+            }
+
+            if (!foundBounds)
+            {
+                combinedBounds = collider.bounds;
+                foundBounds = true;
             }
             else
             {
-                Debug.LogWarning("[TankController] ProjectilesContainer reference is missing in GameManager.");
-            }
-
-            var projectileComponent = projectile.GetComponent<Projectile>();
-            if (projectileComponent != null)
-            {
-                projectileComponent.SetShooterId(OwnerClientId);
+                combinedBounds.Encapsulate(collider.bounds);
             }
         }
+
+        return foundBounds;
     }
 
     #endregion
 
     #region Server RPCs & Reconciliation
 
-    [ServerRpc]
+    [ServerRpc(Delivery = RpcDelivery.Unreliable)]
     private void SendInputToServerRpc(MovementInput input, ServerRpcParams serverRpcParams = default)
     {
-        // 1) Apply on server
-        ApplyMovementOnServer(input);
-        lastProcessedInput = input.inputSequence;
+        // Safety: only allow the owner to submit movement for this object.
+        if (serverRpcParams.Receive.SenderClientId != OwnerClientId)
+        {
+            return;
+        }
 
-        // 2) Build new authoritative ServerState
+        ApplyMovement(input);
+
         ServerState newState = new ServerState
         {
             position = rb.position,
             rotation = rotationChild != null ? rotationChild.eulerAngles.z : 0f,
-            lastProcessedInput = lastProcessedInput
+            lastProcessedInput = input.inputSequence
         };
 
-        // 3) Send back to *all* clients (but only the owner will use it)
-        ReceiveServerStateClientRpc(newState);
+        ClientRpcParams ownerOnlyRpcParams = new ClientRpcParams
+        {
+            Send = new ClientRpcSendParams
+            {
+                TargetClientIds = new[] { serverRpcParams.Receive.SenderClientId }
+            }
+        };
+
+        ReceiveServerStateClientRpc(newState, ownerOnlyRpcParams);
     }
 
-    [ClientRpc]
-    private void ReceiveServerStateClientRpc(ServerState state)
+    [ClientRpc(Delivery = RpcDelivery.Unreliable)]
+    private void ReceiveServerStateClientRpc(ServerState state, ClientRpcParams clientRpcParams = default)
     {
-        // Only the owning client needs reconciliation
         if (!IsOwner || IsServer)
+        {
             return;
+        }
 
-        // Correct our position/rotation to the authoritative state
+        RemoveAcknowledgedInputs(state.lastProcessedInput);
+
+        float positionError = Vector2.Distance(rb.position, state.position);
+        float rotationError = rotationChild != null
+            ? Mathf.Abs(Mathf.DeltaAngle(rotationChild.eulerAngles.z, state.rotation))
+            : 0f;
+
+        bool needsCorrection =
+            positionError > ReconciliationPositionThreshold ||
+            rotationError > ReconciliationRotationThreshold;
+
+        if (!needsCorrection)
+        {
+            return;
+        }
+
         rb.position = state.position;
         if (rotationChild != null)
         {
-            rotationChild.rotation = Quaternion.Euler(0, 0, state.rotation);
+            rotationChild.rotation = Quaternion.Euler(0f, 0f, state.rotation);
         }
 
-        // Remove all inputs up to the last processed by the server
+        for (int i = 0; i < pendingInputs.Count; i++)
+        {
+            ApplyMovementInput(pendingInputs[i]);
+        }
+    }
+
+    private void RemoveAcknowledgedInputs(int lastProcessedInputSequence)
+    {
         int i = 0;
         while (i < pendingInputs.Count)
         {
-            if (pendingInputs[i].inputSequence <= state.lastProcessedInput)
+            if (pendingInputs[i].inputSequence <= lastProcessedInputSequence)
             {
                 pendingInputs.RemoveAt(i);
             }
@@ -396,12 +513,6 @@ public class TankController : NetworkBehaviour
             {
                 i++;
             }
-        }
-
-        // Re-apply all unacknowledged inputs so that we "catch up"
-        for (int j = 0; j < pendingInputs.Count; j++)
-        {
-            ApplyMovementInput(pendingInputs[j]);
         }
     }
 

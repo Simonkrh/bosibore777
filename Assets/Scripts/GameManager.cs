@@ -7,8 +7,8 @@ using System;
 
 public class GameManager : NetworkBehaviour
 {
-    public GameObject playerPrefab;  
-    public MazeGenerator mazeGenerator; 
+    public GameObject playerPrefab;
+    public MazeGenerator mazeGenerator;
     public GameObject projectilesContainer;
     private PlayerDisplayManager displayManager;
 
@@ -17,15 +17,19 @@ public class GameManager : NetworkBehaviour
     private Dictionary<ulong, int> playerScores = new Dictionary<ulong, int>();
 
     private Dictionary<ulong, GameObject> clientIdToPlayer = new Dictionary<ulong, GameObject>();
-    
+
     private List<Vector2Int> availableCells = new List<Vector2Int>();
     private bool startingNewRound = false;
     private readonly List<Color> primaryColors = new List<Color> { Color.green, Color.red, Color.blue };
     private readonly List<Color> availablePrimaryColors = new List<Color>();
     private readonly Dictionary<ulong, Color> playerColors = new Dictionary<ulong, Color>();
-    
+    private float nextAutoSpawnCheckTime = 0f;
+    private const float AutoSpawnCheckIntervalSeconds = 0.25f;
+    private static bool collisionLayersConfigured;
+
     private void Awake()
     {
+        ConfigureCollisionLayers();
         availablePrimaryColors.AddRange(primaryColors);
     }
 
@@ -35,6 +39,108 @@ public class GameManager : NetworkBehaviour
         if (displayManager == null)
         {
             Debug.LogError("PlayerDisplayManager not found in the scene!");
+        }
+    }
+
+    private void ConfigureCollisionLayers()
+    {
+        if (collisionLayersConfigured)
+        {
+            return;
+        }
+
+        int playerLayer = LayerMask.NameToLayer("Player");
+        int bulletLayer = LayerMask.NameToLayer("Bullet");
+        int bulletTriggerLayer = LayerMask.NameToLayer("BulletTrigger");
+
+        if (playerLayer >= 0)
+        {
+            Physics2D.IgnoreLayerCollision(playerLayer, playerLayer, true);
+        }
+        else
+        {
+            Debug.LogWarning("[GameManager] Layer 'Player' was not found.");
+        }
+
+        if (bulletLayer >= 0)
+        {
+            Physics2D.IgnoreLayerCollision(bulletLayer, bulletLayer, true);
+        }
+        else
+        {
+            Debug.LogWarning("[GameManager] Layer 'Bullet' was not found.");
+        }
+
+        if (bulletLayer >= 0 && bulletTriggerLayer >= 0)
+        {
+            Physics2D.IgnoreLayerCollision(bulletLayer, bulletTriggerLayer, true);
+        }
+
+        if (bulletTriggerLayer >= 0)
+        {
+            Physics2D.IgnoreLayerCollision(bulletTriggerLayer, bulletTriggerLayer, true);
+        }
+
+        collisionLayersConfigured = true;
+    }
+
+    public override void OnNetworkSpawn()
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        nextAutoSpawnCheckTime = 0f;
+        TrySpawnMissingPlayers();
+    }
+
+    private void Update()
+    {
+        if (!IsServer || !IsSpawned || NetworkManager == null)
+        {
+            return;
+        }
+
+        if (startingNewRound)
+        {
+            return;
+        }
+
+        if (Time.unscaledTime < nextAutoSpawnCheckTime)
+        {
+            return;
+        }
+
+        nextAutoSpawnCheckTime = Time.unscaledTime + AutoSpawnCheckIntervalSeconds;
+        TrySpawnMissingPlayers();
+    }
+
+    private void TrySpawnMissingPlayers()
+    {
+        if (NetworkManager == null)
+        {
+            return;
+        }
+
+        foreach (var client in NetworkManager.ConnectedClientsList)
+        {
+            ulong clientId = client.ClientId;
+            if (HasSpawnForClient(clientId))
+            {
+                continue;
+            }
+
+            if (!CanSpawnPlayerNow())
+            {
+                Debug.Log($"[GameManager] Auto-spawn delayed for client {clientId}: {GetSpawnReadinessReason()}.");
+                continue;
+            }
+
+            if (SpawnPlayerOnConnect(clientId))
+            {
+                Debug.Log($"[GameManager] Auto-spawned player for client {clientId}.");
+            }
         }
     }
 
@@ -78,54 +184,208 @@ public class GameManager : NetworkBehaviour
         }
     }
 
-    public void SpawnPlayerOnConnect(ulong clientId)
+    public bool SpawnPlayerOnConnect(ulong clientId)
     {
+        if (HasSpawnForClient(clientId))
+        {
+            return true;
+        }
+
+        if (!CanSpawnPlayerNow())
+        {
+            return false;
+        }
+
         Color playerColor = AssignColor(clientId);
+
+        if (!spawnPlayer(clientId))
+        {
+            return false;
+        }
+
         InitializePlayerDisplayAndColors(clientId);
-
-        spawnPlayer(clientId);
-
         AssignIconColorClientRpc(clientId, playerColor);
         AssignTankColor(clientId, playerColor);
+        return true;
     }
 
-    public void SpawnPlayerOnNewRound(ulong clientId)
+    public bool SpawnPlayerOnNewRound(ulong clientId)
     {
-        Color existingColor = playerColors[clientId];
-        
-        spawnPlayer(clientId);
-        
+        if (HasSpawnForClient(clientId))
+        {
+            return true;
+        }
+
+        if (!CanSpawnPlayerNow())
+        {
+            return false;
+        }
+
+        if (!playerColors.TryGetValue(clientId, out Color existingColor))
+        {
+            existingColor = AssignColor(clientId);
+        }
+
+        if (!spawnPlayer(clientId))
+        {
+            return false;
+        }
+
         AssignIconColorClientRpc(clientId, existingColor);
         AssignTankColor(clientId, existingColor);
+        return true;
     }
 
-    private void spawnPlayer(ulong clientId) {
+    private bool spawnPlayer(ulong clientId)
+    {
         if (availableCells == null || availableCells.Count == 0)
         {
             Debug.LogWarning("No available cells for spawning players.");
-            return;
+            return false;
         }
 
-        // Select a random cell or the next available cell
-        Vector2Int cell = availableCells[UnityEngine.Random.Range(0, availableCells.Count)];
-        availableCells.Remove(cell); // Ensure no duplicates
+
+        int cellIndex = UnityEngine.Random.Range(0, availableCells.Count);
+        Vector2Int cell = availableCells[cellIndex];
 
         Vector3 spawnPosition = mazeGenerator.CellToWorldPosition(cell);
 
-        GameObject player = Instantiate(playerPrefab, spawnPosition, Quaternion.identity);
-        player.GetComponent<NetworkObject>().SpawnWithOwnership(clientId);
+        try
+        {
+            NetworkObject spawnedPlayerNetworkObject = NetworkObject.InstantiateAndSpawn(
+                playerPrefab,
+                NetworkManager,
+                ownerClientId: clientId,
+                destroyWithScene: false,
+                isPlayerObject: false,
+                forceOverride: false,
+                position: spawnPosition,
+                rotation: Quaternion.identity
+            );
 
-        alivePlayers.Add(clientId);
-        clientIdToPlayer[clientId] = player;
+            if (spawnedPlayerNetworkObject == null)
+            {
+                Debug.LogError($"[GameManager] InstantiateAndSpawn returned null for client {clientId}.");
+                return false;
+            }
 
-        Debug.Log($"[Server] Spawned player {clientId} at cell {cell} (world position {spawnPosition})");
+            availableCells.RemoveAt(cellIndex);
 
+            GameObject player = spawnedPlayerNetworkObject.gameObject;
+            ApplyPlayerCollisionSettings(player, clientId);
+            alivePlayers.Add(clientId);
+            clientIdToPlayer[clientId] = player;
+
+            Debug.Log($"[Server] Spawned player {clientId} at cell {cell} (world position {spawnPosition})");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[GameManager] InstantiateAndSpawn failed for client {clientId}: {ex.Message}");
+            return false;
+        }
+    }
+
+    public bool HasSpawnForClient(ulong clientId)
+    {
+        return clientIdToPlayer.TryGetValue(clientId, out GameObject player) && player != null;
+    }
+
+    private void ApplyPlayerCollisionSettings(GameObject player, ulong ownerClientId)
+    {
+        int playerLayer = LayerMask.NameToLayer("Player");
+        if (playerLayer >= 0)
+        {
+            SetLayerRecursively(player, playerLayer);
+        }
+
+        Collider2D[] newPlayerColliders = player.GetComponentsInChildren<Collider2D>(true);
+        foreach (var kvp in clientIdToPlayer)
+        {
+            if (kvp.Key == ownerClientId || kvp.Value == null)
+            {
+                continue;
+            }
+
+            Collider2D[] existingPlayerColliders = kvp.Value.GetComponentsInChildren<Collider2D>(true);
+            IgnoreColliderPairs(newPlayerColliders, existingPlayerColliders);
+        }
+    }
+
+    private static void SetLayerRecursively(GameObject root, int layer)
+    {
+        Transform[] transforms = root.GetComponentsInChildren<Transform>(true);
+        for (int i = 0; i < transforms.Length; i++)
+        {
+            transforms[i].gameObject.layer = layer;
+        }
+    }
+
+    private static void IgnoreColliderPairs(Collider2D[] first, Collider2D[] second)
+    {
+        for (int i = 0; i < first.Length; i++)
+        {
+            Collider2D firstCollider = first[i];
+            if (firstCollider == null)
+            {
+                continue;
+            }
+
+            for (int j = 0; j < second.Length; j++)
+            {
+                Collider2D secondCollider = second[j];
+                if (secondCollider == null)
+                {
+                    continue;
+                }
+
+                Physics2D.IgnoreCollision(firstCollider, secondCollider, true);
+            }
+        }
+    }
+
+    public bool CanSpawnPlayerNow()
+    {
+        if (mazeGenerator == null)
+        {
+            mazeGenerator = FindFirstObjectByType<MazeGenerator>();
+        }
+
+        return playerPrefab != null &&
+               mazeGenerator != null &&
+               availableCells != null &&
+               availableCells.Count > 0;
+    }
+
+    public string GetSpawnReadinessReason()
+    {
+        if (playerPrefab == null)
+        {
+            return "playerPrefab is null";
+        }
+
+        if (mazeGenerator == null)
+        {
+            return "mazeGenerator is null";
+        }
+
+        if (availableCells == null)
+        {
+            return "availableCells is null";
+        }
+
+        if (availableCells.Count <= 0)
+        {
+            return "availableCells is empty";
+        }
+
+        return "ready";
     }
 
     [ClientRpc]
     private void AssignIconColorClientRpc(ulong clientId, Color color, ClientRpcParams clientRpcParams = default)
     {
-        if (!IsClient) return; 
+        if (!IsClient) return;
 
         if (PlayerDisplayManager.Instance != null)
         {
@@ -137,7 +397,7 @@ public class GameManager : NetworkBehaviour
         }
     }
 
-    private void AssignTankColor(ulong clientId, Color color) 
+    private void AssignTankColor(ulong clientId, Color color)
     {
         if (clientIdToPlayer.TryGetValue(clientId, out GameObject player))
         {
@@ -209,7 +469,7 @@ public class GameManager : NetworkBehaviour
     [ClientRpc]
     private void SendExistingPlayerDisplaysClientRpc(ulong[] clientIds, int[] scores, ClientRpcParams clientRpcParams = default)
     {
-        if (!IsClient) return; 
+        if (!IsClient) return;
 
         if (PlayerDisplayManager.Instance != null)
         {
@@ -261,17 +521,17 @@ public class GameManager : NetworkBehaviour
             }
         }
     }
-    */ 
+    */
     public void SetAvailableCells(List<Vector2Int> cells)
     {
         availableCells = cells;
-        // Debug.Log($"[GameManager] Received available cells: {availableCells.Count}");
+        Debug.Log($"[GameManager] Received available cells: {availableCells.Count}");
     }
 
     [ClientRpc]
     private void CreatePlayerDisplayClientRpc(ulong clientId, int initialScore)
     {
-        if (!IsClient) return; 
+        if (!IsClient) return;
 
         if (PlayerDisplayManager.Instance != null)
         {
@@ -301,7 +561,7 @@ public class GameManager : NetworkBehaviour
     [ClientRpc]
     public void RemovePlayerDisplayClientRpc(ulong clientId)
     {
-        if (!IsClient) return; 
+        if (!IsClient) return;
 
         if (PlayerDisplayManager.Instance != null)
         {
@@ -382,7 +642,7 @@ public class GameManager : NetworkBehaviour
             NetworkObject projectileNetObj = projectileTransform.GetComponent<NetworkObject>();
             if (projectileNetObj != null && projectileNetObj.IsSpawned)
             {
-                projectileNetObj.Despawn(true); 
+                projectileNetObj.Despawn(true);
             }
             else
             {
@@ -394,7 +654,7 @@ public class GameManager : NetworkBehaviour
     private void StartNewRound()
     {
         if (!IsServer) return;
-        
+
         StartCoroutine(StartNewRoundCoroutine());
     }
 
@@ -402,19 +662,21 @@ public class GameManager : NetworkBehaviour
     {
         Debug.Log("[Server] Starting new round...");
 
-        // Remove the last player standing if any
-        if (alivePlayers.Count == 1)
-        {
-            ulong lastPlayerId = alivePlayers.First();
-            DespawnPlayer(lastPlayerId);
-            RemovePlayerOnNewRound(lastPlayerId);
-        
-            Debug.Log($"[Server] Removed last player standing: {lastPlayerId}");
-        }
-
-        alivePlayers.Clear();
+        DespawnAllPlayersForNewRound();
 
         DespawnAllProjectiles();
+
+        if (mazeGenerator == null)
+        {
+            mazeGenerator = FindFirstObjectByType<MazeGenerator>();
+        }
+
+        if (mazeGenerator == null)
+        {
+            Debug.LogError("[GameManager] Cannot start a new round because MazeGenerator is missing.");
+            startingNewRound = false;
+            yield break;
+        }
 
         // Regenerate and sync the maze
         mazeGenerator.RegenerateMaze();
@@ -423,9 +685,19 @@ public class GameManager : NetworkBehaviour
         yield return new WaitForSeconds(1f); // Adjust based on synchronization speed
 
         // Spawn players after the maze has been regenerated and synced
-        foreach (var client in CustomNetworkManager.Singleton.ConnectedClientsList)
+        if (NetworkManager == null)
         {
-            SpawnPlayerOnNewRound(client.ClientId);
+            Debug.LogError("[GameManager] NetworkManager is null while starting a new round.");
+            startingNewRound = false;
+            yield break;
+        }
+
+        foreach (var client in NetworkManager.ConnectedClientsList)
+        {
+            if (!SpawnPlayerOnNewRound(client.ClientId))
+            {
+                Debug.LogWarning($"[GameManager] SpawnPlayerOnNewRound failed for client {client.ClientId}. Auto-spawn retry will continue.");
+            }
         }
 
         startingNewRound = false;
@@ -438,6 +710,7 @@ public class GameManager : NetworkBehaviour
 
         // Remove victim from alive list
         alivePlayers.Remove(victimId);
+        clientIdToPlayer.Remove(victimId);
 
         Debug.Log($"[Server] Player {victimId} died. Killer: {killerId}");
 
@@ -445,7 +718,6 @@ public class GameManager : NetworkBehaviour
         if (alivePlayers.Count <= 1 && startingNewRound == false)
         {
             startingNewRound = true;
-            
             StartCoroutine(RoundEndRoutine());
         }
     }
@@ -455,16 +727,48 @@ public class GameManager : NetworkBehaviour
         Debug.Log("[Server] RoundEndRoutine waiting 5 seconds...");
         yield return new WaitForSeconds(5f);
 
-        // The round ends. Let's find the "winner" (or none if 0 alive)
-        ulong winnerId = alivePlayers.Count == 1 ? alivePlayers.First() : 0;
-        if (winnerId != 0) {
+        // Award a point only if exactly one player is still alive when the round ends.
+        if (alivePlayers.Count == 1)
+        {
+            ulong winnerId = alivePlayers.First();
             Debug.Log($"[Server] Round has ended. Winner: {winnerId}");
-        
+
+            if (!playerScores.ContainsKey(winnerId))
+            {
+                playerScores[winnerId] = 0;
+            }
+
             playerScores[winnerId]++;
             UpdatePlayerScoreClientRpc(winnerId, playerScores[winnerId]);
         }
 
         StartNewRound();
+    }
+
+    private void DespawnAllPlayersForNewRound()
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        foreach (var kvp in clientIdToPlayer)
+        {
+            GameObject player = kvp.Value;
+            if (player == null)
+            {
+                continue;
+            }
+
+            NetworkObject playerNetworkObject = player.GetComponent<NetworkObject>();
+            if (playerNetworkObject != null && playerNetworkObject.IsSpawned)
+            {
+                playerNetworkObject.Despawn(true);
+            }
+        }
+
+        clientIdToPlayer.Clear();
+        alivePlayers.Clear();
     }
 
 }

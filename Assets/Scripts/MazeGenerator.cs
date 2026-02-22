@@ -28,6 +28,7 @@ public class MazeGenerator : NetworkBehaviour
     private Cell[,] grid;
     private Stack<Vector2Int> stack = new Stack<Vector2Int>();
     private List<Vector2Int> availableCellsList;
+    private bool publishedAvailableCellsToGameManager;
 
     public override void OnNetworkSpawn()
     {
@@ -36,27 +37,47 @@ public class MazeGenerator : NetworkBehaviour
         {
             Debug.Log("[Server] Generating initial maze...");
             RegenerateMaze();
-
-            // Register callback for new client connections
-            if (CustomNetworkManager.Singleton != null)
-                CustomNetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
         }
         else
         {
             Debug.Log("[Client] Waiting for maze data from server...");
+            RequestMazeDataServerRpc();
         }
+    }
+
+    private void Update()
+    {
+        if (!IsServer || publishedAvailableCellsToGameManager || availableCellsList == null)
+        {
+            return;
+        }
+
+        TryPublishAvailableCells();
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void RequestMazeDataServerRpc(ServerRpcParams serverRpcParams = default)
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        ulong requesterClientId = serverRpcParams.Receive.SenderClientId;
+        SendMazeDataToClient(requesterClientId);
     }
 
     public void RegenerateMaze()
     {
         Debug.Log("[MazeGenerator] Regenerating maze...");
+        publishedAvailableCellsToGameManager = false;
         GenerateRandomDimensions();
         GenerateMaze();
         RemoveRandomWalls();
         DrawMaze();
         InitializeAvailableCells();
         Shuffle(availableCellsList);
-        NotifyAvailableCellsReady();
+        TryPublishAvailableCells();
 
         // Sync the new maze to all clients
         if (NetworkObject != null && NetworkObject.IsSpawned)
@@ -140,32 +161,44 @@ public class MazeGenerator : NetworkBehaviour
         }
     }
 
-    public void NotifyAvailableCellsReady()
+    private void TryPublishAvailableCells()
     {
-        // Debug.Log($"[MazeGenerator] Notifying available cells ready: {availableCellsList.Count}");
-        var gameManager = FindFirstObjectByType<GameManager>();
+        if (availableCellsList == null)
+        {
+            return;
+        }
+
+        if (gameManager == null)
+        {
+            gameManager = FindFirstObjectByType<GameManager>();
+        }
+
         if (gameManager != null)
         {
             gameManager.SetAvailableCells(new List<Vector2Int>(availableCellsList));
+            publishedAvailableCellsToGameManager = true;
+            Debug.Log($"[MazeGenerator] Published {availableCellsList.Count} available cells to GameManager.");
         }
         else
         {
-            Debug.LogError("[MazeGenerator] GameManager not found. Cannot set available cells.");
+            Debug.Log("[MazeGenerator] GameManager not ready yet. Will retry publishing available cells.");
         }
     }
 
-    private void OnDestroy()
+    public void SendMazeDataToClient(ulong clientId)
     {
-        // Unregister the callback when this object is destroyed
-        if (CustomNetworkManager.Singleton != null)
+        if (!IsServer)
         {
-            CustomNetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+            return;
         }
-    }
 
-    private void OnClientConnected(ulong clientId)
-    {
-        Debug.Log($"[Server] Client {clientId} connected. Sending maze data...");
+        if (grid == null || width <= 0 || height <= 0)
+        {
+            Debug.LogWarning("[MazeGenerator] Maze data requested before generation. Regenerating now.");
+            RegenerateMaze();
+        }
+
+        Debug.Log($"[Server] Sending maze data to client {clientId}...");
 
         int[] data = SerializeMazeData();
 
@@ -184,8 +217,19 @@ public class MazeGenerator : NetworkBehaviour
     [ClientRpc]
     private void SyncMazeDataToClientClientRpc(int[] serializedData, ClientRpcParams clientRpcParams = default)
     {
-        if (!IsClient) return;
-        Debug.Log($"[Client {CustomNetworkManager.Singleton.LocalClientId}] Received maze data. Deserializing...");
+        if (!IsClient)
+        {
+            return;
+        }
+
+        if (serializedData == null || serializedData.Length == 0)
+        {
+            Debug.LogWarning("[MazeGenerator] Received empty maze data payload.");
+            return;
+        }
+
+        ulong localClientId = NetworkManager != null ? NetworkManager.LocalClientId : ulong.MaxValue;
+        Debug.Log($"[Client {localClientId}] Received maze data. Deserializing...");
         DeserializeMazeData(serializedData);
     }
 

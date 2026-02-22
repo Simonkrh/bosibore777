@@ -7,7 +7,7 @@ public class PlayerController : NetworkBehaviour
 
     public void Die(ulong killerId)
     {
-        if (!IsServer) return;  // Only the server kills players
+        if (!IsServer || !IsSpawned) return;  // Only the server kills spawned players
 
         // Grab the GameManager from the scene
         var GameManager = FindFirstObjectByType<GameManager>();
