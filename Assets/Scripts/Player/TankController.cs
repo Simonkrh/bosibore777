@@ -62,14 +62,16 @@ public class TankController : NetworkBehaviour
     private readonly List<MovementInput> pendingInputs = new List<MovementInput>();
 
     private const int MaxPendingInputs = 128;
-    private const float ReconciliationPositionThreshold = 0.18f;
-    private const float ReconciliationRotationThreshold = 8.0f;
-    private const float SoftReconciliationPositionFactor = 0.2f;
-    private const float SoftReconciliationRotationFactor = 0.25f;
-    private const float HardSnapPositionThreshold = 1.2f;
-    private const float HardSnapRotationThreshold = 35f;
+    private const float ReconciliationPositionThreshold = 0.04f;
+    private const float ReconciliationRotationThreshold = 2.5f;
+    private const float SoftReconciliationPositionFactor = 0.35f;
+    private const float SoftReconciliationRotationFactor = 0.4f;
+    private const float HardSnapPositionThreshold = 0.35f;
+    private const float HardSnapRotationThreshold = 12f;
     private const float MovementWallCastSkin = 0.01f;
-    private const float MovementWallBlockDotThreshold = -0.0001f;
+    private const float MovementWallBlockDotThreshold = 0.0001f;
+    private const float ActiveControlPositionTolerance = 0.03f;
+    private const float ActiveControlRotationTolerance = 1.5f;
 
     // Server-authoritative state replicated for non-owner interpolation
     private readonly NetworkVariable<Vector2> networkPosition = new NetworkVariable<Vector2>(
@@ -349,8 +351,6 @@ public class TankController : NetworkBehaviour
             return requestedMoveVector;
         }
 
-        // Keep the tangent component so tanks can slide on walls/corners instead of hard-locking.
-        Vector2 allowedMoveVector = requestedMoveVector;
         for (int i = 0; i < hitCount; i++)
         {
             RaycastHit2D hit = movementWallHits[i];
@@ -370,20 +370,10 @@ public class TankController : NetworkBehaviour
                 continue;
             }
 
-            float intoWallAmount = Vector2.Dot(allowedMoveVector, wallNormal);
-            if (intoWallAmount < 0f)
-            {
-                allowedMoveVector -= wallNormal * intoWallAmount;
-            }
-        }
-
-        float allowedDistance = Mathf.Min(moveDistance, allowedMoveVector.magnitude);
-        if (allowedDistance <= Mathf.Epsilon)
-        {
+            // Gameplay rule: if wall contact does not separate the tank, movement fully stops.
             return Vector2.zero;
         }
-
-        return allowedMoveVector.normalized * allowedDistance;
+        return requestedMoveVector;
     }
 
     private void SmoothlyInterpolatePositionAndRotation()
@@ -936,7 +926,7 @@ public class TankController : NetworkBehaviour
         ReceiveServerStateClientRpc(newState, ownerOnlyRpcParams);
     }
 
-    [ClientRpc]
+    [ClientRpc(Delivery = RpcDelivery.Unreliable)]
     private void ReceiveServerStateClientRpc(ServerState state, ClientRpcParams clientRpcParams = default)
     {
         if (!IsOwner || IsServer)
@@ -970,7 +960,9 @@ public class TankController : NetworkBehaviour
             Mathf.Abs(cachedMoveInput) > 0.01f ||
             Mathf.Abs(cachedTurnInput) > 0.01f;
 
-        if (activelyControlling && positionError < 0.45f && rotationError < 12f)
+        if (activelyControlling &&
+            positionError < ActiveControlPositionTolerance &&
+            rotationError < ActiveControlRotationTolerance)
         {
             return;
         }

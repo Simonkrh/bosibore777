@@ -9,6 +9,7 @@ public class CustomNetworkManager : NetworkManager
     [SerializeField] private bool autoStartDedicatedServerInBatchMode = true;
     [SerializeField] private string gameplaySceneName = "GameScene";
     [SerializeField] private int defaultPort = 7777;
+    [SerializeField] private bool matchNetworkTickRateToFixedTimestep = true;
 
     private bool serverEventsSubscribed;
     private readonly HashSet<ulong> pendingPlayerSpawns = new HashSet<ulong>();
@@ -24,7 +25,25 @@ public class CustomNetworkManager : NetworkManager
         }
 
         DontDestroyOnLoad(gameObject);
+        ApplyRuntimeTickRateConfiguration();
         Debug.Log("[CustomNetworkManager] Singleton is initialized by the NetworkManager base class.");
+    }
+
+    private void ApplyRuntimeTickRateConfiguration()
+    {
+        if (!matchNetworkTickRateToFixedTimestep || NetworkConfig == null || Time.fixedDeltaTime <= 0f)
+        {
+            return;
+        }
+
+        uint physicsTickRate = (uint)Mathf.Clamp(Mathf.RoundToInt(1f / Time.fixedDeltaTime), 30, 120);
+        if (NetworkConfig.TickRate == physicsTickRate)
+        {
+            return;
+        }
+
+        NetworkConfig.TickRate = physicsTickRate;
+        Debug.Log($"[CustomNetworkManager] Network tick rate set to {physicsTickRate} to match fixed timestep.");
     }
 
     private void OnEnable()
