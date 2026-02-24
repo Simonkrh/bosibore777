@@ -698,6 +698,13 @@ public class GameManager : NetworkBehaviour
 
         foreach (Transform projectileTransform in projectilesContainer.transform)
         {
+            Projectile projectile = projectileTransform.GetComponent<Projectile>();
+            if (projectile != null && IsServer)
+            {
+                projectile.ForceDestroy();
+                continue;
+            }
+
             NetworkObject projectileNetObj = projectileTransform.GetComponent<NetworkObject>();
             if (projectileNetObj != null && projectileNetObj.IsSpawned)
             {
@@ -705,7 +712,7 @@ public class GameManager : NetworkBehaviour
             }
             else
             {
-                Debug.LogWarning($"[GameManager] Projectile {projectileTransform.name} has no NetworkObject or is already despawned.");
+                Destroy(projectileTransform.gameObject);
             }
         }
     }

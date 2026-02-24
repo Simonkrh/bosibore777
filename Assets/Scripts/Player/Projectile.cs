@@ -1,5 +1,6 @@
 using Unity.Netcode;
 using UnityEngine;
+using System;
 
 [RequireComponent(typeof(Rigidbody2D))]
 public class Projectile : NetworkBehaviour
@@ -19,6 +20,9 @@ public class Projectile : NetworkBehaviour
     private bool shooterCanBeHit;
     private Vector2 shooterPositionAtFire;
     private float shooterSelfHitUnlockRadius;
+    private bool destroyInvoked;
+    private int shotSequence = -1;
+    private Action<ulong, int> destroyedCallback;
 
     private void Awake()
     {
@@ -39,6 +43,36 @@ public class Projectile : NetworkBehaviour
     {
         shooterCanBeHit = false;
         IgnoreCollisionWithOtherProjectiles();
+
+        if (IsServer)
+        {
+            return;
+        }
+
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+            rb.simulated = false;
+        }
+
+        Collider2D[] colliders = GetComponentsInChildren<Collider2D>(true);
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            if (colliders[i] != null)
+            {
+                colliders[i].enabled = false;
+            }
+        }
+
+        SpriteRenderer[] renderers = GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] != null)
+            {
+                renderers[i].enabled = false;
+            }
+        }
     }
 
     private void IgnoreCollisionWithOtherProjectiles()
@@ -100,10 +134,12 @@ public class Projectile : NetworkBehaviour
     private System.Collections.IEnumerator DestroyAfterLifetime()
     {
         yield return new WaitForSeconds(lifetime);
-        if (IsServer && NetworkObject != null)
+        if (!IsServer)
         {
-            NetworkObject.Despawn(true);
+            yield break;
         }
+
+        DespawnOrDestroyProjectile();
     }
 
     public void ConfigureShooter(ulong id, Vector2 shooterPosition, float selfHitUnlockRadius)
@@ -118,6 +154,43 @@ public class Projectile : NetworkBehaviour
     public void SetShooterId(ulong id)
     {
         ConfigureShooter(id, rb != null ? rb.position : (Vector2)transform.position, minSelfHitUnlockRadius);
+    }
+
+    public void ConfigureServerProjectile(ulong id, int sequence, Vector2 shooterPosition, float selfHitUnlockRadius, Action<ulong, int> onDestroyed)
+    {
+        ConfigureShooter(id, shooterPosition, selfHitUnlockRadius);
+        shotSequence = sequence;
+        destroyedCallback = onDestroyed;
+    }
+
+    public void ForceDestroy()
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        hasCollided = true;
+        DespawnOrDestroyProjectile();
+    }
+
+    private void DespawnOrDestroyProjectile()
+    {
+        if (destroyInvoked)
+        {
+            return;
+        }
+
+        destroyInvoked = true;
+        destroyedCallback?.Invoke(shooterId, shotSequence);
+
+        if (NetworkObject != null && NetworkObject.IsSpawned)
+        {
+            NetworkObject.Despawn(true);
+            return;
+        }
+
+        Destroy(gameObject);
     }
 
     private bool TryHitPlayer(Collider2D collisionCollider)
@@ -137,12 +210,7 @@ public class Projectile : NetworkBehaviour
         ulong killerId = shooterId;
         playerController.Die(killerId);
         hasCollided = true;
-
-        // Despawn this projectile
-        if (NetworkObject != null && NetworkObject.IsSpawned)
-        {
-            NetworkObject.Despawn(true);
-        }
+        DespawnOrDestroyProjectile();
 
         return true;
     }
@@ -178,18 +246,12 @@ public class Projectile : NetworkBehaviour
             if (maxWallBounces >= 0 && wallBounceCount > maxWallBounces)
             {
                 hasCollided = true;
-                if (NetworkObject != null && NetworkObject.IsSpawned)
-                {
-                    NetworkObject.Despawn(true);
-                }
+                DespawnOrDestroyProjectile();
             }
             return;
         }
 
         hasCollided = true;
-        if (NetworkObject != null && NetworkObject.IsSpawned)
-        {
-            NetworkObject.Despawn(true);
-        }
+        DespawnOrDestroyProjectile();
     }
 }

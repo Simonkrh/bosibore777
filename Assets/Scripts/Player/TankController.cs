@@ -20,6 +20,22 @@ public class TankController : NetworkBehaviour
     public float projectileSpeed = 10f;
     public float shootCooldown = 0.5f;
     public float shootingOffsetDistance = 1.0f;
+    [Tooltip("Layers treated as blocking walls for movement + shot visual raycasts. Leave empty to use layer named 'Wall'.")]
+    [SerializeField] private LayerMask wallCollisionMask;
+
+    [Header("Client Feel")]
+    [Tooltip("Display a short-lived local visual instantly when a non-host client fires.")]
+    [SerializeField] private bool showPredictedShotVisual = true;
+    [SerializeField] private float predictedShotVisualLifetime = 0.12f;
+    [Range(0f, 1f)]
+    [SerializeField] private float predictedShotVisualAlpha = 1f;
+
+    [Header("Shot Fairness")]
+    [Tooltip("Compensate remote shooter latency by advancing projectile spawn using measured RTT.")]
+    [SerializeField] private bool enableShotLatencyCompensation = true;
+    [Range(0f, 1f)]
+    [SerializeField] private float shotLatencyCompensationFactor = 1f;
+    [SerializeField] private float maxShotLatencyCompensationSeconds = 0.12f;
 
     private Rigidbody2D rb;
     private float lastShotTime;
@@ -30,14 +46,30 @@ public class TankController : NetworkBehaviour
 
     private NetworkTransform[] networkTransforms;
     private NetworkRigidbody2D networkRigidbody2D;
+    private ContactFilter2D movementWallContactFilter;
+    private bool movementWallContactFilterInitialized;
+    private readonly RaycastHit2D[] movementWallHits = new RaycastHit2D[8];
+    private readonly Dictionary<long, ShotVisualProjectile> activeShotVisuals = new Dictionary<long, ShotVisualProjectile>();
+    private int nextLocalShotSequence = 0;
+    private float serverLastShotTime = float.NegativeInfinity;
+    private int wallMask;
+    private float nextShotVisualPruneTime;
+    private const float ShotVisualPruneInterval = 2f;
 
     // Client prediction state
     private int nextInputSequence = 0;
+    private int lastReceivedServerInputSequence = -1;
     private readonly List<MovementInput> pendingInputs = new List<MovementInput>();
 
     private const int MaxPendingInputs = 128;
-    private const float ReconciliationPositionThreshold = 0.06f;
-    private const float ReconciliationRotationThreshold = 3.0f;
+    private const float ReconciliationPositionThreshold = 0.18f;
+    private const float ReconciliationRotationThreshold = 8.0f;
+    private const float SoftReconciliationPositionFactor = 0.2f;
+    private const float SoftReconciliationRotationFactor = 0.25f;
+    private const float HardSnapPositionThreshold = 1.2f;
+    private const float HardSnapRotationThreshold = 35f;
+    private const float MovementWallCastSkin = 0.01f;
+    private const float MovementWallBlockDotThreshold = -0.0001f;
 
     // Server-authoritative state replicated for non-owner interpolation
     private readonly NetworkVariable<Vector2> networkPosition = new NetworkVariable<Vector2>(
@@ -62,11 +94,27 @@ public class TankController : NetworkBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         rb.gravityScale = 0f;
+        rb.bodyType = RigidbodyType2D.Kinematic;
+        rb.useFullKinematicContacts = true;
+        if (wallCollisionMask.value == 0)
+        {
+            wallCollisionMask = LayerMask.GetMask("Wall");
+        }
+
+        wallMask = wallCollisionMask.value;
+        InitializeMovementWallContactFilter();
     }
 
     public override void OnNetworkSpawn()
     {
         tankColor.OnValueChanged += OnTankColorChanged;
+        nextInputSequence = 0;
+        lastReceivedServerInputSequence = -1;
+        nextLocalShotSequence = 0;
+        serverLastShotTime = float.NegativeInfinity;
+        nextShotVisualPruneTime = 0f;
+        pendingInputs.Clear();
+        ClearAllShotVisuals();
 
         // This controller already implements prediction + reconciliation + remote interpolation.
         // Disable built-in transform/rigidbody sync to avoid conflicting authority paths.
@@ -82,7 +130,7 @@ public class TankController : NetworkBehaviour
             networkRigidbody2D.enabled = false;
         }
 
-        rb.isKinematic = !IsServer && !IsOwner;
+        rb.isKinematic = true;
 
         if (IsServer)
         {
@@ -99,6 +147,7 @@ public class TankController : NetworkBehaviour
     private void OnDestroy()
     {
         tankColor.OnValueChanged -= OnTankColorChanged;
+        ClearAllShotVisuals();
     }
 
     private void OnTankColorChanged(Color oldColor, Color newColor)
@@ -136,13 +185,24 @@ public class TankController : NetworkBehaviour
 
     private void Update()
     {
-        if (!IsOwner)
+        if (IsOwner)
         {
+            HandleShooting();
+            CacheCurrentInput();
             return;
         }
 
-        HandleShooting();
-        CacheCurrentInput();
+        // Drive remote interpolation at render cadence on pure clients.
+        if (IsClient && !IsServer)
+        {
+            SmoothlyInterpolatePositionAndRotation();
+        }
+
+        if (IsClient && Time.unscaledTime >= nextShotVisualPruneTime)
+        {
+            nextShotVisualPruneTime = Time.unscaledTime + ShotVisualPruneInterval;
+            PruneDestroyedShotVisuals();
+        }
     }
 
     private void FixedUpdate()
@@ -166,10 +226,6 @@ public class TankController : NetworkBehaviour
             {
                 networkChildRotation.Value = rotationChild.eulerAngles.z;
             }
-        }
-        else if (!IsOwner)
-        {
-            SmoothlyInterpolatePositionAndRotation();
         }
     }
 
@@ -206,11 +262,6 @@ public class TankController : NetworkBehaviour
 
     private void ProcessOwnerInputOnClient()
     {
-        if (!HasMovementInput())
-        {
-            return;
-        }
-
         MovementInput inputData = new MovementInput
         {
             moveInput = cachedMoveInput,
@@ -219,8 +270,11 @@ public class TankController : NetworkBehaviour
             inputSequence = nextInputSequence++
         };
 
-        // Predict immediately on local client.
-        ApplyMovement(inputData);
+        if (HasMovementInput())
+        {
+            // Predict immediately on local client.
+            ApplyMovement(inputData);
+        }
 
         pendingInputs.Add(inputData);
         if (pendingInputs.Count > MaxPendingInputs)
@@ -240,11 +294,12 @@ public class TankController : NetworkBehaviour
     {
         float move = input.moveInput;
         float turn = input.rotationInput;
-        float deltaTime = input.deltaTime > 0f ? input.deltaTime : Time.fixedDeltaTime;
+        float deltaTime = Time.fixedDeltaTime;
 
         Transform movementTransform = rotationChild != null ? rotationChild : transform;
-        Vector2 moveVector = movementTransform.up * move * moveSpeed * deltaTime;
-        rb.MovePosition(rb.position + moveVector);
+        Vector2 requestedMoveVector = movementTransform.up * move * moveSpeed * deltaTime;
+        Vector2 allowedMoveVector = GetWallBlockedMoveVector(requestedMoveVector);
+        rb.MovePosition(rb.position + allowedMoveVector);
 
         if (turn != 0f && rotationChild != null)
         {
@@ -252,6 +307,83 @@ public class TankController : NetworkBehaviour
             float rotationAmount = rotationSpeed * turn * deltaTime;
             rotationChild.Rotate(0f, 0f, -rotationAmount);
         }
+    }
+
+    private void InitializeMovementWallContactFilter()
+    {
+        movementWallContactFilter = new ContactFilter2D();
+        movementWallContactFilter.NoFilter();
+        movementWallContactFilter.useTriggers = false;
+        movementWallContactFilter.useLayerMask = wallMask != 0;
+        movementWallContactFilter.layerMask = wallMask;
+        movementWallContactFilterInitialized = true;
+    }
+
+    private Vector2 GetWallBlockedMoveVector(Vector2 requestedMoveVector)
+    {
+        float moveDistance = requestedMoveVector.magnitude;
+        if (moveDistance <= Mathf.Epsilon)
+        {
+            return Vector2.zero;
+        }
+
+        if (!movementWallContactFilterInitialized)
+        {
+            InitializeMovementWallContactFilter();
+        }
+
+        if (wallMask == 0)
+        {
+            return requestedMoveVector;
+        }
+
+        Vector2 moveDirection = requestedMoveVector / moveDistance;
+        int hitCount = rb.Cast(
+            moveDirection,
+            movementWallContactFilter,
+            movementWallHits,
+            moveDistance + MovementWallCastSkin);
+
+        if (hitCount <= 0)
+        {
+            return requestedMoveVector;
+        }
+
+        // Keep the tangent component so tanks can slide on walls/corners instead of hard-locking.
+        Vector2 allowedMoveVector = requestedMoveVector;
+        for (int i = 0; i < hitCount; i++)
+        {
+            RaycastHit2D hit = movementWallHits[i];
+            if (hit.collider == null)
+            {
+                continue;
+            }
+
+            Vector2 wallNormal = hit.normal;
+            if (wallNormal.sqrMagnitude <= Mathf.Epsilon)
+            {
+                continue;
+            }
+
+            if (Vector2.Dot(moveDirection, wallNormal) > MovementWallBlockDotThreshold)
+            {
+                continue;
+            }
+
+            float intoWallAmount = Vector2.Dot(allowedMoveVector, wallNormal);
+            if (intoWallAmount < 0f)
+            {
+                allowedMoveVector -= wallNormal * intoWallAmount;
+            }
+        }
+
+        float allowedDistance = Mathf.Min(moveDistance, allowedMoveVector.magnitude);
+        if (allowedDistance <= Mathf.Epsilon)
+        {
+            return Vector2.zero;
+        }
+
+        return allowedMoveVector.normalized * allowedDistance;
     }
 
     private void SmoothlyInterpolatePositionAndRotation()
@@ -276,14 +408,27 @@ public class TankController : NetworkBehaviour
     {
         if (Input.GetKeyDown(KeyCode.Space) && Time.time >= lastShotTime + shootCooldown)
         {
-            ShootServerRpc();
+            int shotSequence = nextLocalShotSequence++;
+
+            if (!IsServer)
+            {
+                SpawnPredictedShotVisual(shotSequence);
+            }
+
+            ShootServerRpc(shotSequence);
             lastShotTime = Time.time;
         }
     }
 
     [ServerRpc]
-    private void ShootServerRpc()
+    private void ShootServerRpc(int shotSequence, ServerRpcParams serverRpcParams = default)
     {
+        ulong shooterClientId = serverRpcParams.Receive.SenderClientId;
+        if (shooterClientId != OwnerClientId)
+        {
+            return;
+        }
+
         if (projectilePrefab == null)
         {
             Debug.LogError("Projectile prefab is not assigned!");
@@ -297,33 +442,30 @@ public class TankController : NetworkBehaviour
             return;
         }
 
-        Transform firingTransform = rotationChild != null ? rotationChild : transform;
-        Vector2 fireDirection = firingTransform.up.normalized;
-        float projectileRadius = GetProjectileRadius();
-
-        float shooterForwardExtent = GetShooterForwardExtent(fireDirection);
-        float minimumDistanceFromShooter = shooterForwardExtent + projectileRadius + 0.01f;
-        float requestedDistance = Mathf.Max(shootingOffsetDistance, minimumDistanceFromShooter);
-
-        Vector2 firingOrigin = firingTransform.position;
-        Vector2 spawnPosition2D = firingOrigin + fireDirection * requestedDistance;
-        int wallMask = LayerMask.GetMask("Wall");
-
-        if (wallMask != 0)
+        if (manager.NetworkConfig == null || manager.NetworkConfig.NetworkTransport == null)
         {
-            float castDistance = requestedDistance + projectileRadius + 0.01f;
-            RaycastHit2D wallHit = Physics2D.Raycast(firingOrigin, fireDirection, castDistance, wallMask);
-            if (wallHit.collider != null)
-            {
-                // Clamp spawn on the shooter's side of the wall so bullets never tunnel through it.
-                float clampedDistance = Mathf.Max(0f, wallHit.distance - projectileRadius - 0.01f);
-                spawnPosition2D = firingOrigin + fireDirection * clampedDistance;
-            }
+            Debug.LogError("[TankController] Cannot spawn projectile: NetworkTransport is not configured.");
+            return;
         }
 
-        Vector3 spawnPosition = new Vector3(spawnPosition2D.x, spawnPosition2D.y, 0f);
-        Quaternion spawnRotation = firingTransform.rotation;
+        if (Time.time < serverLastShotTime + shootCooldown)
+        {
+            return;
+        }
 
+        serverLastShotTime = Time.time;
+
+        float latencyCompensationDistance = GetShotLatencyCompensationDistanceFromRttMs(
+            manager.NetworkConfig.NetworkTransport.GetCurrentRtt(shooterClientId));
+
+        ComputeProjectileSpawn(
+            latencyCompensationDistance,
+            out Vector2 spawnPosition2D,
+            out Quaternion spawnRotation,
+            out Vector2 shootDirection,
+            out float projectileRadius);
+
+        Vector3 spawnPosition = new Vector3(spawnPosition2D.x, spawnPosition2D.y, 0f);
         NetworkObject projectileNetObj = NetworkObject.InstantiateAndSpawn(
             projectilePrefab,
             manager,
@@ -342,12 +484,12 @@ public class TankController : NetworkBehaviour
         }
 
         GameObject projectile = projectileNetObj.gameObject;
+        DisableTransformSyncComponents(projectile);
         projectile.layer = LayerMask.NameToLayer("Bullet");
 
         var projectileRb = projectile.GetComponent<Rigidbody2D>();
         if (projectileRb != null)
         {
-            Vector2 shootDirection = spawnRotation * Vector2.up;
             projectileRb.linearVelocity = shootDirection * projectileSpeed;
         }
 
@@ -361,12 +503,342 @@ public class TankController : NetworkBehaviour
         }
 
         var projectileComponent = projectile.GetComponent<Projectile>();
-        if (projectileComponent != null)
+        if (projectileComponent == null)
         {
-            float shooterUnlockRadius = GetShooterSelfHitUnlockRadius(projectileRadius);
-            Vector2 shooterPosition = rb != null ? rb.position : (Vector2)transform.position;
-            projectileComponent.ConfigureShooter(OwnerClientId, shooterPosition, shooterUnlockRadius);
+            Debug.LogError("[TankController] Projectile component is missing on projectile prefab.");
+            Destroy(projectile);
+            return;
         }
+
+        float shooterUnlockRadius = GetShooterSelfHitUnlockRadius(projectileRadius);
+        Vector2 shooterPosition = rb != null ? rb.position : (Vector2)transform.position;
+        projectileComponent.ConfigureServerProjectile(
+            shooterClientId,
+            shotSequence,
+            shooterPosition,
+            shooterUnlockRadius,
+            HandleAuthoritativeProjectileDestroyed);
+
+        SpawnShotVisualClientRpc(
+            shooterClientId,
+            shotSequence,
+            spawnPosition2D,
+            shootDirection,
+            projectileSpeed,
+            GetProjectileLifetime(),
+            GetProjectileMaxWallBounces());
+    }
+
+    private void ComputeProjectileSpawn(
+        float additionalSpawnDistance,
+        out Vector2 spawnPosition2D,
+        out Quaternion spawnRotation,
+        out Vector2 fireDirection,
+        out float projectileRadius)
+    {
+        Transform firingTransform = rotationChild != null ? rotationChild : transform;
+        fireDirection = firingTransform.up.normalized;
+        spawnRotation = firingTransform.rotation;
+        projectileRadius = GetProjectileRadius();
+
+        float shooterForwardExtent = GetShooterForwardExtent(fireDirection);
+        float minimumDistanceFromShooter = shooterForwardExtent + projectileRadius + 0.01f;
+        float requestedDistance = Mathf.Max(shootingOffsetDistance, minimumDistanceFromShooter) + Mathf.Max(0f, additionalSpawnDistance);
+
+        Vector2 firingOrigin = firingTransform.position;
+        spawnPosition2D = firingOrigin + fireDirection * requestedDistance;
+        if (wallMask == 0)
+        {
+            return;
+        }
+
+        float castDistance = requestedDistance + projectileRadius + 0.01f;
+        RaycastHit2D wallHit = Physics2D.Raycast(firingOrigin, fireDirection, castDistance, wallMask);
+        if (wallHit.collider == null)
+        {
+            return;
+        }
+
+        // Clamp spawn on the shooter's side of the wall so bullets never tunnel through it.
+        float clampedDistance = Mathf.Max(0f, wallHit.distance - projectileRadius - 0.01f);
+        spawnPosition2D = firingOrigin + fireDirection * clampedDistance;
+    }
+
+    private void DisableTransformSyncComponents(GameObject projectile)
+    {
+        NetworkRigidbody2D netRigidbody = projectile.GetComponent<NetworkRigidbody2D>();
+        if (netRigidbody != null)
+        {
+            netRigidbody.enabled = false;
+        }
+
+        NetworkTransform[] transforms = projectile.GetComponentsInChildren<NetworkTransform>(true);
+        for (int i = 0; i < transforms.Length; i++)
+        {
+            transforms[i].enabled = false;
+        }
+    }
+
+    private void HandleAuthoritativeProjectileDestroyed(ulong shooterClientId, int shotSequence)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        DespawnShotVisualClientRpc(shooterClientId, shotSequence);
+    }
+
+    [ClientRpc]
+    private void SpawnShotVisualClientRpc(
+        ulong shooterClientId,
+        int shotSequence,
+        Vector2 spawnPosition,
+        Vector2 shootDirection,
+        float speed,
+        float visualLifetime,
+        int maxWallBounces,
+        ClientRpcParams clientRpcParams = default)
+    {
+        if (!IsClient || IsServer)
+        {
+            return;
+        }
+
+        UpsertShotVisual(
+            shooterClientId,
+            shotSequence,
+            spawnPosition,
+            shootDirection,
+            speed,
+            visualLifetime,
+            maxWallBounces,
+            1f);
+    }
+
+    [ClientRpc]
+    private void DespawnShotVisualClientRpc(
+        ulong shooterClientId,
+        int shotSequence,
+        ClientRpcParams clientRpcParams = default)
+    {
+        if (!IsClient || IsServer)
+        {
+            return;
+        }
+
+        RemoveShotVisual(shooterClientId, shotSequence);
+    }
+
+    private void SpawnPredictedShotVisual(int shotSequence)
+    {
+        if (!showPredictedShotVisual || projectilePrefab == null || !IsOwner || IsServer)
+        {
+            return;
+        }
+
+        NetworkManager manager = NetworkManager;
+        if (manager == null || manager.NetworkConfig == null || manager.NetworkConfig.NetworkTransport == null)
+        {
+            return;
+        }
+
+        SpriteRenderer sourceRenderer = projectilePrefab.GetComponentInChildren<SpriteRenderer>();
+        if (sourceRenderer == null || sourceRenderer.sprite == null)
+        {
+            return;
+        }
+
+        float localCompensationDistance = GetShotLatencyCompensationDistanceFromRttMs(
+            manager.NetworkConfig.NetworkTransport.GetCurrentRtt(Unity.Netcode.NetworkManager.ServerClientId));
+
+        ComputeProjectileSpawn(
+            localCompensationDistance,
+            out Vector2 spawnPosition2D,
+            out _,
+            out Vector2 fireDirection,
+            out _);
+
+        float oneWaySeconds = GetOneWayLatencySecondsFromRttMs(
+            manager.NetworkConfig.NetworkTransport.GetCurrentRtt(Unity.Netcode.NetworkManager.ServerClientId));
+        float visualLifetime = Mathf.Max(predictedShotVisualLifetime, oneWaySeconds * 2f);
+        visualLifetime = Mathf.Clamp(visualLifetime, 0.04f, 0.35f);
+
+        UpsertShotVisual(
+            OwnerClientId,
+            shotSequence,
+            spawnPosition2D,
+            fireDirection,
+            projectileSpeed,
+            visualLifetime,
+            GetProjectileMaxWallBounces(),
+            predictedShotVisualAlpha);
+    }
+
+    private void UpsertShotVisual(
+        ulong shooterClientId,
+        int shotSequence,
+        Vector2 spawnPosition,
+        Vector2 direction,
+        float speed,
+        float visualLifetime,
+        int maxWallBounces,
+        float alphaMultiplier)
+    {
+        long shotKey = ComposeShotVisualKey(shooterClientId, shotSequence);
+        ShotVisualProjectile existingVisual = null;
+        if (activeShotVisuals.TryGetValue(shotKey, out ShotVisualProjectile activeVisual))
+        {
+            existingVisual = activeVisual;
+        }
+
+        if (existingVisual == null)
+        {
+            existingVisual = CreateShotVisual();
+            if (existingVisual == null)
+            {
+                return;
+            }
+
+            activeShotVisuals[shotKey] = existingVisual;
+        }
+
+        existingVisual.Configure(
+            spawnPosition,
+            direction,
+            speed,
+            visualLifetime,
+            maxWallBounces,
+            wallMask,
+            alphaMultiplier);
+    }
+
+    private ShotVisualProjectile CreateShotVisual()
+    {
+        SpriteRenderer sourceRenderer = projectilePrefab != null ? projectilePrefab.GetComponentInChildren<SpriteRenderer>() : null;
+        if (sourceRenderer == null || sourceRenderer.sprite == null)
+        {
+            return null;
+        }
+
+        GameObject visualObject = new GameObject("ShotVisualProjectile");
+        visualObject.transform.localScale = projectilePrefab.transform.localScale;
+
+        SpriteRenderer visualRenderer = visualObject.AddComponent<SpriteRenderer>();
+        visualRenderer.sprite = sourceRenderer.sprite;
+        visualRenderer.sharedMaterial = sourceRenderer.sharedMaterial;
+        visualRenderer.sortingLayerID = sourceRenderer.sortingLayerID;
+        visualRenderer.sortingOrder = sourceRenderer.sortingOrder;
+        visualRenderer.color = sourceRenderer.color;
+
+        return visualObject.AddComponent<ShotVisualProjectile>();
+    }
+
+    private void RemoveShotVisual(ulong shooterClientId, int shotSequence)
+    {
+        long shotKey = ComposeShotVisualKey(shooterClientId, shotSequence);
+        if (!activeShotVisuals.TryGetValue(shotKey, out ShotVisualProjectile visual))
+        {
+            return;
+        }
+
+        if (visual != null)
+        {
+            Destroy(visual.gameObject);
+        }
+
+        activeShotVisuals.Remove(shotKey);
+    }
+
+    private void ClearAllShotVisuals()
+    {
+        foreach (var kvp in activeShotVisuals)
+        {
+            if (kvp.Value != null)
+            {
+                Destroy(kvp.Value.gameObject);
+            }
+        }
+
+        activeShotVisuals.Clear();
+    }
+
+    private void PruneDestroyedShotVisuals()
+    {
+        if (activeShotVisuals.Count == 0)
+        {
+            return;
+        }
+
+        List<long> deadKeys = null;
+        foreach (var kvp in activeShotVisuals)
+        {
+            if (kvp.Value != null)
+            {
+                continue;
+            }
+
+            if (deadKeys == null)
+            {
+                deadKeys = new List<long>();
+            }
+
+            deadKeys.Add(kvp.Key);
+        }
+
+        if (deadKeys == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < deadKeys.Count; i++)
+        {
+            activeShotVisuals.Remove(deadKeys[i]);
+        }
+    }
+
+    private static long ComposeShotVisualKey(ulong shooterClientId, int shotSequence)
+    {
+        return unchecked(((long)shooterClientId << 32) ^ (uint)shotSequence);
+    }
+
+    private float GetOneWayLatencySecondsFromRttMs(ulong rttMs)
+    {
+        float oneWaySeconds = (float)rttMs * 0.0005f;
+        return Mathf.Clamp(oneWaySeconds, 0f, maxShotLatencyCompensationSeconds);
+    }
+
+    private float GetShotLatencyCompensationDistanceFromRttMs(ulong rttMs)
+    {
+        if (!enableShotLatencyCompensation || projectileSpeed <= 0f)
+        {
+            return 0f;
+        }
+
+        float oneWaySeconds = GetOneWayLatencySecondsFromRttMs(rttMs) * Mathf.Clamp01(shotLatencyCompensationFactor);
+        return projectileSpeed * oneWaySeconds;
+    }
+
+    private float GetProjectileLifetime()
+    {
+        if (projectilePrefab == null)
+        {
+            return 10f;
+        }
+
+        Projectile projectile = projectilePrefab.GetComponent<Projectile>();
+        return projectile != null ? projectile.lifetime : 10f;
+    }
+
+    private int GetProjectileMaxWallBounces()
+    {
+        if (projectilePrefab == null)
+        {
+            return -1;
+        }
+
+        Projectile projectile = projectilePrefab.GetComponent<Projectile>();
+        return projectile != null ? projectile.maxWallBounces : -1;
     }
 
     private float GetProjectileRadius()
@@ -435,7 +907,7 @@ public class TankController : NetworkBehaviour
 
     #region Server RPCs & Reconciliation
 
-    [ServerRpc(Delivery = RpcDelivery.Unreliable)]
+    [ServerRpc]
     private void SendInputToServerRpc(MovementInput input, ServerRpcParams serverRpcParams = default)
     {
         // Safety: only allow the owner to submit movement for this object.
@@ -464,7 +936,7 @@ public class TankController : NetworkBehaviour
         ReceiveServerStateClientRpc(newState, ownerOnlyRpcParams);
     }
 
-    [ClientRpc(Delivery = RpcDelivery.Unreliable)]
+    [ClientRpc]
     private void ReceiveServerStateClientRpc(ServerState state, ClientRpcParams clientRpcParams = default)
     {
         if (!IsOwner || IsServer)
@@ -472,6 +944,12 @@ public class TankController : NetworkBehaviour
             return;
         }
 
+        if (state.lastProcessedInput <= lastReceivedServerInputSequence)
+        {
+            return;
+        }
+
+        lastReceivedServerInputSequence = state.lastProcessedInput;
         RemoveAcknowledgedInputs(state.lastProcessedInput);
 
         float positionError = Vector2.Distance(rb.position, state.position);
@@ -488,10 +966,30 @@ public class TankController : NetworkBehaviour
             return;
         }
 
-        rb.position = state.position;
+        bool activelyControlling =
+            Mathf.Abs(cachedMoveInput) > 0.01f ||
+            Mathf.Abs(cachedTurnInput) > 0.01f;
+
+        if (activelyControlling && positionError < 0.45f && rotationError < 12f)
+        {
+            return;
+        }
+
+        if (positionError > HardSnapPositionThreshold || rotationError > HardSnapRotationThreshold)
+        {
+            rb.position = state.position;
+        }
+        else
+        {
+            rb.position = Vector2.Lerp(rb.position, state.position, SoftReconciliationPositionFactor);
+        }
+
         if (rotationChild != null)
         {
-            rotationChild.rotation = Quaternion.Euler(0f, 0f, state.rotation);
+            float correctedRotation = rotationError > HardSnapRotationThreshold
+                ? state.rotation
+                : Mathf.LerpAngle(rotationChild.eulerAngles.z, state.rotation, SoftReconciliationRotationFactor);
+            rotationChild.rotation = Quaternion.Euler(0f, 0f, correctedRotation);
         }
 
         for (int i = 0; i < pendingInputs.Count; i++)
