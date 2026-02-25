@@ -371,11 +371,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2631974470593108492, guid: 6966a3844f6278d489d7ae087bd3430f, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 671.5
+      value: 1014
       objectReference: {fileID: 0}
     - target: {fileID: 2631974470593108492, guid: 6966a3844f6278d489d7ae087bd3430f, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 377.5
+      value: 523
       objectReference: {fileID: 0}
     - target: {fileID: 2631974470593108492, guid: 6966a3844f6278d489d7ae087bd3430f, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -886,7 +886,6 @@ RectTransform:
   - {fileID: 496905827}
   - {fileID: 40250682}
   - {fileID: 2113967022}
-  - {fileID: 6431561655234337018}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -1078,12 +1077,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0cd44c1031e13a943bb63640046fad76, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_UiScaleMode: 0
+  m_UiScaleMode: 1
   m_ReferencePixelsPerUnit: 100
   m_ScaleFactor: 1
-  m_ReferenceResolution: {x: 800, y: 600}
+  m_ReferenceResolution: {x: 1920, y: 1080}
   m_ScreenMatchMode: 0
-  m_MatchWidthOrHeight: 0
+  m_MatchWidthOrHeight: 0.5
   m_PhysicalUnit: 3
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
@@ -1432,11 +1431,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7194390154454869459, guid: e6bd9e49486c2e54f9e22c83df37aa9e, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 671.5
+      value: 1014
       objectReference: {fileID: 0}
     - target: {fileID: 7194390154454869459, guid: e6bd9e49486c2e54f9e22c83df37aa9e, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 377.5
+      value: 523
       objectReference: {fileID: 0}
     - target: {fileID: 7194390154454869459, guid: e6bd9e49486c2e54f9e22c83df37aa9e, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -1496,11 +1495,11 @@ Transform:
   m_GameObject: {fileID: 2492958477331840603}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -960.2781, y: -539.8436, z: 0}
-  m_LocalScale: {x: 1.4300493, y: 1.4300493, z: 1.4300493}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 1111985461}
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &6465956146593022757 stripped
 MonoBehaviour:
@@ -1597,3 +1596,4 @@ SceneRoots:
   - {fileID: 569677153}
   - {fileID: 858256637}
   - {fileID: 6610057492376058931}
+  - {fileID: 6431561655234337018}

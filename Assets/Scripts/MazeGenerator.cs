@@ -437,6 +437,15 @@ public class MazeGenerator : NetworkBehaviour
             mazeParent = mazeParentObj.transform;
         }
 
+        if (mazeParent.parent != null)
+        {
+            mazeParent.SetParent(null, false);
+        }
+
+        mazeParent.position = Vector3.zero;
+        mazeParent.rotation = Quaternion.identity;
+        mazeParent.localScale = Vector3.one;
+
         // Clear existing maze objects
         foreach (Transform child in mazeParent)
         {
