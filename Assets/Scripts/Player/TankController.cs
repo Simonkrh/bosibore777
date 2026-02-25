@@ -98,6 +98,7 @@ public class TankController : NetworkBehaviour
         rb.gravityScale = 0f;
         rb.bodyType = RigidbodyType2D.Kinematic;
         rb.useFullKinematicContacts = true;
+
         if (wallCollisionMask.value == 0)
         {
             wallCollisionMask = LayerMask.GetMask("Wall");
@@ -474,12 +475,13 @@ public class TankController : NetworkBehaviour
         }
 
         GameObject projectile = projectileNetObj.gameObject;
-        DisableTransformSyncComponents(projectile);
+        EnableTransformSyncComponents(projectile);
         projectile.layer = LayerMask.NameToLayer("Bullet");
 
         var projectileRb = projectile.GetComponent<Rigidbody2D>();
         if (projectileRb != null)
         {
+            projectileRb.interpolation = RigidbodyInterpolation2D.None;
             projectileRb.linearVelocity = shootDirection * projectileSpeed;
         }
 
@@ -509,14 +511,18 @@ public class TankController : NetworkBehaviour
             shooterUnlockRadius,
             HandleAuthoritativeProjectileDestroyed);
 
-        SpawnShotVisualClientRpc(
-            shooterClientId,
-            shotSequence,
-            spawnPosition2D,
-            shootDirection,
-            projectileSpeed,
-            GetProjectileLifetime(),
-            GetProjectileMaxWallBounces());
+        if (showPredictedShotVisual)
+        {
+            ClientRpcParams shooterOnlyRpcParams = new ClientRpcParams
+            {
+                Send = new ClientRpcSendParams
+                {
+                    TargetClientIds = new[] { shooterClientId }
+                }
+            };
+
+            ConfirmAuthoritativeShotSpawnClientRpc(shooterClientId, shotSequence, shooterOnlyRpcParams);
+        }
     }
 
     private void ComputeProjectileSpawn(
@@ -554,7 +560,7 @@ public class TankController : NetworkBehaviour
         spawnPosition2D = firingOrigin + fireDirection * clampedDistance;
     }
 
-    private void DisableTransformSyncComponents(GameObject projectile)
+    private void EnableTransformSyncComponents(GameObject projectile)
     {
         NetworkRigidbody2D netRigidbody = projectile.GetComponent<NetworkRigidbody2D>();
         if (netRigidbody != null)
@@ -565,7 +571,9 @@ public class TankController : NetworkBehaviour
         NetworkTransform[] transforms = projectile.GetComponentsInChildren<NetworkTransform>(true);
         for (int i = 0; i < transforms.Length; i++)
         {
-            transforms[i].enabled = false;
+            transforms[i].enabled = true;
+            transforms[i].Interpolate = false;
+            transforms[i].PositionThreshold = 0.0001f;
         }
     }
 
@@ -580,6 +588,21 @@ public class TankController : NetworkBehaviour
     }
 
     [ClientRpc]
+    private void ConfirmAuthoritativeShotSpawnClientRpc(
+        ulong shooterClientId,
+        int shotSequence,
+        ClientRpcParams clientRpcParams = default)
+    {
+        if (!showPredictedShotVisual || !IsClient || IsServer || !IsOwner || OwnerClientId != shooterClientId)
+        {
+            return;
+        }
+
+        // Local prediction is only a short bridge until authoritative projectile replication arrives.
+        RemoveShotVisual(shooterClientId, shotSequence);
+    }
+
+    [ClientRpc]
     private void SpawnShotVisualClientRpc(
         ulong shooterClientId,
         int shotSequence,
@@ -590,7 +613,7 @@ public class TankController : NetworkBehaviour
         int maxWallBounces,
         ClientRpcParams clientRpcParams = default)
     {
-        if (!IsClient || IsServer)
+        if (!showPredictedShotVisual || !IsClient || IsServer)
         {
             return;
         }

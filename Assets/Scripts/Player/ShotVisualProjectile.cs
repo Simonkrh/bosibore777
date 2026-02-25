@@ -10,7 +10,6 @@ public class ShotVisualProjectile : MonoBehaviour
     private int wallMask;
     private float elapsed;
     private bool configured;
-    private float startAlpha = 1f;
     private SpriteRenderer spriteRenderer;
     private Color baseColor = Color.white;
 
@@ -51,7 +50,6 @@ public class ShotVisualProjectile : MonoBehaviour
             Color color = baseColor;
             color.a *= Mathf.Clamp01(alphaMultiplier);
             spriteRenderer.color = color;
-            startAlpha = color.a;
         }
 
         transform.up = direction;
@@ -113,12 +111,5 @@ public class ShotVisualProjectile : MonoBehaviour
         transform.position = currentPosition;
         transform.up = direction;
 
-        if (spriteRenderer != null)
-        {
-            float fadeT = Mathf.Clamp01(elapsed / lifetime);
-            Color color = spriteRenderer.color;
-            color.a = Mathf.Lerp(startAlpha, 0f, fadeT);
-            spriteRenderer.color = color;
-        }
     }
 }

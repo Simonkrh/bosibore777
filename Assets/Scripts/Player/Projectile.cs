@@ -1,4 +1,5 @@
 using Unity.Netcode;
+using Unity.Netcode.Components;
 using UnityEngine;
 using System;
 
@@ -29,6 +30,7 @@ public class Projectile : NetworkBehaviour
         rb = GetComponent<Rigidbody2D>();
         rb.gravityScale = 0f; // top-down, no gravity
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+        rb.interpolation = RigidbodyInterpolation2D.None;
     }
 
     private void Start()
@@ -43,34 +45,58 @@ public class Projectile : NetworkBehaviour
     {
         shooterCanBeHit = false;
         IgnoreCollisionWithOtherProjectiles();
-
-        if (IsServer)
-        {
-            return;
-        }
+        EnsureNetworkSyncComponentsEnabled();
 
         if (rb != null)
         {
-            rb.linearVelocity = Vector2.zero;
-            rb.angularVelocity = 0f;
-            rb.simulated = false;
-        }
+            rb.gravityScale = 0f;
+            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+            rb.interpolation = RigidbodyInterpolation2D.None;
 
-        Collider2D[] colliders = GetComponentsInChildren<Collider2D>(true);
-        for (int i = 0; i < colliders.Length; i++)
-        {
-            if (colliders[i] != null)
+            if (IsServer)
             {
-                colliders[i].enabled = false;
+                rb.bodyType = RigidbodyType2D.Dynamic;
+                rb.simulated = true;
+            }
+            else
+            {
+                // Non-authority projectiles are display-only; server owns all projectile physics.
+                rb.bodyType = RigidbodyType2D.Kinematic;
+                rb.linearVelocity = Vector2.zero;
+                rb.angularVelocity = 0f;
+                rb.simulated = true;
             }
         }
 
-        SpriteRenderer[] renderers = GetComponentsInChildren<SpriteRenderer>(true);
-        for (int i = 0; i < renderers.Length; i++)
+        if (!IsServer)
         {
-            if (renderers[i] != null)
+            Collider2D[] colliders = GetComponentsInChildren<Collider2D>(true);
+            for (int i = 0; i < colliders.Length; i++)
             {
-                renderers[i].enabled = false;
+                if (colliders[i] != null)
+                {
+                    colliders[i].enabled = false;
+                }
+            }
+        }
+    }
+
+    private void EnsureNetworkSyncComponentsEnabled()
+    {
+        NetworkRigidbody2D netRigidbody = GetComponent<NetworkRigidbody2D>();
+        if (netRigidbody != null)
+        {
+            netRigidbody.enabled = false;
+        }
+
+        NetworkTransform[] transforms = GetComponentsInChildren<NetworkTransform>(true);
+        for (int i = 0; i < transforms.Length; i++)
+        {
+            if (transforms[i] != null)
+            {
+                transforms[i].enabled = true;
+                transforms[i].Interpolate = false;
+                transforms[i].PositionThreshold = 0.0001f;
             }
         }
     }
@@ -113,7 +139,7 @@ public class Projectile : NetworkBehaviour
 
     private void FixedUpdate()
     {
-        if (!IsServer || hasCollided || hasBouncedOffWall || shooterCanBeHit || !shooterConfigured)
+        if (!IsServer || hasCollided || shooterCanBeHit || !shooterConfigured)
         {
             return;
         }
@@ -201,7 +227,8 @@ public class Projectile : NetworkBehaviour
             return false;
         }
 
-        if (playerController.OwnerClientId == shooterId && !hasBouncedOffWall && !shooterCanBeHit)
+        // Self-hit is only valid after the projectile has both bounced and cleared the shooter unlock distance.
+        if (playerController.OwnerClientId == shooterId && (!hasBouncedOffWall || !shooterCanBeHit))
         {
             return false;
         }
