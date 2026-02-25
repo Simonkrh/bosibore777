@@ -40,6 +40,24 @@ public static class NetworkRuntimeConfig
         return safeFallback;
     }
 
+    public static string ReadListenAddress(string fallbackListenAddress = ListenOnAllInterfaces)
+    {
+        string safeFallback = string.IsNullOrWhiteSpace(fallbackListenAddress)
+            ? ListenOnAllInterfaces
+            : fallbackListenAddress.Trim();
+        string[] args = Environment.GetCommandLineArgs();
+
+        if (TryGetArgValue(args, "-listen", out string value) ||
+            TryGetArgValue(args, "-bind", out value) ||
+            TryGetArgValue(args, "--listen", out value) ||
+            TryGetArgValue(args, "--bind", out value))
+        {
+            return value.Trim();
+        }
+
+        return safeFallback;
+    }
+
     public static bool TryConfigureClient(NetworkManager manager, string serverAddress, ushort port)
     {
         if (!TryGetUnityTransport(manager, out UnityTransport transport))
@@ -62,14 +80,21 @@ public static class NetworkRuntimeConfig
         return true;
     }
 
-    public static bool TryConfigureDedicatedServer(NetworkManager manager, ushort port)
+    public static bool TryConfigureDedicatedServer(
+        NetworkManager manager,
+        ushort port,
+        string listenAddress = ListenOnAllInterfaces)
     {
         if (!TryGetUnityTransport(manager, out UnityTransport transport))
         {
             return false;
         }
 
-        transport.SetConnectionData(DefaultLoopbackAddress, port, ListenOnAllInterfaces);
+        string safeListenAddress = string.IsNullOrWhiteSpace(listenAddress)
+            ? ListenOnAllInterfaces
+            : listenAddress.Trim();
+
+        transport.SetConnectionData(DefaultLoopbackAddress, port, safeListenAddress);
         return true;
     }
 

@@ -80,14 +80,15 @@ public class CustomNetworkManager : NetworkManager
     private void StartDedicatedServer()
     {
         ushort port = NetworkRuntimeConfig.ReadPort(defaultPort);
+        string listenAddress = NetworkRuntimeConfig.ReadListenAddress(NetworkRuntimeConfig.ListenOnAllInterfaces);
 
-        if (!NetworkRuntimeConfig.TryConfigureDedicatedServer(this, port))
+        if (!NetworkRuntimeConfig.TryConfigureDedicatedServer(this, port, listenAddress))
         {
             Debug.LogError("[CustomNetworkManager] Dedicated server startup aborted: transport configuration failed.");
             return;
         }
 
-        Debug.Log($"[CustomNetworkManager] Batch mode detected. Starting dedicated server on port {port}.");
+        Debug.Log($"[CustomNetworkManager] Batch mode detected. Starting dedicated server on {listenAddress}:{port}.");
         if (!StartServer())
         {
             Debug.LogError("[CustomNetworkManager] Failed to start dedicated server.");

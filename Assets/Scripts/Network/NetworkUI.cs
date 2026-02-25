@@ -9,26 +9,49 @@ public class NetworkUI : MonoBehaviour
 
     public void StartClient()
     {
+        string serverAddress = NetworkRuntimeConfig.ReadAddress(defaultServerAddress);
+        ushort port = NetworkRuntimeConfig.ReadPort(defaultPort);
+        StartClientTo(serverAddress, port);
+    }
+
+    public bool StartClientTo(string serverAddress, int port)
+    {
+        if (port < 1 || port > 65535)
+        {
+            Debug.LogError($"[NetworkUI] Invalid port: {port}.");
+            return false;
+        }
+
+        return StartClientTo(serverAddress, (ushort)port);
+    }
+
+    public bool StartClientTo(string serverAddress, ushort port)
+    {
         CustomNetworkManager manager = EnsureNetworkManager();
         if (manager == null)
         {
             Debug.LogError("[NetworkUI] CustomNetworkManager.Singleton is null.");
-            return;
+            return false;
         }
 
-        string serverAddress = NetworkRuntimeConfig.ReadAddress(defaultServerAddress);
-        ushort port = NetworkRuntimeConfig.ReadPort(defaultPort);
-        if (!NetworkRuntimeConfig.TryConfigureClient(manager, serverAddress, port))
+        string normalizedAddress = string.IsNullOrWhiteSpace(serverAddress)
+            ? defaultServerAddress
+            : serverAddress.Trim();
+
+        if (!NetworkRuntimeConfig.TryConfigureClient(manager, normalizedAddress, port))
         {
             Debug.LogError("[NetworkUI] Failed to configure client transport.");
-            return;
+            return false;
         }
 
-        Debug.Log($"[NetworkUI] Starting client to {serverAddress}:{port}.");
+        Debug.Log($"[NetworkUI] Starting client to {normalizedAddress}:{port}.");
         if (!manager.StartClient())
         {
             Debug.LogError("[NetworkUI] Failed to start client.");
+            return false;
         }
+
+        return true;
     }
 
     public void StartHost()
