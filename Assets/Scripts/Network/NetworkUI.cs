@@ -77,10 +77,10 @@ public class NetworkUI : MonoBehaviour
             return existingManager;
         }
 
-        GameObject networkManagerPrefab = Resources.Load<GameObject>("Prefabs/CustomNetworkManager");
+        GameObject networkManagerPrefab = Resources.Load<GameObject>("Prefabs/Network/CustomNetworkManager");
         if (networkManagerPrefab == null)
         {
-            Debug.LogError("[NetworkUI] Could not load Resources/Prefabs/CustomNetworkManager.");
+            Debug.LogError("[NetworkUI] Could not load Resources/Prefabs/Network/CustomNetworkManager.");
             return null;
         }
 
