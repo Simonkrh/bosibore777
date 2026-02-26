@@ -53,6 +53,7 @@ public class PlayerDisplayManager : MonoBehaviour
         {
             display.SetScore(initialScore); // Initialize score with the provided value
             playerDisplays[clientId] = display;
+            RefreshDisplayLayout();
         }
         else
         {
@@ -79,6 +80,7 @@ public class PlayerDisplayManager : MonoBehaviour
             Destroy(display.gameObject);
             playerDisplays.Remove(clientId);
             Debug.Log($"[PlayerDisplayManager] Removed display for clientId: {clientId}");
+            RefreshDisplayLayout();
         }
         else
         {
@@ -95,6 +97,20 @@ public class PlayerDisplayManager : MonoBehaviour
         else
         {
             Debug.LogWarning($"Player display for {clientId} not found.");
+        }
+    }
+
+    private void RefreshDisplayLayout()
+    {
+        if (displayPlane == null)
+        {
+            return;
+        }
+
+        ResponsiveGridSizer sizer = displayPlane.GetComponent<ResponsiveGridSizer>();
+        if (sizer != null)
+        {
+            sizer.Recalculate();
         }
     }
 }
