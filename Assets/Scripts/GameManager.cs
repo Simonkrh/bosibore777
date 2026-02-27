@@ -649,24 +649,28 @@ public class GameManager : NetworkBehaviour
 
     public void DespawnPlayer(ulong clientId)
     {
-        if (clientIdToPlayer.TryGetValue(clientId, out GameObject player))
+        if (!IsServer)
         {
-            if (player != null)
-            {
-                player.GetComponent<NetworkObject>().Despawn(true);
-                Destroy(player);
-                Debug.Log($"[Server] Despawned player {clientId}");
-            }
+            return;
         }
-        else
+
+        if (!clientIdToPlayer.ContainsKey(clientId))
         {
             Debug.LogWarning($"[Server] Attempted to despawn player {clientId}, but no such player was found.");
+            return;
         }
+
+        DespawnTrackedPlayerObject(clientId);
+        clientIdToPlayer.Remove(clientId);
+        alivePlayers.Remove(clientId);
+        Debug.Log($"[Server] Despawned player {clientId}");
     }
 
     public void RemovePlayerOnDisconnect(ulong clientId)
     {
         if (!IsServer) return;
+
+        DespawnTrackedPlayerObject(clientId);
 
         if (alivePlayers.Contains(clientId))
         {
@@ -686,6 +690,27 @@ public class GameManager : NetworkBehaviour
         ReleaseColor(clientId);
 
         RemovePlayerDisplayClientRpc(clientId);
+    }
+
+    private void DespawnTrackedPlayerObject(ulong clientId)
+    {
+        if (!clientIdToPlayer.TryGetValue(clientId, out GameObject player) || player == null)
+        {
+            return;
+        }
+
+        NetworkObject playerNetworkObject = player.GetComponent<NetworkObject>();
+        if (playerNetworkObject != null && playerNetworkObject.IsSpawned)
+        {
+            playerNetworkObject.Despawn(true);
+            return;
+        }
+
+        if (playerNetworkObject == null)
+        {
+            // Safety fallback: this should not happen for the player prefab.
+            Destroy(player);
+        }
     }
 
     public void DespawnAllProjectiles()

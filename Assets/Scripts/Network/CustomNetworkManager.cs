@@ -16,19 +16,6 @@ public class CustomNetworkManager : NetworkManager
     private float nextSpawnRetryTime;
     private const float SpawnRetryIntervalSeconds = 0.25f;
 
-    private void Awake()
-    {
-        if (Singleton != null && Singleton != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-
-        DontDestroyOnLoad(gameObject);
-        ApplyRuntimeTickRateConfiguration();
-        Debug.Log("[CustomNetworkManager] Singleton is initialized by the NetworkManager base class.");
-    }
-
     private void ApplyRuntimeTickRateConfiguration()
     {
         if (!matchNetworkTickRateToFixedTimestep || NetworkConfig == null || Time.fixedDeltaTime <= 0f)
@@ -46,14 +33,20 @@ public class CustomNetworkManager : NetworkManager
         Debug.Log($"[CustomNetworkManager] Network tick rate set to {physicsTickRate} to match fixed timestep.");
     }
 
-    private void OnEnable()
-    {
-        OnServerStarted += HandleServerStarted;
-        OnServerStopped += HandleServerStopped;
-    }
-
     private void Start()
     {
+        if (Singleton != null && Singleton != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        ApplyRuntimeTickRateConfiguration();
+        Debug.Log("[CustomNetworkManager] Singleton is initialized by the NetworkManager base class.");
+
+        OnServerStarted += HandleServerStarted;
+        OnServerStopped += HandleServerStopped;
+
         if (Application.isBatchMode &&
             autoStartDedicatedServerInBatchMode &&
             !IsServer &&
@@ -196,31 +189,14 @@ public class CustomNetworkManager : NetworkManager
         Debug.Log($"[Server] OnClientDisconnected: client {clientId}");
         pendingPlayerSpawns.Remove(clientId);
 
-        if (Singleton == null || Singleton.SpawnManager == null)
+        var gameManager = FindFirstObjectByType<GameManager>();
+        if (gameManager == null)
         {
-            Debug.LogWarning("SpawnManager is not available during client disconnection.");
+            Debug.LogWarning($"[Server] GameManager not found while handling disconnect for client {clientId}.");
             return;
         }
 
-        // Find and destroy the player's object if it exists
-        foreach (var obj in Singleton.SpawnManager.SpawnedObjects.Values)
-        {
-            if (obj != null && obj.OwnerClientId == clientId)
-            {
-                var playerController = obj.GetComponent<PlayerController>();
-                if (playerController != null)
-                {
-                    playerController.Die(clientId); 
-                    Debug.Log($"[Server] Player {clientId} killed on disconnection.");
-                }
-            }
-        }
-
-        var gameManager = FindFirstObjectByType<GameManager>();
-        if (gameManager != null)
-        {
-            gameManager.RemovePlayerOnDisconnect(clientId);
-        }
+        gameManager.RemovePlayerOnDisconnect(clientId);
     }
 
     private void OnSceneLoadCompleted(

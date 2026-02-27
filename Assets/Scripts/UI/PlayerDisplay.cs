@@ -1,10 +1,10 @@
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro; // If using TextMeshPro
+using TMPro;
 
 public class PlayerDisplay : MonoBehaviour
 {
-    public TextMeshProUGUI scoreText; 
+    public TextMeshProUGUI scoreText;
     public Image playerIcon;
 
     public void SetScore(int score)
