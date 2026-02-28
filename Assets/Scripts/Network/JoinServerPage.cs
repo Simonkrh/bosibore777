@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class JoinServerPage : MonoBehaviour
 {
@@ -31,6 +32,11 @@ public class JoinServerPage : MonoBehaviour
     [Header("Saved List")]
     [SerializeField] private Transform listContainer;
     [SerializeField] private SavedServerListItem listItemPrefab;
+    [SerializeField] private bool autoConfigureVerticalListLayout = true;
+    [SerializeField] private float listItemSpacing = 6f;
+    [SerializeField] private bool forceChildExpandWidth = true;
+    [SerializeField] private bool enforceItemRectLayout = true;
+    [SerializeField] private float fallbackItemHeight = 56f;
 
     [Header("Status (Optional)")]
     [SerializeField] private TMP_Text statusLabel;
@@ -56,6 +62,7 @@ public class JoinServerPage : MonoBehaviour
         }
 
         LoadSavedServers();
+        EnsureListLayoutConfigured();
         RefreshListUi();
     }
 
@@ -313,16 +320,25 @@ public class JoinServerPage : MonoBehaviour
             return;
         }
 
+        EnsureListLayoutConfigured();
+
         for (int i = 0; i < savedServers.Count; i++)
         {
             SavedServerEntry entry = savedServers[i];
-            SavedServerListItem item = Instantiate(listItemPrefab, listContainer);
+            SavedServerListItem item = Instantiate(listItemPrefab, listContainer, false);
+            ConfigureSpawnedItemLayout(item);
             item.Configure(
                 i,
                 entry.Address + ":" + entry.Port,
                 JoinServerByIndex,
                 RemoveServerByIndex);
             spawnedItems.Add(item);
+        }
+
+        if (listContainer is RectTransform listRect)
+        {
+            Canvas.ForceUpdateCanvases();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(listRect);
         }
     }
 
@@ -370,5 +386,102 @@ public class JoinServerPage : MonoBehaviour
     private void HandleClientJoinStatusChanged(string status)
     {
         SetStatus(status);
+    }
+
+    private void EnsureListLayoutConfigured()
+    {
+        if (!autoConfigureVerticalListLayout || listContainer == null)
+        {
+            return;
+        }
+
+        RectTransform listRect = listContainer as RectTransform;
+        if (listRect == null)
+        {
+            return;
+        }
+
+        VerticalLayoutGroup verticalLayout = listContainer.GetComponent<VerticalLayoutGroup>();
+        if (verticalLayout == null)
+        {
+            verticalLayout = listContainer.gameObject.AddComponent<VerticalLayoutGroup>();
+        }
+
+        GridLayoutGroup gridLayout = listContainer.GetComponent<GridLayoutGroup>();
+        if (gridLayout != null)
+        {
+            gridLayout.enabled = false;
+        }
+
+        HorizontalLayoutGroup horizontalLayout = listContainer.GetComponent<HorizontalLayoutGroup>();
+        if (horizontalLayout != null)
+        {
+            horizontalLayout.enabled = false;
+        }
+
+        verticalLayout.childAlignment = TextAnchor.UpperLeft;
+        verticalLayout.childControlWidth = true;
+        verticalLayout.childControlHeight = true;
+        verticalLayout.childForceExpandWidth = forceChildExpandWidth;
+        verticalLayout.childForceExpandHeight = false;
+        verticalLayout.spacing = Mathf.Max(0f, listItemSpacing);
+
+        ContentSizeFitter contentSizeFitter = listContainer.GetComponent<ContentSizeFitter>();
+        if (contentSizeFitter == null)
+        {
+            contentSizeFitter = listContainer.gameObject.AddComponent<ContentSizeFitter>();
+        }
+
+        contentSizeFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        contentSizeFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        ScrollRect scrollRect = listContainer.GetComponentInParent<ScrollRect>();
+        if (scrollRect != null && scrollRect.content == null)
+        {
+            scrollRect.content = listRect;
+        }
+    }
+
+    private void ConfigureSpawnedItemLayout(SavedServerListItem item)
+    {
+        if (!enforceItemRectLayout || item == null)
+        {
+            return;
+        }
+
+        RectTransform itemRect = item.transform as RectTransform;
+        if (itemRect == null)
+        {
+            return;
+        }
+
+        float targetHeight = Mathf.Max(1f, fallbackItemHeight);
+        if (listItemPrefab != null)
+        {
+            RectTransform prefabRect = listItemPrefab.transform as RectTransform;
+            if (prefabRect != null && prefabRect.rect.height > 1f)
+            {
+                targetHeight = prefabRect.rect.height;
+            }
+        }
+
+        itemRect.anchorMin = new Vector2(0f, 1f);
+        itemRect.anchorMax = new Vector2(1f, 1f);
+        itemRect.pivot = new Vector2(0.5f, 1f);
+        itemRect.anchoredPosition = Vector2.zero;
+        itemRect.offsetMin = new Vector2(0f, itemRect.offsetMin.y);
+        itemRect.offsetMax = new Vector2(0f, itemRect.offsetMax.y);
+        itemRect.sizeDelta = new Vector2(0f, targetHeight);
+        itemRect.localScale = Vector3.one;
+
+        LayoutElement layoutElement = item.GetComponent<LayoutElement>();
+        if (layoutElement == null)
+        {
+            layoutElement = item.gameObject.AddComponent<LayoutElement>();
+        }
+
+        layoutElement.minHeight = targetHeight;
+        layoutElement.preferredHeight = targetHeight;
+        layoutElement.flexibleHeight = 0f;
     }
 }
