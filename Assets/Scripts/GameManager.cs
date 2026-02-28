@@ -340,6 +340,8 @@ public class GameManager : NetworkBehaviour
         Vector2Int cell = availableCells[cellIndex];
 
         Vector3 spawnPosition = mazeGenerator.CellToWorldPosition(cell);
+        float spawnYawDegrees = UnityEngine.Random.Range(0, 4) * 90f;
+        Quaternion spawnRotation = Quaternion.Euler(0f, 0f, spawnYawDegrees);
 
         try
         {
@@ -351,7 +353,7 @@ public class GameManager : NetworkBehaviour
                 isPlayerObject: false,
                 forceOverride: false,
                 position: spawnPosition,
-                rotation: Quaternion.identity
+                rotation: spawnRotation
             );
 
             if (spawnedPlayerNetworkObject == null)
@@ -367,7 +369,7 @@ public class GameManager : NetworkBehaviour
             alivePlayers.Add(clientId);
             clientIdToPlayer[clientId] = player;
 
-            Debug.Log($"[Server] Spawned player {clientId} at cell {cell} (world position {spawnPosition})");
+            Debug.Log($"[Server] Spawned player {clientId} at cell {cell} (world position {spawnPosition}, rotation {spawnYawDegrees} deg)");
             return true;
         }
         catch (Exception ex)
