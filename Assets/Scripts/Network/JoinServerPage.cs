@@ -59,6 +59,16 @@ public class JoinServerPage : MonoBehaviour
         RefreshListUi();
     }
 
+    private void OnEnable()
+    {
+        AttachNetworkUiStatusListener();
+    }
+
+    private void OnDisable()
+    {
+        DetachNetworkUiStatusListener();
+    }
+
     public void OpenJoinPage()
     {
         if (panelToHideWhenOpen != null)
@@ -180,10 +190,13 @@ public class JoinServerPage : MonoBehaviour
             return;
         }
 
+        AttachNetworkUiStatusListener();
+
         bool started = networkUI.StartClientTo(address, port);
-        SetStatus(started
-            ? $"Joining {address}:{port}..."
-            : $"Failed to join {address}:{port}");
+        if (!started)
+        {
+            SetStatus($"Failed to start join to {address}:{port}");
+        }
     }
 
     private bool TryParseEndpoint(string addressText, string portText, out string address, out int port, out string error)
@@ -326,5 +339,36 @@ public class JoinServerPage : MonoBehaviour
     private GameObject ResolvePageRoot()
     {
         return pageRoot != null ? pageRoot : gameObject;
+    }
+
+    private void AttachNetworkUiStatusListener()
+    {
+        if (networkUI == null)
+        {
+            networkUI = FindFirstObjectByType<NetworkUI>();
+        }
+
+        if (networkUI == null)
+        {
+            return;
+        }
+
+        networkUI.ClientJoinStatusChanged -= HandleClientJoinStatusChanged;
+        networkUI.ClientJoinStatusChanged += HandleClientJoinStatusChanged;
+    }
+
+    private void DetachNetworkUiStatusListener()
+    {
+        if (networkUI == null)
+        {
+            return;
+        }
+
+        networkUI.ClientJoinStatusChanged -= HandleClientJoinStatusChanged;
+    }
+
+    private void HandleClientJoinStatusChanged(string status)
+    {
+        SetStatus(status);
     }
 }
