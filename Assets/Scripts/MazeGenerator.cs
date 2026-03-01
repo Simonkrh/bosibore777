@@ -250,6 +250,19 @@ public class MazeGenerator : NetworkBehaviour
         return new Vector3(x, y, 0);
     }
 
+    public bool TryGetRandomAvailableCellWorldPosition(out Vector3 worldPosition)
+    {
+        worldPosition = Vector3.zero;
+        if (availableCellsList == null || availableCellsList.Count == 0)
+        {
+            return false;
+        }
+
+        int randomIndex = Random.Range(0, availableCellsList.Count);
+        worldPosition = CellToWorldPosition(availableCellsList[randomIndex]);
+        return true;
+    }
+
     void GenerateMaze()
     {
         grid = new Cell[width, height];

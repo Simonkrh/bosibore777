@@ -239,6 +239,10 @@ MonoBehaviour:
   gameplaySceneName: GameScene
   defaultServerAddress: 127.0.0.1
   defaultPort: 7777
+  clientStartResetTimeoutSeconds: 4
+  clientConnectWatchdogSeconds: 6
+  clientConnectTimeoutMs: 1000
+  clientMaxConnectAttempts: 3
 --- !u!114 &334634829 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 5432380930127464270, guid: 6966a3844f6278d489d7ae087bd3430f, type: 3}

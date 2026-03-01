@@ -384,6 +384,18 @@ public class GameManager : NetworkBehaviour
         return clientIdToPlayer.TryGetValue(clientId, out GameObject player) && player != null;
     }
 
+    public bool TryGetPlayerObject(ulong clientId, out GameObject playerObject)
+    {
+        if (clientIdToPlayer.TryGetValue(clientId, out GameObject player) && player != null)
+        {
+            playerObject = player;
+            return true;
+        }
+
+        playerObject = null;
+        return false;
+    }
+
     private void ApplyPlayerCollisionSettings(GameObject player, ulong ownerClientId)
     {
         int playerLayer = LayerMask.NameToLayer("Player");
@@ -758,6 +770,7 @@ public class GameManager : NetworkBehaviour
         DespawnAllPlayersForNewRound();
 
         DespawnAllProjectiles();
+        DespawnAllAbilityPickups();
 
         if (mazeGenerator == null)
         {
@@ -795,6 +808,23 @@ public class GameManager : NetworkBehaviour
 
         startingNewRound = false;
         Debug.Log("[Server] Round started. Players are now alive.");
+    }
+
+    private void DespawnAllAbilityPickups()
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        AbilityPickupSpawner[] spawners = FindObjectsByType<AbilityPickupSpawner>(FindObjectsSortMode.None);
+        for (int i = 0; i < spawners.Length; i++)
+        {
+            if (spawners[i] != null)
+            {
+                spawners[i].DespawnAllPickupsServer();
+            }
+        }
     }
 
     public void PlayerDied(ulong victimId, ulong killerId)

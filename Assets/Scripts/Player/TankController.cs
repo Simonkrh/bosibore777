@@ -40,6 +40,7 @@ public class TankController : NetworkBehaviour
     private Rigidbody2D rb;
     private float lastShotTime;
     private GameManager gameManager;
+    private TankAbilityController abilityController;
 
     private float cachedMoveInput = 0f;
     private float cachedTurnInput = 0f;
@@ -106,6 +107,7 @@ public class TankController : NetworkBehaviour
 
         wallMask = wallCollisionMask.value;
         InitializeMovementWallContactFilter();
+        abilityController = GetComponent<TankAbilityController>();
     }
 
     public override void OnNetworkSpawn()
@@ -171,6 +173,16 @@ public class TankController : NetworkBehaviour
         else
         {
             Debug.LogWarning("TankRenderer is not assigned.");
+        }
+
+        if (abilityController == null)
+        {
+            abilityController = GetComponent<TankAbilityController>();
+        }
+
+        if (abilityController != null)
+        {
+            abilityController.ApplyModelOverrideColor(color);
         }
     }
 
@@ -400,14 +412,45 @@ public class TankController : NetworkBehaviour
         if (Input.GetKeyDown(KeyCode.Space) && Time.time >= lastShotTime + shootCooldown)
         {
             int shotSequence = nextLocalShotSequence++;
-
-            if (!IsServer)
+            bool hasUsableAbility = abilityController != null && abilityController.HasAbility;
+            if (hasUsableAbility)
             {
-                SpawnPredictedShotVisual(shotSequence);
+                TryUseEquippedAbilityServerRpc(shotSequence);
+            }
+            else
+            {
+                if (!IsServer)
+                {
+                    SpawnPredictedShotVisual(shotSequence);
+                }
+
+                ShootServerRpc(shotSequence);
             }
 
-            ShootServerRpc(shotSequence);
             lastShotTime = Time.time;
+        }
+    }
+
+    [ServerRpc]
+    private void TryUseEquippedAbilityServerRpc(int shotSequence, ServerRpcParams serverRpcParams = default)
+    {
+        if (serverRpcParams.Receive.SenderClientId != OwnerClientId)
+        {
+            return;
+        }
+
+        if (abilityController == null)
+        {
+            abilityController = GetComponent<TankAbilityController>();
+            if (abilityController == null)
+            {
+                return;
+            }
+        }
+
+        if (!abilityController.TryUseEquippedAbility(this, shotSequence))
+        {
+            ServerFireStandardShot(shotSequence, OwnerClientId);
         }
     }
 
@@ -416,6 +459,16 @@ public class TankController : NetworkBehaviour
     {
         ulong shooterClientId = serverRpcParams.Receive.SenderClientId;
         if (shooterClientId != OwnerClientId)
+        {
+            return;
+        }
+
+        ServerFireStandardShot(shotSequence, shooterClientId);
+    }
+
+    private void ServerFireStandardShot(int shotSequence, ulong shooterClientId)
+    {
+        if (!IsServer)
         {
             return;
         }
@@ -575,6 +628,108 @@ public class TankController : NetworkBehaviour
             transforms[i].Interpolate = false;
             transforms[i].PositionThreshold = 0.0001f;
         }
+    }
+
+    public bool TryComputeAbilityProjectileSpawn(
+        float additionalSpawnDistance,
+        out Vector2 spawnPosition2D,
+        out Quaternion spawnRotation,
+        out Vector2 fireDirection,
+        out float projectileRadius)
+    {
+        if (!IsServer)
+        {
+            spawnPosition2D = default;
+            spawnRotation = Quaternion.identity;
+            fireDirection = Vector2.zero;
+            projectileRadius = 0f;
+            return false;
+        }
+
+        ComputeProjectileSpawn(
+            additionalSpawnDistance,
+            out spawnPosition2D,
+            out spawnRotation,
+            out fireDirection,
+            out projectileRadius);
+
+        return true;
+    }
+
+    public bool TrySpawnAbilityProjectile(
+        GameObject projectileToSpawn,
+        int shotSequence,
+        Vector2 spawnPosition2D,
+        Quaternion spawnRotation,
+        Vector2 shootDirection,
+        float launchSpeed,
+        out NetworkObject spawnedProjectile)
+    {
+        spawnedProjectile = null;
+        if (!IsServer || projectileToSpawn == null)
+        {
+            return false;
+        }
+
+        NetworkManager manager = NetworkManager;
+        if (manager == null || !manager.IsServer || !manager.IsListening)
+        {
+            return false;
+        }
+
+        Vector3 spawnPosition = new Vector3(spawnPosition2D.x, spawnPosition2D.y, 0f);
+        NetworkObject projectileNetObj = NetworkObject.InstantiateAndSpawn(
+            projectileToSpawn,
+            manager,
+            ownerClientId: Unity.Netcode.NetworkManager.ServerClientId,
+            destroyWithScene: false,
+            isPlayerObject: false,
+            forceOverride: false,
+            position: spawnPosition,
+            rotation: spawnRotation
+        );
+
+        if (projectileNetObj == null)
+        {
+            return false;
+        }
+
+        GameObject projectile = projectileNetObj.gameObject;
+        EnableTransformSyncComponents(projectile);
+        projectile.layer = LayerMask.NameToLayer("Bullet");
+
+        var projectileRb = projectile.GetComponent<Rigidbody2D>();
+        if (projectileRb != null)
+        {
+            projectileRb.interpolation = RigidbodyInterpolation2D.None;
+            projectileRb.linearVelocity = shootDirection * launchSpeed;
+        }
+
+        if (gameManager == null)
+        {
+            gameManager = FindFirstObjectByType<GameManager>();
+        }
+
+        if (gameManager != null && gameManager.projectilesContainer != null)
+        {
+            projectile.transform.SetParent(gameManager.projectilesContainer.transform, true);
+        }
+
+        var projectileComponent = projectile.GetComponent<Projectile>();
+        if (projectileComponent != null)
+        {
+            float shooterUnlockRadius = GetShooterSelfHitUnlockRadius(GetProjectileRadius());
+            Vector2 shooterPosition = rb != null ? rb.position : (Vector2)transform.position;
+            projectileComponent.ConfigureServerProjectile(
+                OwnerClientId,
+                shotSequence,
+                shooterPosition,
+                shooterUnlockRadius,
+                HandleAuthoritativeProjectileDestroyed);
+        }
+
+        spawnedProjectile = projectileNetObj;
+        return true;
     }
 
     private void HandleAuthoritativeProjectileDestroyed(ulong shooterClientId, int shotSequence)
