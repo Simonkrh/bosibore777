@@ -14,4 +14,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   homingMissilePrefab: {fileID: 6673431591696494813, guid: 7eca8aab8dcb4754eba9c2289aff83ec, type: 3}
   missileSpeed: 2
-  extraSpawnDistance: 0
+  extraSpawnDistance: 1
