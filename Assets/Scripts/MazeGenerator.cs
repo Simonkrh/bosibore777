@@ -250,6 +250,103 @@ public class MazeGenerator : NetworkBehaviour
         return new Vector3(x, y, 0);
     }
 
+    public bool TryWorldToCell(Vector2 worldPosition, out Vector2Int cell)
+    {
+        cell = default;
+        if (grid == null || width <= 0 || height <= 0 || cellSize <= 0f)
+        {
+            return false;
+        }
+
+        float mazeWidth = width * cellSize;
+        float mazeHeight = height * cellSize;
+        float minX = -mazeWidth * 0.5f;
+        float minY = -mazeHeight * 0.5f;
+
+        int cellX = Mathf.FloorToInt((worldPosition.x - minX) / cellSize);
+        int cellY = Mathf.FloorToInt((worldPosition.y - minY) / cellSize);
+        Vector2Int candidate = new Vector2Int(cellX, cellY);
+        if (!IsCellInBounds(candidate))
+        {
+            return false;
+        }
+
+        cell = candidate;
+        return true;
+    }
+
+    public bool TryFindPath(Vector2 startWorldPosition, Vector2 goalWorldPosition, List<Vector2> worldPath)
+    {
+        if (worldPath == null)
+        {
+            return false;
+        }
+
+        worldPath.Clear();
+        if (grid == null || width <= 0 || height <= 0)
+        {
+            return false;
+        }
+
+        if (!TryWorldToCell(startWorldPosition, out Vector2Int startCell) ||
+            !TryWorldToCell(goalWorldPosition, out Vector2Int goalCell))
+        {
+            return false;
+        }
+
+        if (startCell == goalCell)
+        {
+            worldPath.Add(CellToWorldPosition(goalCell));
+            return true;
+        }
+
+        List<Vector2Int> openSet = new List<Vector2Int> { startCell };
+        HashSet<Vector2Int> closedSet = new HashSet<Vector2Int>();
+        Dictionary<Vector2Int, Vector2Int> cameFrom = new Dictionary<Vector2Int, Vector2Int>();
+        Dictionary<Vector2Int, int> gScore = new Dictionary<Vector2Int, int> { [startCell] = 0 };
+        Dictionary<Vector2Int, int> fScore = new Dictionary<Vector2Int, int> { [startCell] = GetManhattanDistance(startCell, goalCell) };
+
+        while (openSet.Count > 0)
+        {
+            Vector2Int current = GetBestOpenNode(openSet, fScore);
+            if (current == goalCell)
+            {
+                BuildWorldPath(cameFrom, current, worldPath);
+                return true;
+            }
+
+            openSet.Remove(current);
+            closedSet.Add(current);
+
+            for (int direction = 0; direction < 4; direction++)
+            {
+                if (!TryGetTraversableNeighbor(current, direction, out Vector2Int neighbor) ||
+                    closedSet.Contains(neighbor))
+                {
+                    continue;
+                }
+
+                int currentG = GetScoreOrDefault(gScore, current, int.MaxValue / 4);
+                int tentativeG = currentG + 1;
+
+                if (!openSet.Contains(neighbor))
+                {
+                    openSet.Add(neighbor);
+                }
+                else if (tentativeG >= GetScoreOrDefault(gScore, neighbor, int.MaxValue / 4))
+                {
+                    continue;
+                }
+
+                cameFrom[neighbor] = current;
+                gScore[neighbor] = tentativeG;
+                fScore[neighbor] = tentativeG + GetManhattanDistance(neighbor, goalCell);
+            }
+        }
+
+        return false;
+    }
+
     public bool TryGetRandomAvailableCellWorldPosition(out Vector3 worldPosition)
     {
         worldPosition = Vector3.zero;
@@ -439,6 +536,83 @@ public class MazeGenerator : NetworkBehaviour
     int GetOppositeDirection(int direction)
     {
         return (direction + 2) % 4;
+    }
+
+    private bool IsCellInBounds(Vector2Int cell)
+    {
+        return cell.x >= 0 && cell.y >= 0 && cell.x < width && cell.y < height;
+    }
+
+    private bool TryGetTraversableNeighbor(Vector2Int fromCell, int direction, out Vector2Int neighbor)
+    {
+        neighbor = GetNeighbor(fromCell, direction);
+        if (!IsCellInBounds(fromCell) || !IsCellInBounds(neighbor))
+        {
+            return false;
+        }
+
+        Cell from = grid[fromCell.x, fromCell.y];
+        Cell to = grid[neighbor.x, neighbor.y];
+        if (from == null || to == null || from.walls == null || to.walls == null || from.walls.Length < 4 || to.walls.Length < 4)
+        {
+            return false;
+        }
+
+        if (from.walls[direction])
+        {
+            return false;
+        }
+
+        int oppositeDirection = GetOppositeDirection(direction);
+        if (to.walls[oppositeDirection])
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static int GetManhattanDistance(Vector2Int from, Vector2Int to)
+    {
+        return Mathf.Abs(from.x - to.x) + Mathf.Abs(from.y - to.y);
+    }
+
+    private static int GetScoreOrDefault(Dictionary<Vector2Int, int> scores, Vector2Int key, int fallback)
+    {
+        return scores.TryGetValue(key, out int value) ? value : fallback;
+    }
+
+    private static Vector2Int GetBestOpenNode(List<Vector2Int> openSet, Dictionary<Vector2Int, int> fScore)
+    {
+        Vector2Int bestNode = openSet[0];
+        int bestScore = GetScoreOrDefault(fScore, bestNode, int.MaxValue / 4);
+
+        for (int i = 1; i < openSet.Count; i++)
+        {
+            Vector2Int node = openSet[i];
+            int nodeScore = GetScoreOrDefault(fScore, node, int.MaxValue / 4);
+            if (nodeScore < bestScore)
+            {
+                bestScore = nodeScore;
+                bestNode = node;
+            }
+        }
+
+        return bestNode;
+    }
+
+    private void BuildWorldPath(Dictionary<Vector2Int, Vector2Int> cameFrom, Vector2Int currentNode, List<Vector2> worldPath)
+    {
+        worldPath.Clear();
+        worldPath.Add(CellToWorldPosition(currentNode));
+
+        while (cameFrom.TryGetValue(currentNode, out Vector2Int previousNode))
+        {
+            currentNode = previousNode;
+            worldPath.Add(CellToWorldPosition(currentNode));
+        }
+
+        worldPath.Reverse();
     }
 
 

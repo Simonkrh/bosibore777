@@ -7,6 +7,9 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
     [SerializeField] private GameObject homingMissilePrefab;
     [SerializeField] private float missileSpeed = 8f;
     [SerializeField] private float extraSpawnDistance = 0f;
+    [SerializeField] private float homingDelaySeconds = 3f;
+    [SerializeField] private float targetRefreshIntervalSeconds = 0.2f;
+    [SerializeField] private float turnRateDegreesPerSecond = 90f;
 
     public override bool TryActivateServer(TankController owner, int shotSequence)
     {
@@ -37,53 +40,27 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
             return false;
         }
 
+        HomingMissileGuidance guidance = spawnedProjectile.gameObject.GetComponent<HomingMissileGuidance>();
+        if (guidance == null)
+        {
+            guidance = spawnedProjectile.gameObject.AddComponent<HomingMissileGuidance>();
+        }
+
+        guidance.Configure(
+            homingDelaySeconds,
+            targetRefreshIntervalSeconds,
+            turnRateDegreesPerSecond,
+            missileSpeed);
+
         return true;
     }
 
-    private NetworkObject FindClosestTarget(TankController owner)
+    private void OnValidate()
     {
-        if (owner == null || owner.NetworkManager == null)
-        {
-            return null;
-        }
-
-        GameManager gameManager = Object.FindFirstObjectByType<GameManager>();
-        if (gameManager == null)
-        {
-            return null;
-        }
-
-        Vector2 origin = owner.transform.position;
-        float bestDistanceSqr = float.MaxValue;
-        NetworkObject closest = null;
-
-        for (int i = 0; i < owner.NetworkManager.ConnectedClientsList.Count; i++)
-        {
-            ulong clientId = owner.NetworkManager.ConnectedClientsList[i].ClientId;
-            if (clientId == owner.OwnerClientId)
-            {
-                continue;
-            }
-
-            if (!gameManager.TryGetPlayerObject(clientId, out GameObject playerObject) || playerObject == null)
-            {
-                continue;
-            }
-
-            NetworkObject targetNetworkObject = playerObject.GetComponent<NetworkObject>();
-            if (targetNetworkObject == null || !targetNetworkObject.IsSpawned)
-            {
-                continue;
-            }
-
-            float distanceSqr = ((Vector2)playerObject.transform.position - origin).sqrMagnitude;
-            if (distanceSqr < bestDistanceSqr)
-            {
-                bestDistanceSqr = distanceSqr;
-                closest = targetNetworkObject;
-            }
-        }
-
-        return closest;
+        missileSpeed = Mathf.Max(0f, missileSpeed);
+        extraSpawnDistance = Mathf.Max(0f, extraSpawnDistance);
+        homingDelaySeconds = Mathf.Max(0f, homingDelaySeconds);
+        targetRefreshIntervalSeconds = Mathf.Max(0.02f, targetRefreshIntervalSeconds);
+        turnRateDegreesPerSecond = Mathf.Max(0f, turnRateDegreesPerSecond);
     }
 }

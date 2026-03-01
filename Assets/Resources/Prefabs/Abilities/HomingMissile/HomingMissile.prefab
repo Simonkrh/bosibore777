@@ -16,6 +16,7 @@ GameObject:
   - component: {fileID: 7871827565308887773}
   - component: {fileID: 4118828399794514721}
   - component: {fileID: 1110438431142310435}
+  - component: {fileID: -3522215255666235687}
   m_Layer: 6
   m_Name: HomingMissile
   m_TagString: Untagged
@@ -131,7 +132,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
-  lifetime: 10
+  lifetime: 12
   maxWallBounces: -1
   minSelfHitUnlockRadius: 0.1
 --- !u!50 &3889443181341378348
@@ -289,3 +290,15 @@ BoxCollider2D:
   m_AutoTiling: 0
   m_Size: {x: 0.14647892, y: 0.42665434}
   m_EdgeRadius: 0
+--- !u!114 &-3522215255666235687
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6673431591696494813}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2e76506ccefd4687ab4f15eb9a35c1d0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
