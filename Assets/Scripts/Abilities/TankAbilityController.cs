@@ -26,6 +26,11 @@ public class TankAbilityController : NetworkBehaviour
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
     );
+    private readonly NetworkVariable<FixedString128Bytes> overrideSpriteResourcePath = new NetworkVariable<FixedString128Bytes>(
+        default,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
 
     private GameObject runtimeModelOverride;
     private SpriteRenderer[] runtimeModelOverrideRenderers;
@@ -37,12 +42,14 @@ public class TankAbilityController : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         equippedAbilityId.OnValueChanged += HandleEquippedAbilityChanged;
+        overrideSpriteResourcePath.OnValueChanged += HandleOverrideSpritePathChanged;
         ApplyAbilityVisual(equippedAbilityId.Value.ToString());
     }
 
     private void OnDestroy()
     {
         equippedAbilityId.OnValueChanged -= HandleEquippedAbilityChanged;
+        overrideSpriteResourcePath.OnValueChanged -= HandleOverrideSpritePathChanged;
         ClearRuntimeModelOverride();
     }
 
@@ -53,6 +60,7 @@ public class TankAbilityController : NetworkBehaviour
             return false;
         }
 
+        overrideSpriteResourcePath.Value = default;
         equippedAbilityId.Value = definition.Id.Trim();
         return true;
     }
@@ -127,12 +135,28 @@ public class TankAbilityController : NetworkBehaviour
             return;
         }
 
+        overrideSpriteResourcePath.Value = default;
         equippedAbilityId.Value = default;
+    }
+
+    public void SetModelOverrideSpriteResourceServer(string resourcesPath)
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        overrideSpriteResourcePath.Value = string.IsNullOrWhiteSpace(resourcesPath) ? default : resourcesPath.Trim();
     }
 
     private void HandleEquippedAbilityChanged(FixedString64Bytes _, FixedString64Bytes newValue)
     {
         ApplyAbilityVisual(newValue.ToString());
+    }
+
+    private void HandleOverrideSpritePathChanged(FixedString128Bytes _, FixedString128Bytes newValue)
+    {
+        ApplyRuntimeModelOverrideSpriteFromPath(newValue.ToString());
     }
 
     private void ApplyAbilityVisual(string abilityId)
@@ -166,6 +190,7 @@ public class TankAbilityController : NetworkBehaviour
         runtimeModelOverride.transform.localRotation = Quaternion.identity;
         SetLayerRecursively(runtimeModelOverride, gameObject.layer);
         runtimeModelOverrideRenderers = runtimeModelOverride.GetComponentsInChildren<SpriteRenderer>(true);
+        ApplyRuntimeModelOverrideSpriteFromPath(overrideSpriteResourcePath.Value.ToString());
 
         TankController ownerTank = GetComponent<TankController>();
         if (ownerTank != null)
@@ -194,6 +219,33 @@ public class TankAbilityController : NetworkBehaviour
         Destroy(runtimeModelOverride);
         runtimeModelOverride = null;
         runtimeModelOverrideRenderers = null;
+    }
+
+    private void ApplyRuntimeModelOverrideSpriteFromPath(string resourcesPath)
+    {
+        if (runtimeModelOverrideRenderers == null || runtimeModelOverrideRenderers.Length == 0)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(resourcesPath))
+        {
+            return;
+        }
+
+        Sprite loadedSprite = Resources.Load<Sprite>(resourcesPath);
+        if (loadedSprite == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < runtimeModelOverrideRenderers.Length; i++)
+        {
+            if (runtimeModelOverrideRenderers[i] != null)
+            {
+                runtimeModelOverrideRenderers[i].sprite = loadedSprite;
+            }
+        }
     }
 
     public void ApplyModelOverrideColor(Color color)

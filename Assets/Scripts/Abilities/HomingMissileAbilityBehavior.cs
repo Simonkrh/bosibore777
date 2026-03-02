@@ -1,9 +1,18 @@
 using Unity.Netcode;
 using UnityEngine;
+using System.Collections.Generic;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 [CreateAssetMenu(menuName = "Abilities/Behaviors/Homing Missile", fileName = "HomingMissileAbilityBehavior")]
 public class HomingMissileAbilityBehavior : AbilityBehavior
 {
+    [Header("Tank Visuals")]
+    [Tooltip("Sprite shown on the shooter's tank after firing, until the missile despawns. Must be inside a Resources folder.")]
+    [SerializeField] private Sprite firedTankSprite;
+    [SerializeField, HideInInspector] private string firedTankSpriteResourcePath = "Sprites/Tanks/HomingMissileFiredTank";
+
     [Header("Spawn")]
     [Tooltip("Projectile prefab to spawn for this ability.")]
     [SerializeField] private GameObject homingMissilePrefab;
@@ -59,12 +68,19 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
     [SerializeField] private float farRangeCornerTurnRateMultiplier = 1f;
     [Tooltip("Line-of-sight probe scale at long range. Higher = more conservative wall clearance when far.")]
     [SerializeField] private float farRangeLineOfSightProbeMultiplier = 1.5f;
+    private readonly Dictionary<ulong, NetworkObject> activeMissilesByOwner = new Dictionary<ulong, NetworkObject>();
 
     public override AbilityActivationResult TryActivateServer(TankController owner, int shotSequence)
     {
         if (owner == null || homingMissilePrefab == null || !owner.IsServer)
         {
             return AbilityActivationResult.NotActivated;
+        }
+
+        ulong ownerClientId = owner.OwnerClientId;
+        if (TryGetActiveMissile(ownerClientId, out _))
+        {
+            return AbilityActivationResult.ActivatedKeep;
         }
 
         if (!owner.TryComputeAbilityProjectileSpawn(
@@ -99,7 +115,16 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
         if (abilityController != null)
         {
             abilityController.RegisterAbilityProjectileServer(spawnedProjectile);
+            abilityController.SetModelOverrideSpriteResourceServer(firedTankSpriteResourcePath);
         }
+
+        Projectile missileProjectile = spawnedProjectile.gameObject.GetComponent<Projectile>();
+        if (missileProjectile != null)
+        {
+            missileProjectile.SetPreDestroyServerCallback((projectileInstance, _) =>
+                HandleMissilePreDestroyServer(owner, ownerClientId, projectileInstance));
+        }
+        activeMissilesByOwner[ownerClientId] = spawnedProjectile;
 
         HomingMissileGuidance guidance = spawnedProjectile.gameObject.GetComponent<HomingMissileGuidance>();
         if (guidance == null)
@@ -130,7 +155,51 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
             farRangeCornerTurnRateMultiplier,
             farRangeLineOfSightProbeMultiplier);
 
-        return AbilityActivationResult.ActivatedConsume;
+        return AbilityActivationResult.ActivatedKeep;
+    }
+
+    private bool TryGetActiveMissile(ulong ownerClientId, out NetworkObject activeMissile)
+    {
+        activeMissile = null;
+        if (!activeMissilesByOwner.TryGetValue(ownerClientId, out NetworkObject trackedMissile))
+        {
+            return false;
+        }
+
+        if (trackedMissile == null || !trackedMissile.IsSpawned)
+        {
+            activeMissilesByOwner.Remove(ownerClientId);
+            return false;
+        }
+
+        activeMissile = trackedMissile;
+        return true;
+    }
+
+    private void HandleMissilePreDestroyServer(TankController owner, ulong ownerClientId, Projectile projectile)
+    {
+        if (owner == null || projectile == null)
+        {
+            return;
+        }
+
+        if (!TryGetActiveMissile(ownerClientId, out NetworkObject activeMissile))
+        {
+            return;
+        }
+
+        if (activeMissile == null || activeMissile.gameObject != projectile.gameObject)
+        {
+            return;
+        }
+
+        activeMissilesByOwner.Remove(ownerClientId);
+
+        TankAbilityController abilityController = owner.GetComponent<TankAbilityController>();
+        if (abilityController != null)
+        {
+            abilityController.ClearEquippedAbilityServer();
+        }
     }
 
     private void OnValidate()
@@ -157,5 +226,27 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
         farRangeTurnRateMultiplier = Mathf.Max(0.05f, farRangeTurnRateMultiplier);
         farRangeCornerTurnRateMultiplier = Mathf.Clamp(farRangeCornerTurnRateMultiplier, 0.05f, 1f);
         farRangeLineOfSightProbeMultiplier = Mathf.Max(0.05f, farRangeLineOfSightProbeMultiplier);
+
+#if UNITY_EDITOR
+        if (firedTankSprite != null)
+        {
+            string spriteAssetPath = AssetDatabase.GetAssetPath(firedTankSprite);
+            string marker = "/Resources/";
+            int markerIndex = spriteAssetPath.IndexOf(marker, System.StringComparison.OrdinalIgnoreCase);
+            if (markerIndex >= 0)
+            {
+                string relativePath = spriteAssetPath.Substring(markerIndex + marker.Length);
+                int extensionIndex = relativePath.LastIndexOf('.');
+                firedTankSpriteResourcePath = extensionIndex >= 0
+                    ? relativePath.Substring(0, extensionIndex)
+                    : relativePath;
+            }
+        }
+#endif
+    }
+
+    private void OnDisable()
+    {
+        activeMissilesByOwner.Clear();
     }
 }

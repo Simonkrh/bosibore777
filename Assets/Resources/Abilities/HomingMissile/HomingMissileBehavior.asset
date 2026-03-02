@@ -12,11 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cfdcb4b8b33827f449161670fbb4e965, type: 3}
   m_Name: HomingMissileBehavior
   m_EditorClassIdentifier: 
+  firedTankSprite: {fileID: 21300000, guid: e7085eb9b02bfb0418dc3ae84c43d13e, type: 3}
+  firedTankSpriteResourcePath: Sprites/Tanks/HomingMissileFiredTank
   homingMissilePrefab: {fileID: 6673431591696494813, guid: 7eca8aab8dcb4754eba9c2289aff83ec, type: 3}
   missileSpeed: 1.95
-  extraSpawnDistance: 0.1
+  extraSpawnDistance: 0.15
   homingDelaySeconds: 3
-  targetRefreshIntervalSeconds: 0.2
+  targetRefreshIntervalSeconds: 0.15
   turnRateDegreesPerSecond: 270
   cornerTurnRateMultiplier: 0.5
   wobbleAmplitudeDegrees: 50
