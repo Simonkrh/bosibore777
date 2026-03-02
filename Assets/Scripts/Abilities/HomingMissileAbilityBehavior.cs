@@ -73,6 +73,12 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
             return false;
         }
 
+        Projectile projectile = spawnedProjectile.gameObject.GetComponent<Projectile>();
+        if (projectile != null)
+        {
+            projectile.SetVisualColorServer(owner.tankColor.Value);
+        }
+
         HomingMissileGuidance guidance = spawnedProjectile.gameObject.GetComponent<HomingMissileGuidance>();
         if (guidance == null)
         {

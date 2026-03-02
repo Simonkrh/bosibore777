@@ -24,6 +24,7 @@ public class Projectile : NetworkBehaviour
     private bool destroyInvoked;
     private int shotSequence = -1;
     private Action<ulong, int> destroyedCallback;
+    private SpriteRenderer[] visualRenderers;
 
     private void Awake()
     {
@@ -31,6 +32,7 @@ public class Projectile : NetworkBehaviour
         rb.gravityScale = 0f; // top-down, no gravity
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         rb.interpolation = RigidbodyInterpolation2D.None;
+        CacheVisualRenderersIfNeeded();
     }
 
     private void Start()
@@ -187,6 +189,50 @@ public class Projectile : NetworkBehaviour
         ConfigureShooter(id, shooterPosition, selfHitUnlockRadius);
         shotSequence = sequence;
         destroyedCallback = onDestroyed;
+    }
+
+    public void SetVisualColorServer(Color color)
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        ApplyVisualColor(color);
+        SetVisualColorClientRpc(color);
+    }
+
+    [ClientRpc]
+    private void SetVisualColorClientRpc(Color color)
+    {
+        if (IsServer)
+        {
+            return;
+        }
+
+        ApplyVisualColor(color);
+    }
+
+    private void CacheVisualRenderersIfNeeded()
+    {
+        if (visualRenderers != null && visualRenderers.Length > 0)
+        {
+            return;
+        }
+
+        visualRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+    }
+
+    private void ApplyVisualColor(Color color)
+    {
+        CacheVisualRenderersIfNeeded();
+        for (int i = 0; i < visualRenderers.Length; i++)
+        {
+            if (visualRenderers[i] != null)
+            {
+                visualRenderers[i].color = color;
+            }
+        }
     }
 
     public void ForceDestroy()
