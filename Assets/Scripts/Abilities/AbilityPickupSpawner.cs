@@ -8,7 +8,12 @@ public class AbilityPickupSpawner : NetworkBehaviour
     [SerializeField] private AbilityPickup pickupPrefab;
     [SerializeField] private float initialSpawnDelaySeconds = 2f;
     [SerializeField] private float spawnIntervalSeconds = 8f;
+    [Tooltip("When enabled, maxActivePickups is ignored and spawning continues until no valid tiles remain.")]
+    [SerializeField] private bool noLimitSpawning;
     [SerializeField] private int maxActivePickups = 3;
+    [Tooltip("Pickup cannot spawn within this traversable tile distance from players (1 = same tile + directly reachable neighbors).")]
+    [SerializeField] private int blockedTileRadiusAroundPlayers = 1;
+    [SerializeField] private int maxSpawnPositionAttempts = 32;
     [SerializeField] private List<AbilityDefinition> spawnPool = new List<AbilityDefinition>();
 
     private readonly List<AbilityPickup> activePickups = new List<AbilityPickup>();
@@ -77,7 +82,8 @@ public class AbilityPickupSpawner : NetworkBehaviour
         while (IsServer && IsSpawned)
         {
             CleanupInactivePickups();
-            if (activePickups.Count < Mathf.Max(0, maxActivePickups))
+            bool canSpawnMore = noLimitSpawning || activePickups.Count < Mathf.Max(0, maxActivePickups);
+            if (canSpawnMore)
             {
                 TrySpawnPickup();
             }
@@ -104,7 +110,7 @@ public class AbilityPickupSpawner : NetworkBehaviour
             mazeGenerator = FindFirstObjectByType<MazeGenerator>();
         }
 
-        if (mazeGenerator == null || !mazeGenerator.TryGetRandomAvailableCellWorldPosition(out Vector3 worldPosition))
+        if (mazeGenerator == null || !TryGetValidSpawnWorldPosition(out Vector3 worldPosition))
         {
             return;
         }
@@ -165,5 +171,105 @@ public class AbilityPickupSpawner : NetworkBehaviour
                 index++;
             }
         }
+    }
+
+    private bool TryGetValidSpawnWorldPosition(out Vector3 worldPosition)
+    {
+        worldPosition = Vector3.zero;
+        if (mazeGenerator == null)
+        {
+            return false;
+        }
+
+        int attempts = Mathf.Max(1, maxSpawnPositionAttempts);
+        for (int i = 0; i < attempts; i++)
+        {
+            if (!mazeGenerator.TryGetRandomAvailableCellWorldPosition(out Vector3 candidatePosition))
+            {
+                return false;
+            }
+
+            if (!mazeGenerator.TryWorldToCell(candidatePosition, out Vector2Int candidateCell))
+            {
+                continue;
+            }
+
+            if (IsBlockedByNearbyPlayer(candidateCell))
+            {
+                continue;
+            }
+
+            if (IsBlockedByExistingPickup(candidateCell))
+            {
+                continue;
+            }
+
+            worldPosition = candidatePosition;
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool IsBlockedByNearbyPlayer(Vector2Int candidateCell)
+    {
+        int tileRadius = Mathf.Max(0, blockedTileRadiusAroundPlayers);
+        if (tileRadius <= 0)
+        {
+            return false;
+        }
+
+        TankController[] tanks = FindObjectsByType<TankController>(FindObjectsSortMode.None);
+        for (int i = 0; i < tanks.Length; i++)
+        {
+            TankController tank = tanks[i];
+            if (tank == null)
+            {
+                continue;
+            }
+
+            NetworkObject tankNetworkObject = tank.GetComponent<NetworkObject>();
+            if (tankNetworkObject == null || !tankNetworkObject.IsSpawned)
+            {
+                continue;
+            }
+
+            if (!mazeGenerator.TryWorldToCell(tank.transform.position, out Vector2Int playerCell))
+            {
+                continue;
+            }
+
+            if (mazeGenerator.IsWithinPathDistanceInTiles(playerCell, candidateCell, tileRadius))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsBlockedByExistingPickup(Vector2Int candidateCell)
+    {
+        AbilityPickup[] pickups = FindObjectsByType<AbilityPickup>(FindObjectsSortMode.None);
+        for (int i = 0; i < pickups.Length; i++)
+        {
+            AbilityPickup pickup = pickups[i];
+            if (pickup == null || !pickup.IsSpawned)
+            {
+                continue;
+            }
+
+            if (!mazeGenerator.TryWorldToCell(pickup.transform.position, out Vector2Int pickupCell))
+            {
+                continue;
+            }
+
+            if (pickupCell == candidateCell)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

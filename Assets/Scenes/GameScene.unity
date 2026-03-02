@@ -385,7 +385,10 @@ MonoBehaviour:
   pickupPrefab: {fileID: 1447832014731761121, guid: 583be123a31e7cf40b72d8b4cba2dac6, type: 3}
   initialSpawnDelaySeconds: 1
   spawnIntervalSeconds: 1
+  noLimitSpawning: 1
   maxActivePickups: 10
+  blockedTileRadiusAroundPlayers: 1
+  maxSpawnPositionAttempts: 32
   spawnPool: []
 --- !u!1001 &459090433
 PrefabInstance:

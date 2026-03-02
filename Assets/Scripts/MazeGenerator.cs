@@ -347,6 +347,70 @@ public class MazeGenerator : NetworkBehaviour
         return false;
     }
 
+    public bool IsWithinPathDistanceInTiles(Vector2Int fromCell, Vector2Int toCell, int maxDistance)
+    {
+        if (grid == null || width <= 0 || height <= 0)
+        {
+            return false;
+        }
+
+        int distanceLimit = Mathf.Max(0, maxDistance);
+        if (!IsCellInBounds(fromCell) || !IsCellInBounds(toCell))
+        {
+            return false;
+        }
+
+        if (fromCell == toCell)
+        {
+            return true;
+        }
+
+        if (distanceLimit == 0)
+        {
+            return false;
+        }
+
+        Queue<Vector2Int> frontier = new Queue<Vector2Int>();
+        Dictionary<Vector2Int, int> visitedDistance = new Dictionary<Vector2Int, int>();
+
+        frontier.Enqueue(fromCell);
+        visitedDistance[fromCell] = 0;
+
+        while (frontier.Count > 0)
+        {
+            Vector2Int current = frontier.Dequeue();
+            int currentDistance = visitedDistance[current];
+            if (currentDistance >= distanceLimit)
+            {
+                continue;
+            }
+
+            for (int direction = 0; direction < 4; direction++)
+            {
+                if (!TryGetTraversableNeighbor(current, direction, out Vector2Int neighbor))
+                {
+                    continue;
+                }
+
+                if (visitedDistance.ContainsKey(neighbor))
+                {
+                    continue;
+                }
+
+                int neighborDistance = currentDistance + 1;
+                if (neighbor == toCell && neighborDistance <= distanceLimit)
+                {
+                    return true;
+                }
+
+                visitedDistance[neighbor] = neighborDistance;
+                frontier.Enqueue(neighbor);
+            }
+        }
+
+        return false;
+    }
+
     public bool TryGetRandomAvailableCellWorldPosition(out Vector3 worldPosition)
     {
         worldPosition = Vector3.zero;

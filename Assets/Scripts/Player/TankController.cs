@@ -409,32 +409,39 @@ public class TankController : NetworkBehaviour
 
     private void HandleShooting()
     {
-        if (Input.GetKeyDown(KeyCode.Space) && Time.time >= lastShotTime + shootCooldown)
+        if (!Input.GetKeyDown(KeyCode.Space))
         {
-            int shotSequence = nextLocalShotSequence++;
-            bool hasUsableAbility = abilityController != null && abilityController.HasAbility;
-            bool abilityUsageInProgress = abilityController != null && abilityController.IsAbilityUsageActive;
-            if (hasUsableAbility)
-            {
-                TryUseEquippedAbilityServerRpc(shotSequence);
-            }
-            else if (abilityUsageInProgress)
-            {
-                // Ability is still resolving in-world; block fallback normal shots.
-                return;
-            }
-            else
-            {
-                if (!IsServer)
-                {
-                    SpawnPredictedShotVisual(shotSequence);
-                }
-
-                ShootServerRpc(shotSequence);
-            }
-
-            lastShotTime = Time.time;
+            return;
         }
+
+        int shotSequence = nextLocalShotSequence++;
+        bool hasUsableAbility = abilityController != null && abilityController.HasAbility;
+        bool abilityUsageInProgress = abilityController != null && abilityController.IsAbilityUsageActive;
+        if (hasUsableAbility)
+        {
+            TryUseEquippedAbilityServerRpc(shotSequence);
+            lastShotTime = Time.time;
+            return;
+        }
+
+        if (Time.time < lastShotTime + shootCooldown)
+        {
+            return;
+        }
+
+        if (abilityUsageInProgress)
+        {
+            // Ability is still resolving in-world; block fallback normal shots.
+            return;
+        }
+
+        if (!IsServer)
+        {
+            SpawnPredictedShotVisual(shotSequence);
+        }
+
+        ShootServerRpc(shotSequence);
+        lastShotTime = Time.time;
     }
 
     [ServerRpc]
