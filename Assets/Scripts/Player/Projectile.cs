@@ -6,6 +6,16 @@ using System;
 [RequireComponent(typeof(Rigidbody2D))]
 public class Projectile : NetworkBehaviour
 {
+    public enum DestroyCause
+    {
+        Unknown = 0,
+        LifetimeExpired = 1,
+        PlayerHit = 2,
+        WallBounceLimit = 3,
+        Collision = 4,
+        Forced = 5
+    }
+
     public float lifetime = 10f;
     [Tooltip("How many wall bounces before despawn. -1 means unlimited.")]
     public int maxWallBounces = -1;
@@ -24,7 +34,10 @@ public class Projectile : NetworkBehaviour
     private bool destroyInvoked;
     private int shotSequence = -1;
     private Action<ulong, int> destroyedCallback;
+    private Action<Projectile, DestroyCause> preDestroyServerCallback;
     private SpriteRenderer[] visualRenderers;
+    private bool allowImmediateSelfHit;
+    private DestroyCause pendingDestroyCause = DestroyCause.Unknown;
 
     private void Awake()
     {
@@ -167,6 +180,7 @@ public class Projectile : NetworkBehaviour
             yield break;
         }
 
+        pendingDestroyCause = DestroyCause.LifetimeExpired;
         DespawnOrDestroyProjectile();
     }
 
@@ -189,6 +203,26 @@ public class Projectile : NetworkBehaviour
         ConfigureShooter(id, shooterPosition, selfHitUnlockRadius);
         shotSequence = sequence;
         destroyedCallback = onDestroyed;
+    }
+
+    public void ConfigureSelfHitBehaviorServer(bool allowImmediateSelfHitValue)
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        allowImmediateSelfHit = allowImmediateSelfHitValue;
+    }
+
+    public void SetPreDestroyServerCallback(Action<Projectile, DestroyCause> callback)
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        preDestroyServerCallback = callback;
     }
 
     public void SetVisualColorServer(Color color)
@@ -243,6 +277,7 @@ public class Projectile : NetworkBehaviour
         }
 
         hasCollided = true;
+        pendingDestroyCause = DestroyCause.Forced;
         DespawnOrDestroyProjectile();
     }
 
@@ -254,6 +289,7 @@ public class Projectile : NetworkBehaviour
         }
 
         destroyInvoked = true;
+        preDestroyServerCallback?.Invoke(this, pendingDestroyCause);
         destroyedCallback?.Invoke(shooterId, shotSequence);
 
         if (NetworkObject != null && NetworkObject.IsSpawned)
@@ -273,8 +309,8 @@ public class Projectile : NetworkBehaviour
             return false;
         }
 
-        // Self-hit is only valid after the projectile has both bounced and cleared the shooter unlock distance.
-        if (playerController.OwnerClientId == shooterId && (!hasBouncedOffWall || !shooterCanBeHit))
+        // By default self-hit is only valid after bounce + unlock travel; special projectiles can override this.
+        if (!allowImmediateSelfHit && playerController.OwnerClientId == shooterId && (!hasBouncedOffWall || !shooterCanBeHit))
         {
             return false;
         }
@@ -283,6 +319,7 @@ public class Projectile : NetworkBehaviour
         ulong killerId = shooterId;
         playerController.Die(killerId);
         hasCollided = true;
+        pendingDestroyCause = DestroyCause.PlayerHit;
         DespawnOrDestroyProjectile();
 
         return true;
@@ -319,12 +356,14 @@ public class Projectile : NetworkBehaviour
             if (maxWallBounces >= 0 && wallBounceCount > maxWallBounces)
             {
                 hasCollided = true;
+                pendingDestroyCause = DestroyCause.WallBounceLimit;
                 DespawnOrDestroyProjectile();
             }
             return;
         }
 
         hasCollided = true;
+        pendingDestroyCause = DestroyCause.Collision;
         DespawnOrDestroyProjectile();
     }
 }

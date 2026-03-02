@@ -10,7 +10,7 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
     [Tooltip("Base launch speed. Higher = faster missile travel. Lower = slower travel.")]
     [SerializeField] private float missileSpeed = 1.9f;
     [Tooltip("Extra distance from muzzle before spawn. Higher = starts farther forward. Lower = starts closer to shooter.")]
-    [SerializeField] private float extraSpawnDistance = 0.15f;
+    [SerializeField] private float extraSpawnDistance = 0.1f;
 
     [Header("Homing")]
     [Tooltip("Time before homing starts. Higher = flies straight longer first. Lower = starts tracking sooner.")]
@@ -60,11 +60,11 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
     [Tooltip("Line-of-sight probe scale at long range. Higher = more conservative wall clearance when far.")]
     [SerializeField] private float farRangeLineOfSightProbeMultiplier = 1.5f;
 
-    public override bool TryActivateServer(TankController owner, int shotSequence)
+    public override AbilityActivationResult TryActivateServer(TankController owner, int shotSequence)
     {
         if (owner == null || homingMissilePrefab == null || !owner.IsServer)
         {
-            return false;
+            return AbilityActivationResult.NotActivated;
         }
 
         if (!owner.TryComputeAbilityProjectileSpawn(
@@ -74,7 +74,7 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
                 out Vector2 fireDirection,
                 out _))
         {
-            return false;
+            return AbilityActivationResult.NotActivated;
         }
 
         if (!owner.TrySpawnAbilityProjectile(
@@ -86,7 +86,7 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
                 missileSpeed,
                 out NetworkObject spawnedProjectile))
         {
-            return false;
+            return AbilityActivationResult.NotActivated;
         }
 
         Projectile projectile = spawnedProjectile.gameObject.GetComponent<Projectile>();
@@ -124,7 +124,7 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
             farRangeCornerTurnRateMultiplier,
             farRangeLineOfSightProbeMultiplier);
 
-        return true;
+        return AbilityActivationResult.ActivatedConsume;
     }
 
     private void OnValidate()

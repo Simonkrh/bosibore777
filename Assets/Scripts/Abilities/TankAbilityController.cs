@@ -73,12 +73,17 @@ public class TankAbilityController : NetworkBehaviour
             return false;
         }
 
-        if (!definition.Behavior.TryActivateServer(owner, shotSequence))
+        AbilityActivationResult activationResult = definition.Behavior.TryActivateServer(owner, shotSequence);
+        if (activationResult == AbilityActivationResult.NotActivated)
         {
             return false;
         }
 
-        equippedAbilityId.Value = default;
+        if (activationResult == AbilityActivationResult.ActivatedConsume)
+        {
+            equippedAbilityId.Value = default;
+        }
+
         return true;
     }
 

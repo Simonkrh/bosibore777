@@ -154,7 +154,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0.005004883, y: -436}
+  m_AnchoredPosition: {x: 0.005126953, y: -436}
   m_SizeDelta: {x: -360.1722, y: -978.4457}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &40250683
@@ -383,9 +383,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
   pickupPrefab: {fileID: 1447832014731761121, guid: 583be123a31e7cf40b72d8b4cba2dac6, type: 3}
-  initialSpawnDelaySeconds: 2
-  spawnIntervalSeconds: 3
-  maxActivePickups: 3
+  initialSpawnDelaySeconds: 1
+  spawnIntervalSeconds: 1
+  maxActivePickups: 10
   spawnPool: []
 --- !u!1001 &459090433
 PrefabInstance:

@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 5468645838082112802}
   - component: {fileID: 1233872058322956659}
   m_Layer: 7
-  m_Name: HomingMissileBody
+  m_Name: HomingMissileTankBody
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
