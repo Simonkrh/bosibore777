@@ -21,12 +21,18 @@ public class TankAbilityController : NetworkBehaviour
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
     );
+    private readonly NetworkVariable<int> activeAbilityUsageCount = new NetworkVariable<int>(
+        0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
 
     private GameObject runtimeModelOverride;
     private SpriteRenderer[] runtimeModelOverrideRenderers;
     private bool initializedCachedDefaults;
 
     public bool HasAbility => !string.IsNullOrWhiteSpace(equippedAbilityId.Value.ToString());
+    public bool IsAbilityUsageActive => activeAbilityUsageCount.Value > 0;
 
     public override void OnNetworkSpawn()
     {
@@ -85,6 +91,43 @@ public class TankAbilityController : NetworkBehaviour
         }
 
         return true;
+    }
+
+    public bool RegisterAbilityProjectileServer(NetworkObject projectileNetworkObject)
+    {
+        if (!IsServer || projectileNetworkObject == null || !projectileNetworkObject.IsSpawned)
+        {
+            return false;
+        }
+
+        Projectile projectile = projectileNetworkObject.GetComponent<Projectile>();
+        if (projectile == null)
+        {
+            return false;
+        }
+
+        activeAbilityUsageCount.Value = Mathf.Max(0, activeAbilityUsageCount.Value) + 1;
+        projectile.SetPreDestroyServerCallback((_, __) =>
+        {
+            if (!IsServer)
+            {
+                return;
+            }
+
+            activeAbilityUsageCount.Value = Mathf.Max(0, activeAbilityUsageCount.Value - 1);
+        });
+
+        return true;
+    }
+
+    public void ClearEquippedAbilityServer()
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        equippedAbilityId.Value = default;
     }
 
     private void HandleEquippedAbilityChanged(FixedString64Bytes _, FixedString64Bytes newValue)

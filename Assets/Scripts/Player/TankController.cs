@@ -413,9 +413,15 @@ public class TankController : NetworkBehaviour
         {
             int shotSequence = nextLocalShotSequence++;
             bool hasUsableAbility = abilityController != null && abilityController.HasAbility;
+            bool abilityUsageInProgress = abilityController != null && abilityController.IsAbilityUsageActive;
             if (hasUsableAbility)
             {
                 TryUseEquippedAbilityServerRpc(shotSequence);
+            }
+            else if (abilityUsageInProgress)
+            {
+                // Ability is still resolving in-world; block fallback normal shots.
+                return;
             }
             else
             {
@@ -450,6 +456,11 @@ public class TankController : NetworkBehaviour
 
         if (!abilityController.TryUseEquippedAbility(this, shotSequence))
         {
+            if (abilityController.IsAbilityUsageActive)
+            {
+                return;
+            }
+
             ServerFireStandardShot(shotSequence, OwnerClientId);
         }
     }
@@ -469,6 +480,16 @@ public class TankController : NetworkBehaviour
     private void ServerFireStandardShot(int shotSequence, ulong shooterClientId)
     {
         if (!IsServer)
+        {
+            return;
+        }
+
+        if (abilityController == null)
+        {
+            abilityController = GetComponent<TankAbilityController>();
+        }
+
+        if (abilityController != null && abilityController.IsAbilityUsageActive)
         {
             return;
         }

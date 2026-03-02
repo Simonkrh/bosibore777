@@ -47,7 +47,7 @@ public class AbilityPickup : NetworkBehaviour
         }
 
         TankAbilityController tankAbilityController = other.GetComponentInParent<TankAbilityController>();
-        if (tankAbilityController == null || tankAbilityController.HasAbility)
+        if (tankAbilityController == null || tankAbilityController.HasAbility || tankAbilityController.IsAbilityUsageActive)
         {
             return;
         }

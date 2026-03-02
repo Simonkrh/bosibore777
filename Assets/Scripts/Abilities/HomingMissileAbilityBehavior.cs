@@ -95,6 +95,12 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
             projectile.SetVisualColorServer(owner.tankColor.Value);
         }
 
+        TankAbilityController abilityController = owner.GetComponent<TankAbilityController>();
+        if (abilityController != null)
+        {
+            abilityController.RegisterAbilityProjectileServer(spawnedProjectile);
+        }
+
         HomingMissileGuidance guidance = spawnedProjectile.gameObject.GetComponent<HomingMissileGuidance>();
         if (guidance == null)
         {

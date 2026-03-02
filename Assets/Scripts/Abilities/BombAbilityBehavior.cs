@@ -108,6 +108,12 @@ public class BombAbilityBehavior : AbilityBehavior
                 HandleBombPreDestroyServer(owner, ownerClientId, projectileInstance, cause));
         }
 
+        TankAbilityController abilityController = owner.GetComponent<TankAbilityController>();
+        if (abilityController != null)
+        {
+            abilityController.RegisterAbilityProjectileServer(spawnedBomb);
+        }
+
         if (tintProjectilesWithShooterColor)
         {
             if (projectile != null)
@@ -221,6 +227,17 @@ public class BombAbilityBehavior : AbilityBehavior
         Vector2 detonationPosition = bombProjectile.transform.position;
         TrySpawnShards(owner, detonationPosition, autoSequenceBase);
         activeBombsByOwner.Remove(ownerClientId);
+
+        if ((destroyCause == Projectile.DestroyCause.LifetimeExpired ||
+             destroyCause == Projectile.DestroyCause.PlayerHit) &&
+            owner != null)
+        {
+            TankAbilityController abilityController = owner.GetComponent<TankAbilityController>();
+            if (abilityController != null)
+            {
+                abilityController.ClearEquippedAbilityServer();
+            }
+        }
     }
 
     private void ConfigureShardMotion(GameObject shardObject, float baseSpeed)

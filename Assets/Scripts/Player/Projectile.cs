@@ -222,7 +222,7 @@ public class Projectile : NetworkBehaviour
             return;
         }
 
-        preDestroyServerCallback = callback;
+        preDestroyServerCallback += callback;
     }
 
     public void SetVisualColorServer(Color color)
