@@ -13,18 +13,25 @@ MonoBehaviour:
   m_Name: HomingMissileBehavior
   m_EditorClassIdentifier: 
   homingMissilePrefab: {fileID: 6673431591696494813, guid: 7eca8aab8dcb4754eba9c2289aff83ec, type: 3}
-  missileSpeed: 1.9
+  missileSpeed: 1.95
   extraSpawnDistance: 0.15
   homingDelaySeconds: 3
   targetRefreshIntervalSeconds: 0.2
-  turnRateDegreesPerSecond: 220
-  cornerTurnRateMultiplier: 0.75
+  turnRateDegreesPerSecond: 270
+  cornerTurnRateMultiplier: 0.5
   wobbleAmplitudeDegrees: 60
-  wobbleFrequencyHz: 1
+  wobbleFrequencyHz: 3
   wobbleBaselineStrength: 0.25
   wobbleBuildUpPerSecond: 1.5
   wobbleDecayPerSecond: 5
-  pathLookaheadNodes: 3
-  wallHugOffset: 0.4
-  wallHugProbeRadius: 0.05
+  pathLookaheadNodes: 5
+  wallHugOffset: 0.3
+  wallHugProbeRadius: 0.06
   lineOfSightProbeRadius: 0.04
+  closeRangeTiles: 2
+  farRangeTiles: 8
+  farRangeWobbleMultiplier: 0.35
+  farRangeWallHugMultiplier: 0.1
+  farRangeTurnRateMultiplier: 1.15
+  farRangeCornerTurnRateMultiplier: 1
+  farRangeLineOfSightProbeMultiplier: 1.5

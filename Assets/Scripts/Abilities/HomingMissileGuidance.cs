@@ -7,12 +7,14 @@ public class HomingMissileGuidance : MonoBehaviour
 {
     private const float MinDirectionSqrMagnitude = 0.0001f;
     private const float TwoPi = Mathf.PI * 2f;
+    private const float MinRangeBandTiles = 0.01f;
 
     private Rigidbody2D rb;
     private GameManager gameManager;
     private MazeGenerator mazeGenerator;
     private Transform currentTarget;
     private readonly List<Vector2> pathBuffer = new List<Vector2>(32);
+    private readonly List<Vector2> targetEvaluationPathBuffer = new List<Vector2>(32);
 
     private float homingDelaySeconds = 3f;
     private float targetRefreshIntervalSeconds = 0.2f;
@@ -28,6 +30,16 @@ public class HomingMissileGuidance : MonoBehaviour
     private float wallHugOffset = 0.22f;
     private float wallHugProbeRadius = 0.05f;
     private float lineOfSightProbeRadius = 0.06f;
+
+    // Distance-adaptive steering profile (distance measured in maze tiles).
+    private float closeRangeTiles = 2f;
+    private float farRangeTiles = 8f;
+    private float farRangeWobbleMultiplier = 0.35f;
+    private float farRangeWallHugMultiplier = 0.1f;
+    private float farRangeTurnRateMultiplier = 1.15f;
+    private float farRangeCornerTurnRateMultiplier = 1f;
+    private float farRangeLineOfSightProbeMultiplier = 1.5f;
+
     private int wallMask;
 
     private float spawnTime;
@@ -55,7 +67,14 @@ public class HomingMissileGuidance : MonoBehaviour
         int pathLookaheadNodesValue,
         float wallHugOffsetValue,
         float wallHugProbeRadiusValue,
-        float lineOfSightProbeRadiusValue)
+        float lineOfSightProbeRadiusValue,
+        float closeRangeTilesValue,
+        float farRangeTilesValue,
+        float farRangeWobbleMultiplierValue,
+        float farRangeWallHugMultiplierValue,
+        float farRangeTurnRateMultiplierValue,
+        float farRangeCornerTurnRateMultiplierValue,
+        float farRangeLineOfSightProbeMultiplierValue)
     {
         homingDelaySeconds = Mathf.Max(0f, homingDelay);
         targetRefreshIntervalSeconds = Mathf.Max(0.02f, targetRefreshInterval);
@@ -71,6 +90,15 @@ public class HomingMissileGuidance : MonoBehaviour
         wallHugOffset = Mathf.Max(0f, wallHugOffsetValue);
         wallHugProbeRadius = Mathf.Max(0f, wallHugProbeRadiusValue);
         lineOfSightProbeRadius = Mathf.Max(0f, lineOfSightProbeRadiusValue);
+
+        closeRangeTiles = Mathf.Max(0f, closeRangeTilesValue);
+        farRangeTiles = Mathf.Max(closeRangeTiles + MinRangeBandTiles, farRangeTilesValue);
+        farRangeWobbleMultiplier = Mathf.Clamp01(farRangeWobbleMultiplierValue);
+        farRangeWallHugMultiplier = Mathf.Clamp01(farRangeWallHugMultiplierValue);
+        farRangeTurnRateMultiplier = Mathf.Max(0.05f, farRangeTurnRateMultiplierValue);
+        farRangeCornerTurnRateMultiplier = Mathf.Clamp(farRangeCornerTurnRateMultiplierValue, 0.05f, 1f);
+        farRangeLineOfSightProbeMultiplier = Mathf.Max(0.05f, farRangeLineOfSightProbeMultiplierValue);
+
         wallMask = LayerMask.GetMask("Wall");
 
         spawnTime = Time.time;
@@ -105,8 +133,11 @@ public class HomingMissileGuidance : MonoBehaviour
             RefreshTargetIfNeeded();
             if (currentTarget != null)
             {
-                Vector2 steeringTarget = ResolveSteeringTarget((Vector2)currentTarget.position, out float turnRateScale);
-                currentVelocity = SteerTowardsTarget(currentVelocity, steeringTarget, turnRateScale);
+                Vector2 steeringTarget = ResolveSteeringTarget(
+                    (Vector2)currentTarget.position,
+                    out float turnRateScale,
+                    out float closeRangeFactor);
+                currentVelocity = SteerTowardsTarget(currentVelocity, steeringTarget, turnRateScale, closeRangeFactor);
             }
         }
 
@@ -116,7 +147,11 @@ public class HomingMissileGuidance : MonoBehaviour
         }
     }
 
-    private Vector2 SteerTowardsTarget(Vector2 currentVelocity, Vector3 targetPosition, float turnRateScale)
+    private Vector2 SteerTowardsTarget(
+        Vector2 currentVelocity,
+        Vector3 targetPosition,
+        float turnRateScale,
+        float closeRangeFactor)
     {
         Vector2 toTarget = (Vector2)targetPosition - rb.position;
         if (toTarget.sqrMagnitude < MinDirectionSqrMagnitude)
@@ -127,7 +162,7 @@ public class HomingMissileGuidance : MonoBehaviour
         Vector2 currentDirection = currentVelocity.normalized;
         Vector2 desiredDirection = toTarget.normalized;
 
-        float effectiveTurnRate = turnRateDegreesPerSecond * Mathf.Clamp(turnRateScale, 0.05f, 1f);
+        float effectiveTurnRate = turnRateDegreesPerSecond * Mathf.Max(0.05f, turnRateScale);
         float maxTurnStep = effectiveTurnRate * Time.fixedDeltaTime;
         float rawAngleToDesired = Vector2.SignedAngle(currentDirection, desiredDirection);
         float normalizedTurnDemand = maxTurnStep > Mathf.Epsilon
@@ -145,7 +180,8 @@ public class HomingMissileGuidance : MonoBehaviour
             wobblePhaseRadians -= TwoPi;
         }
 
-        float wobbleOffsetDegrees = Mathf.Sin(wobblePhaseRadians) * wobbleAmplitudeDegrees * wobbleStrength;
+        float rangeScaledWobble = Mathf.Lerp(farRangeWobbleMultiplier, 1f, closeRangeFactor);
+        float wobbleOffsetDegrees = Mathf.Sin(wobblePhaseRadians) * wobbleAmplitudeDegrees * wobbleStrength * rangeScaledWobble;
         Vector2 wobbledDesiredDirection =
             (Quaternion.Euler(0f, 0f, wobbleOffsetDegrees) * desiredDirection).normalized;
 
@@ -158,14 +194,17 @@ public class HomingMissileGuidance : MonoBehaviour
         {
             speed = fallbackSpeed;
         }
+
         Vector2 steeredVelocity = steeredDirection * speed;
         rb.linearVelocity = steeredVelocity;
         return steeredVelocity;
     }
 
-    private Vector2 ResolveSteeringTarget(Vector2 targetPosition, out float turnRateScale)
+    private Vector2 ResolveSteeringTarget(Vector2 targetPosition, out float turnRateScale, out float closeRangeFactor)
     {
         turnRateScale = 1f;
+        closeRangeFactor = 1f;
+
         if (!TryResolveMazeGenerator(out MazeGenerator resolvedMaze))
         {
             return targetPosition;
@@ -177,29 +216,49 @@ public class HomingMissileGuidance : MonoBehaviour
             return targetPosition;
         }
 
+        float pathDistanceTiles = GetPathDistanceTiles(pathBuffer, resolvedMaze.cellSize);
+        closeRangeFactor = GetCloseRangeFactor(pathDistanceTiles);
+
+        float effectiveWallHugOffset = wallHugOffset * Mathf.Lerp(farRangeWallHugMultiplier, 1f, closeRangeFactor);
+        float effectiveLineOfSightProbeRadius = lineOfSightProbeRadius * Mathf.Lerp(
+            farRangeLineOfSightProbeMultiplier,
+            1f,
+            closeRangeFactor);
+        float effectiveCornerTurnRateMultiplier = Mathf.Lerp(
+            farRangeCornerTurnRateMultiplier,
+            cornerTurnRateMultiplier,
+            closeRangeFactor);
+        float effectiveTurnRateMultiplier = Mathf.Lerp(farRangeTurnRateMultiplier, 1f, closeRangeFactor);
+
         if (pathBuffer.Count == 1)
         {
+            turnRateScale = effectiveTurnRateMultiplier;
             return pathBuffer[0];
         }
 
-        turnRateScale = GetCornerTurnRateScale();
+        turnRateScale = GetCornerTurnRateScale(effectiveCornerTurnRateMultiplier) * effectiveTurnRateMultiplier;
 
         int maxIndex = GetStraightCorridorLookaheadLimit();
         int chosenIndex = 1;
 
         for (int i = maxIndex; i >= 1; i--)
         {
-            if (HasLineOfSight(rb.position, pathBuffer[i]))
+            if (HasLineOfSight(rb.position, pathBuffer[i], effectiveLineOfSightProbeRadius))
             {
                 chosenIndex = i;
                 break;
             }
         }
 
-        return ApplyWallHugBias(pathBuffer[chosenIndex], chosenIndex, targetPosition);
+        return ApplyWallHugBias(
+            pathBuffer[chosenIndex],
+            chosenIndex,
+            targetPosition,
+            effectiveWallHugOffset,
+            effectiveLineOfSightProbeRadius);
     }
 
-    private float GetCornerTurnRateScale()
+    private float GetCornerTurnRateScale(float effectiveCornerTurnRateMultiplier)
     {
         if (pathBuffer.Count < 3)
         {
@@ -215,10 +274,10 @@ public class HomingMissileGuidance : MonoBehaviour
 
         float alignment = Vector2.Dot(firstStep.normalized, secondStep.normalized);
         float cornerSharpness = Mathf.Clamp01(1f - Mathf.Clamp(alignment, -1f, 1f));
-        return Mathf.Lerp(1f, cornerTurnRateMultiplier, cornerSharpness);
+        return Mathf.Lerp(1f, Mathf.Clamp(effectiveCornerTurnRateMultiplier, 0.05f, 1f), cornerSharpness);
     }
 
-    private bool HasLineOfSight(Vector2 from, Vector2 to)
+    private bool HasLineOfSight(Vector2 from, Vector2 to, float probeRadius)
     {
         if (wallMask == 0)
         {
@@ -233,13 +292,13 @@ public class HomingMissileGuidance : MonoBehaviour
         }
 
         Vector2 direction = delta / distance;
-        if (lineOfSightProbeRadius <= 0f)
+        if (probeRadius <= 0f)
         {
             RaycastHit2D hit = Physics2D.Raycast(from, direction, distance, wallMask);
             return hit.collider == null;
         }
 
-        RaycastHit2D circleHit = Physics2D.CircleCast(from, lineOfSightProbeRadius, direction, distance, wallMask);
+        RaycastHit2D circleHit = Physics2D.CircleCast(from, probeRadius, direction, distance, wallMask);
         return circleHit.collider == null;
     }
 
@@ -279,14 +338,19 @@ public class HomingMissileGuidance : MonoBehaviour
         return straightLimit;
     }
 
-    private Vector2 ApplyWallHugBias(Vector2 baseTarget, int pathIndex, Vector2 targetPosition)
+    private Vector2 ApplyWallHugBias(
+        Vector2 baseTarget,
+        int pathIndex,
+        Vector2 targetPosition,
+        float effectiveWallHugOffset,
+        float effectiveLineOfSightProbeRadius)
     {
-        if (wallHugOffset <= 0f)
+        if (effectiveWallHugOffset <= 0f)
         {
             return baseTarget;
         }
 
-        Vector2 segmentDirection = Vector2.zero;
+        Vector2 segmentDirection;
         if (pathIndex > 0)
         {
             segmentDirection = pathBuffer[pathIndex] - pathBuffer[pathIndex - 1];
@@ -317,13 +381,13 @@ public class HomingMissileGuidance : MonoBehaviour
         for (int step = offsetSteps; step >= 1; step--)
         {
             float scale = (float)step / offsetSteps;
-            Vector2 candidate = baseTarget + normal * (wallHugOffset * sideSign * scale);
+            Vector2 candidate = baseTarget + normal * (effectiveWallHugOffset * sideSign * scale);
             if (IsPositionBlocked(candidate))
             {
                 continue;
             }
 
-            if (HasLineOfSight(rb.position, candidate))
+            if (HasLineOfSight(rb.position, candidate, effectiveLineOfSightProbeRadius))
             {
                 return candidate;
             }
@@ -345,6 +409,38 @@ public class HomingMissileGuidance : MonoBehaviour
         }
 
         return Physics2D.OverlapCircle(point, wallHugProbeRadius, wallMask) != null;
+    }
+
+    private float GetCloseRangeFactor(float pathDistanceTiles)
+    {
+        if (pathDistanceTiles <= closeRangeTiles)
+        {
+            return 1f;
+        }
+
+        if (pathDistanceTiles >= farRangeTiles)
+        {
+            return 0f;
+        }
+
+        return 1f - Mathf.InverseLerp(closeRangeTiles, farRangeTiles, pathDistanceTiles);
+    }
+
+    private static float GetPathDistanceTiles(List<Vector2> worldPath, float cellSize)
+    {
+        if (worldPath == null || worldPath.Count <= 1)
+        {
+            return 0f;
+        }
+
+        float worldDistance = 0f;
+        for (int i = 1; i < worldPath.Count; i++)
+        {
+            worldDistance += Vector2.Distance(worldPath[i - 1], worldPath[i]);
+        }
+
+        float safeCellSize = Mathf.Max(0.0001f, cellSize);
+        return worldDistance / safeCellSize;
     }
 
     private void RefreshTargetIfNeeded()
@@ -412,8 +508,13 @@ public class HomingMissileGuidance : MonoBehaviour
         }
 
         Vector2 origin = rb != null ? rb.position : (Vector2)transform.position;
-        float bestDistanceSqr = float.MaxValue;
-        Transform closestTarget = null;
+
+        bool hasMaze = TryResolveMazeGenerator(out MazeGenerator resolvedMaze);
+        float bestPathDistanceTiles = float.MaxValue;
+        Transform closestTargetByPath = null;
+
+        float bestAirDistanceSqr = float.MaxValue;
+        Transform closestTargetByAir = null;
 
         for (int i = 0; i < manager.ConnectedClientsList.Count; i++)
         {
@@ -430,14 +531,34 @@ public class HomingMissileGuidance : MonoBehaviour
                 continue;
             }
 
-            float distanceSqr = ((Vector2)playerObject.transform.position - origin).sqrMagnitude;
-            if (distanceSqr < bestDistanceSqr)
+            Vector2 targetPosition = playerObject.transform.position;
+            float airDistanceSqr = (targetPosition - origin).sqrMagnitude;
+            if (airDistanceSqr < bestAirDistanceSqr)
             {
-                bestDistanceSqr = distanceSqr;
-                closestTarget = playerObject.transform;
+                bestAirDistanceSqr = airDistanceSqr;
+                closestTargetByAir = playerObject.transform;
+            }
+
+            if (!hasMaze)
+            {
+                continue;
+            }
+
+            targetEvaluationPathBuffer.Clear();
+            if (!resolvedMaze.TryFindPath(origin, targetPosition, targetEvaluationPathBuffer) ||
+                targetEvaluationPathBuffer.Count == 0)
+            {
+                continue;
+            }
+
+            float pathDistanceTiles = GetPathDistanceTiles(targetEvaluationPathBuffer, resolvedMaze.cellSize);
+            if (pathDistanceTiles < bestPathDistanceTiles)
+            {
+                bestPathDistanceTiles = pathDistanceTiles;
+                closestTargetByPath = playerObject.transform;
             }
         }
 
-        return closestTarget;
+        return closestTargetByPath != null ? closestTargetByPath : closestTargetByAir;
     }
 }

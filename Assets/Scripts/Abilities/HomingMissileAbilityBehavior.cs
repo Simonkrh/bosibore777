@@ -44,6 +44,22 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
     [Tooltip("Probe radius for line-of-sight tests. Higher = more conservative LOS checks. Lower = more permissive/aggressive LOS.")]
     [SerializeField] private float lineOfSightProbeRadius = 0.04f;
 
+    [Header("Adaptive Navigation")]
+    [Tooltip("Path distance in tiles considered close-range chase. Lower = missile stays in aggressive mode only when very close.")]
+    [SerializeField] private float closeRangeTiles = 2f;
+    [Tooltip("Path distance in tiles considered long-range navigation. Higher = missile stays cautious for longer.")]
+    [SerializeField] private float farRangeTiles = 8f;
+    [Tooltip("Wobble strength multiplier at long range (0..1). Lower = steadier and less wall-prone far from target.")]
+    [SerializeField] private float farRangeWobbleMultiplier = 0.35f;
+    [Tooltip("Wall-hug strength multiplier at long range (0..1). Lower = keeps to safer corridor centerlines at distance.")]
+    [SerializeField] private float farRangeWallHugMultiplier = 0.1f;
+    [Tooltip("Turn-rate scale at long range. Higher = corners are handled more decisively when far.")]
+    [SerializeField] private float farRangeTurnRateMultiplier = 1.15f;
+    [Tooltip("Corner turn-rate multiplier at long range (0..1). 1 means no extra corner widening when far.")]
+    [SerializeField] private float farRangeCornerTurnRateMultiplier = 1f;
+    [Tooltip("Line-of-sight probe scale at long range. Higher = more conservative wall clearance when far.")]
+    [SerializeField] private float farRangeLineOfSightProbeMultiplier = 1.5f;
+
     public override bool TryActivateServer(TankController owner, int shotSequence)
     {
         if (owner == null || homingMissilePrefab == null || !owner.IsServer)
@@ -99,7 +115,14 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
             pathLookaheadNodes,
             wallHugOffset,
             wallHugProbeRadius,
-            lineOfSightProbeRadius);
+            lineOfSightProbeRadius,
+            closeRangeTiles,
+            farRangeTiles,
+            farRangeWobbleMultiplier,
+            farRangeWallHugMultiplier,
+            farRangeTurnRateMultiplier,
+            farRangeCornerTurnRateMultiplier,
+            farRangeLineOfSightProbeMultiplier);
 
         return true;
     }
@@ -121,5 +144,12 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
         wallHugOffset = Mathf.Max(0f, wallHugOffset);
         wallHugProbeRadius = Mathf.Max(0f, wallHugProbeRadius);
         lineOfSightProbeRadius = Mathf.Max(0f, lineOfSightProbeRadius);
+        closeRangeTiles = Mathf.Max(0f, closeRangeTiles);
+        farRangeTiles = Mathf.Max(closeRangeTiles + 0.01f, farRangeTiles);
+        farRangeWobbleMultiplier = Mathf.Clamp01(farRangeWobbleMultiplier);
+        farRangeWallHugMultiplier = Mathf.Clamp01(farRangeWallHugMultiplier);
+        farRangeTurnRateMultiplier = Mathf.Max(0.05f, farRangeTurnRateMultiplier);
+        farRangeCornerTurnRateMultiplier = Mathf.Clamp(farRangeCornerTurnRateMultiplier, 0.05f, 1f);
+        farRangeLineOfSightProbeMultiplier = Mathf.Max(0.05f, farRangeLineOfSightProbeMultiplier);
     }
 }
