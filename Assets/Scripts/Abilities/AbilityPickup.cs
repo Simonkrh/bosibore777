@@ -47,6 +47,32 @@ public class AbilityPickup : NetworkBehaviour
         }
 
         TankAbilityController tankAbilityController = other.GetComponentInParent<TankAbilityController>();
+        if (tankAbilityController == null)
+        {
+            return;
+        }
+
+        TryAssignToTank(tankAbilityController);
+    }
+
+    private void OnTriggerStay2D(Collider2D other)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        TankAbilityController tankAbilityController = other.GetComponentInParent<TankAbilityController>();
+        if (tankAbilityController == null)
+        {
+            return;
+        }
+
+        TryAssignToTank(tankAbilityController);
+    }
+
+    private void TryAssignToTank(TankAbilityController tankAbilityController)
+    {
         if (tankAbilityController == null || tankAbilityController.HasAbility || tankAbilityController.IsAbilityUsageActive)
         {
             return;
