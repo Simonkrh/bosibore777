@@ -9,9 +9,9 @@ using UnityEditor;
 public class HomingMissileAbilityBehavior : AbilityBehavior
 {
     [Header("Tank Visuals")]
-    [Tooltip("Sprite shown on the shooter's tank after firing, until the missile despawns. Must be inside a Resources folder.")]
-    [SerializeField] private Sprite firedTankSprite;
-    [SerializeField, HideInInspector] private string firedTankSpriteResourcePath = "Sprites/Tanks/HomingMissileFiredTank";
+    [Tooltip("Optional body prefab shown after firing, used when hitbox should differ from pre-fire body. Must be inside a Resources folder.")]
+    [SerializeField] private GameObject firedTankBodyPrefab;
+    [SerializeField, HideInInspector] private string firedTankBodyPrefabResourcePath = "Prefabs/Abilities/HomingMissile/HomingMissileFiredTankBody";
 
     [Header("Spawn")]
     [Tooltip("Projectile prefab to spawn for this ability.")]
@@ -115,7 +115,7 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
         if (abilityController != null)
         {
             abilityController.RegisterAbilityProjectileServer(spawnedProjectile);
-            abilityController.SetModelOverrideSpriteResourceServer(firedTankSpriteResourcePath);
+            abilityController.SetModelOverridePrefabResourceServer(firedTankBodyPrefabResourcePath);
         }
 
         Projectile missileProjectile = spawnedProjectile.gameObject.GetComponent<Projectile>();
@@ -228,16 +228,16 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
         farRangeLineOfSightProbeMultiplier = Mathf.Max(0.05f, farRangeLineOfSightProbeMultiplier);
 
 #if UNITY_EDITOR
-        if (firedTankSprite != null)
+        if (firedTankBodyPrefab != null)
         {
-            string spriteAssetPath = AssetDatabase.GetAssetPath(firedTankSprite);
+            string prefabAssetPath = AssetDatabase.GetAssetPath(firedTankBodyPrefab);
             string marker = "/Resources/";
-            int markerIndex = spriteAssetPath.IndexOf(marker, System.StringComparison.OrdinalIgnoreCase);
+            int markerIndex = prefabAssetPath.IndexOf(marker, System.StringComparison.OrdinalIgnoreCase);
             if (markerIndex >= 0)
             {
-                string relativePath = spriteAssetPath.Substring(markerIndex + marker.Length);
+                string relativePath = prefabAssetPath.Substring(markerIndex + marker.Length);
                 int extensionIndex = relativePath.LastIndexOf('.');
-                firedTankSpriteResourcePath = extensionIndex >= 0
+                firedTankBodyPrefabResourcePath = extensionIndex >= 0
                     ? relativePath.Substring(0, extensionIndex)
                     : relativePath;
             }

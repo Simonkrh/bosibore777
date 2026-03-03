@@ -31,6 +31,11 @@ public class TankAbilityController : NetworkBehaviour
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
     );
+    private readonly NetworkVariable<FixedString128Bytes> overrideModelPrefabResourcePath = new NetworkVariable<FixedString128Bytes>(
+        default,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
 
     private GameObject runtimeModelOverride;
     private SpriteRenderer[] runtimeModelOverrideRenderers;
@@ -43,6 +48,7 @@ public class TankAbilityController : NetworkBehaviour
     {
         equippedAbilityId.OnValueChanged += HandleEquippedAbilityChanged;
         overrideSpriteResourcePath.OnValueChanged += HandleOverrideSpritePathChanged;
+        overrideModelPrefabResourcePath.OnValueChanged += HandleOverrideModelPrefabPathChanged;
         ApplyAbilityVisual(equippedAbilityId.Value.ToString());
     }
 
@@ -50,6 +56,7 @@ public class TankAbilityController : NetworkBehaviour
     {
         equippedAbilityId.OnValueChanged -= HandleEquippedAbilityChanged;
         overrideSpriteResourcePath.OnValueChanged -= HandleOverrideSpritePathChanged;
+        overrideModelPrefabResourcePath.OnValueChanged -= HandleOverrideModelPrefabPathChanged;
         ClearRuntimeModelOverride();
     }
 
@@ -61,6 +68,7 @@ public class TankAbilityController : NetworkBehaviour
         }
 
         overrideSpriteResourcePath.Value = default;
+        overrideModelPrefabResourcePath.Value = default;
         equippedAbilityId.Value = definition.Id.Trim();
         return true;
     }
@@ -136,6 +144,7 @@ public class TankAbilityController : NetworkBehaviour
         }
 
         overrideSpriteResourcePath.Value = default;
+        overrideModelPrefabResourcePath.Value = default;
         equippedAbilityId.Value = default;
     }
 
@@ -149,6 +158,16 @@ public class TankAbilityController : NetworkBehaviour
         overrideSpriteResourcePath.Value = string.IsNullOrWhiteSpace(resourcesPath) ? default : resourcesPath.Trim();
     }
 
+    public void SetModelOverridePrefabResourceServer(string resourcesPath)
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        overrideModelPrefabResourcePath.Value = string.IsNullOrWhiteSpace(resourcesPath) ? default : resourcesPath.Trim();
+    }
+
     private void HandleEquippedAbilityChanged(FixedString64Bytes _, FixedString64Bytes newValue)
     {
         ApplyAbilityVisual(newValue.ToString());
@@ -157,6 +176,11 @@ public class TankAbilityController : NetworkBehaviour
     private void HandleOverrideSpritePathChanged(FixedString128Bytes _, FixedString128Bytes newValue)
     {
         ApplyRuntimeModelOverrideSpriteFromPath(newValue.ToString());
+    }
+
+    private void HandleOverrideModelPrefabPathChanged(FixedString128Bytes _, FixedString128Bytes __)
+    {
+        ApplyAbilityVisual(equippedAbilityId.Value.ToString());
     }
 
     private void ApplyAbilityVisual(string abilityId)
@@ -170,7 +194,7 @@ public class TankAbilityController : NetworkBehaviour
             return;
         }
 
-        GameObject overridePrefab = definition.TankModelOverridePrefab;
+        GameObject overridePrefab = ResolveModelOverridePrefab(definition);
         if (overridePrefab == null)
         {
             SetDefaultBodyOverrideActive(false);
@@ -207,6 +231,21 @@ public class TankAbilityController : NetworkBehaviour
         }
 
         return transform;
+    }
+
+    private GameObject ResolveModelOverridePrefab(AbilityDefinition definition)
+    {
+        string overridePrefabPath = overrideModelPrefabResourcePath.Value.ToString();
+        if (!string.IsNullOrWhiteSpace(overridePrefabPath))
+        {
+            GameObject loadedOverride = Resources.Load<GameObject>(overridePrefabPath);
+            if (loadedOverride != null)
+            {
+                return loadedOverride;
+            }
+        }
+
+        return definition.TankModelOverridePrefab;
     }
 
     private void ClearRuntimeModelOverride()
