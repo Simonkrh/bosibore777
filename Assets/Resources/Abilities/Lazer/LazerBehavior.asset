@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e357d90f8c0f4647bc3f8457cff0204f, type: 3}
+  m_Name: LazerBehavior
+  m_EditorClassIdentifier: 
+  lazerTankBodyPrefab: {fileID: 6225562633387485068, guid: 6ba9cf55f3d7494b84f9d94073f5a58d, type: 3}
+  lazerTankBodyPrefabResourcePath: Prefabs/Abilities/Lazer/LazerTankBody
+  lazerProjectilePrefab: {fileID: 6673431591696494813, guid: cc0aee0f6e4b4fd784f35e1338a96940, type: 3}
+  projectedLazerLength: 4
+  lazerBulletSpeed: 30
+  lazerBulletMaxDistance: 12
+  extraSpawnDistance: 0
+  tintProjectilesWithShooterColor: 1

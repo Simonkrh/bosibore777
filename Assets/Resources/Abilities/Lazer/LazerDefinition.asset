@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8731fd3f280d1c648b45ff85206f92e2, type: 3}
+  m_Name: LazerDefinition
+  m_EditorClassIdentifier: 
+  id: ability.lazer
+  displayName: Lazer
+  spawnWeight: 1
+  pickupVisualPrefab: {fileID: 3372658264404020033, guid: 43d62410c65545118fbed0a8f6c10491, type: 3}
+  tankModelOverridePrefab: {fileID: 6225562633387485068, guid: 6ba9cf55f3d7494b84f9d94073f5a58d, type: 3}
+  behavior: {fileID: 11400000, guid: b78f118f6d8f4ef090f316544f57c469, type: 2}

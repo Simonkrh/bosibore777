@@ -39,6 +39,8 @@ public class Projectile : NetworkBehaviour
     private bool allowImmediateSelfHit;
     private DestroyCause pendingDestroyCause = DestroyCause.Unknown;
 
+    public ulong ShooterClientId => shooterId;
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();

@@ -641,10 +641,26 @@ public class TankController : NetworkBehaviour
         out Vector2 fireDirection,
         out float projectileRadius)
     {
+        float resolvedProjectileRadius = GetProjectileRadius();
+        ComputeProjectileSpawnWithRadius(
+            additionalSpawnDistance,
+            resolvedProjectileRadius,
+            out spawnPosition2D,
+            out spawnRotation,
+            out fireDirection);
+        projectileRadius = resolvedProjectileRadius;
+    }
+
+    private void ComputeProjectileSpawnWithRadius(
+        float additionalSpawnDistance,
+        float projectileRadius,
+        out Vector2 spawnPosition2D,
+        out Quaternion spawnRotation,
+        out Vector2 fireDirection)
+    {
         Transform firingTransform = rotationChild != null ? rotationChild : transform;
         fireDirection = firingTransform.up.normalized;
         spawnRotation = firingTransform.rotation;
-        projectileRadius = GetProjectileRadius();
 
         float shooterForwardExtent = GetShooterForwardExtent(fireDirection);
         float minimumDistanceFromShooter = shooterForwardExtent + projectileRadius + 0.01f;
@@ -709,6 +725,60 @@ public class TankController : NetworkBehaviour
             out fireDirection,
             out projectileRadius);
 
+        return true;
+    }
+
+    public bool TryComputeAbilityProjectileSpawn(
+        GameObject projectileToSpawn,
+        float additionalSpawnDistance,
+        out Vector2 spawnPosition2D,
+        out Quaternion spawnRotation,
+        out Vector2 fireDirection,
+        out float projectileRadius)
+    {
+        if (!IsServer || projectileToSpawn == null)
+        {
+            spawnPosition2D = default;
+            spawnRotation = Quaternion.identity;
+            fireDirection = Vector2.zero;
+            projectileRadius = 0f;
+            return false;
+        }
+
+        projectileRadius = GetProjectileRadiusForPrefab(projectileToSpawn);
+        ComputeProjectileSpawnWithRadius(
+            additionalSpawnDistance,
+            projectileRadius,
+            out spawnPosition2D,
+            out spawnRotation,
+            out fireDirection);
+        return true;
+    }
+
+    public bool TryComputeAbilityProjectilePreviewSpawn(
+        GameObject projectileToSpawn,
+        float additionalSpawnDistance,
+        out Vector2 spawnPosition2D,
+        out Quaternion spawnRotation,
+        out Vector2 fireDirection,
+        out float projectileRadius)
+    {
+        if (projectileToSpawn == null)
+        {
+            spawnPosition2D = default;
+            spawnRotation = Quaternion.identity;
+            fireDirection = Vector2.zero;
+            projectileRadius = 0f;
+            return false;
+        }
+
+        projectileRadius = GetProjectileRadiusForPrefab(projectileToSpawn);
+        ComputeProjectileSpawnWithRadius(
+            additionalSpawnDistance,
+            projectileRadius,
+            out spawnPosition2D,
+            out spawnRotation,
+            out fireDirection);
         return true;
     }
 
@@ -1067,10 +1137,15 @@ public class TankController : NetworkBehaviour
 
     private float GetProjectileRadius()
     {
-        CircleCollider2D circleCollider = projectilePrefab != null ? projectilePrefab.GetComponent<CircleCollider2D>() : null;
+        return GetProjectileRadiusForPrefab(projectilePrefab);
+    }
+
+    private static float GetProjectileRadiusForPrefab(GameObject sourceProjectilePrefab)
+    {
+        CircleCollider2D circleCollider = sourceProjectilePrefab != null ? sourceProjectilePrefab.GetComponent<CircleCollider2D>() : null;
         if (circleCollider != null)
         {
-            Vector3 scale = projectilePrefab.transform.localScale;
+            Vector3 scale = sourceProjectilePrefab.transform.localScale;
             float scaleFactor = Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.y));
             return Mathf.Max(0.005f, circleCollider.radius * scaleFactor);
         }
@@ -1085,8 +1160,20 @@ public class TankController : NetworkBehaviour
             return 0.2f;
         }
 
+        if (direction.sqrMagnitude <= Mathf.Epsilon)
+        {
+            return 0.2f;
+        }
+
+        Vector2 normalizedDirection = direction.normalized;
+        Vector2 firingOrigin = rotationChild != null ? (Vector2)rotationChild.position : (Vector2)transform.position;
+        Vector2 centerOffsetFromOrigin = (Vector2)combinedBounds.center - firingOrigin;
         Vector2 extents = combinedBounds.extents;
-        return Mathf.Abs(direction.x) * extents.x + Mathf.Abs(direction.y) * extents.y;
+
+        // Bounds extents are relative to bounds center, so include center offset from muzzle origin.
+        float centeredProjection = Mathf.Abs(normalizedDirection.x) * extents.x + Mathf.Abs(normalizedDirection.y) * extents.y;
+        float offsetProjection = Vector2.Dot(centerOffsetFromOrigin, normalizedDirection);
+        return Mathf.Max(0f, centeredProjection + offsetProjection);
     }
 
     private float GetShooterSelfHitUnlockRadius(float projectileRadius)
