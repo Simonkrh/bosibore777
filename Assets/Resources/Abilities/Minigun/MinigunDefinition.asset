@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8731fd3f280d1c648b45ff85206f92e2, type: 3}
+  m_Name: MinigunDefinition
+  m_EditorClassIdentifier: 
+  id: ability.minigun
+  displayName: Minigun
+  spawnWeight: 1
+  pickupVisualPrefab: {fileID: 3372658264404020033, guid: f832255b74d546fba2f5b95a85d9f31e, type: 3}
+  tankModelOverridePrefab: {fileID: 6225562633387485068, guid: 3aa5fc2f9f59442780d8fa5e6ce2a0d7, type: 3}
+  behavior: {fileID: 11400000, guid: 1c7b829300eb4c0bb4d0ddf05353a4e6, type: 2}

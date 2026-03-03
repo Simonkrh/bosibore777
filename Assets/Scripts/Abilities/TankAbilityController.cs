@@ -109,6 +109,29 @@ public class TankAbilityController : NetworkBehaviour
         return true;
     }
 
+    public void NotifyAbilityInputReleasedServer(TankController owner)
+    {
+        if (!IsServer || owner == null)
+        {
+            return;
+        }
+
+        string currentAbilityId = equippedAbilityId.Value.ToString();
+        if (string.IsNullOrWhiteSpace(currentAbilityId))
+        {
+            return;
+        }
+
+        if (!AbilityRuntimeDatabase.TryGetById(currentAbilityId, out AbilityDefinition definition) ||
+            definition == null ||
+            definition.Behavior == null)
+        {
+            return;
+        }
+
+        definition.Behavior.NotifyInputReleasedServer(owner);
+    }
+
     public bool RegisterAbilityProjectileServer(NetworkObject projectileNetworkObject)
     {
         if (!IsServer || projectileNetworkObject == null || !projectileNetworkObject.IsSpawned)

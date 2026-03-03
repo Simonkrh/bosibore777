@@ -10,4 +10,8 @@ public enum AbilityActivationResult
 public abstract class AbilityBehavior : ScriptableObject
 {
     public abstract AbilityActivationResult TryActivateServer(TankController owner, int shotSequence);
+
+    public virtual void NotifyInputReleasedServer(TankController owner)
+    {
+    }
 }

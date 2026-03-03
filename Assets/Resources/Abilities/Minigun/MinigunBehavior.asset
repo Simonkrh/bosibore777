@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9df559a31dc84c86a74a0de3978a1d5d, type: 3}
+  m_Name: MinigunBehavior
+  m_EditorClassIdentifier: 
+  minigunTankBodyPrefab: {fileID: 6225562633387485068, guid: 3aa5fc2f9f59442780d8fa5e6ce2a0d7, type: 3}
+  minigunTankBodyPrefabResourcePath: Prefabs/Abilities/Minigun/MinigunTankBody
+  miniBulletPrefab: {fileID: 6673431591696494813, guid: d37f35e50a7307042ab770e184f4908d, type: 3}
+  spreadDegrees: 8
+  bulletCount: 20
+  firingDurationSeconds: 2.5
+  bulletSpeed: 2.4
+  chargeUpSeconds: 1
+  clearAfterSeconds: 2
+  extraSpawnDistance: 0.03
+  shotSequenceStride: 1000
+  tintProjectilesWithShooterColor: 0

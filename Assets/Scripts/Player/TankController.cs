@@ -409,14 +409,22 @@ public class TankController : NetworkBehaviour
 
     private void HandleShooting()
     {
-        if (!Input.GetKeyDown(KeyCode.Space))
+        bool pressedSpace = Input.GetKeyDown(KeyCode.Space);
+        bool releasedSpace = Input.GetKeyUp(KeyCode.Space);
+
+        bool hasUsableAbility = abilityController != null && abilityController.HasAbility;
+        bool abilityUsageInProgress = abilityController != null && abilityController.IsAbilityUsageActive;
+        if (releasedSpace && (hasUsableAbility || abilityUsageInProgress))
+        {
+            NotifyAbilityInputReleasedServerRpc();
+        }
+
+        if (!pressedSpace)
         {
             return;
         }
 
         int shotSequence = nextLocalShotSequence++;
-        bool hasUsableAbility = abilityController != null && abilityController.HasAbility;
-        bool abilityUsageInProgress = abilityController != null && abilityController.IsAbilityUsageActive;
         if (hasUsableAbility)
         {
             TryUseEquippedAbilityServerRpc(shotSequence);
@@ -442,6 +450,26 @@ public class TankController : NetworkBehaviour
 
         ShootServerRpc(shotSequence);
         lastShotTime = Time.time;
+    }
+
+    [ServerRpc]
+    private void NotifyAbilityInputReleasedServerRpc(ServerRpcParams serverRpcParams = default)
+    {
+        if (serverRpcParams.Receive.SenderClientId != OwnerClientId)
+        {
+            return;
+        }
+
+        if (abilityController == null)
+        {
+            abilityController = GetComponent<TankAbilityController>();
+            if (abilityController == null)
+            {
+                return;
+            }
+        }
+
+        abilityController.NotifyAbilityInputReleasedServer(this);
     }
 
     [ServerRpc]

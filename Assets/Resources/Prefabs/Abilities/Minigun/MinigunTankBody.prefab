@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 5468645838082112802}
   - component: {fileID: 1233872058322956659}
   m_Layer: 7
-  m_Name: HomingMissileTankBody
+  m_Name: MinigunTankBody
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -78,12 +78,12 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 100
-  m_Sprite: {fileID: 21300000, guid: d293313d9726af4429b1401ff45c3ec2, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 7b57542cb66cc8545a467c6defd9f70d, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 0.24782608, y: 0.39130434}
+  m_Size: {x: 0.24782608, y: 0.40434784}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -128,7 +128,7 @@ BoxCollider2D:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.43}
     oldSize: {x: 0.24782608, y: 0.4347826}
-    newSize: {x: 0.24782608, y: 0.39130434}
+    newSize: {x: 0.24782608, y: 0.40434784}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
     adaptiveTiling: 0
@@ -169,15 +169,15 @@ BoxCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 0.0008001104, y: 0.18213327}
+  m_Offset: {x: -0.00009961799, y: 0.16434097}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.43}
     oldSize: {x: 0.24782608, y: 0.4347826}
-    newSize: {x: 0.24782608, y: 0.39130434}
+    newSize: {x: 0.24782608, y: 0.40434784}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 0.059001684, y: 0.12348941}
+  m_Size: {x: 0.06709925, y: 0.08790487}
   m_EdgeRadius: 0
