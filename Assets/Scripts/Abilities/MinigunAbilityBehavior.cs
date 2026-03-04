@@ -26,7 +26,7 @@ public class MinigunAbilityBehavior : AbilityBehavior
     [Header("Timing")]
     [Tooltip("How long the player must hold before firing starts.")]
     [SerializeField] private float chargeUpSeconds = 1f;
-    [Tooltip("How long after cancel/finish before the ability clears.")]
+    [Tooltip("How long after the full burst finishes before the ability clears.")]
     [SerializeField] private float clearAfterSeconds = 2f;
 
     [Header("Spawn")]

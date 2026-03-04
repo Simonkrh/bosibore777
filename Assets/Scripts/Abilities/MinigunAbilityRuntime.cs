@@ -86,18 +86,21 @@ public class MinigunAbilityRuntime : MonoBehaviour
 
     public void NotifyInputReleased()
     {
-        if (state != RuntimeState.Charging)
+        if (state == RuntimeState.Idle)
         {
             return;
         }
 
-        // Releasing after charge is complete should not cancel the burst.
-        if (Time.time - chargeStartTime >= chargeUpSeconds)
+        if (state == RuntimeState.WaitingToClear)
         {
             return;
         }
 
-        releasedDuringCharge = true;
+        if (state == RuntimeState.Charging)
+        {
+            releasedDuringCharge = true;
+        }
+
         BeginClearCountdown(Time.time);
     }
 
