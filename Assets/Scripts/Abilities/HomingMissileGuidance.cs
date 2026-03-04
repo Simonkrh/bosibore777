@@ -26,6 +26,7 @@ public class HomingMissileGuidance : MonoBehaviour
     private float wobbleBaselineStrength = 0.15f;
     private float wobbleBuildUpPerSecond = 2.5f;
     private float wobbleDecayPerSecond = 1f;
+    private float wobbleCloseRangeTiles = 2f;
     private int pathLookaheadNodes = 4;
     private float wallHugOffset = 0.22f;
     private float wallHugProbeRadius = 0.05f;
@@ -64,6 +65,7 @@ public class HomingMissileGuidance : MonoBehaviour
         float wobbleBaselineStrengthValue,
         float wobbleBuildUpPerSecondValue,
         float wobbleDecayPerSecondValue,
+        float wobbleCloseRangeTilesValue,
         int pathLookaheadNodesValue,
         float wallHugOffsetValue,
         float wallHugProbeRadiusValue,
@@ -86,6 +88,7 @@ public class HomingMissileGuidance : MonoBehaviour
         wobbleBaselineStrength = Mathf.Clamp01(wobbleBaselineStrengthValue);
         wobbleBuildUpPerSecond = Mathf.Max(0f, wobbleBuildUpPerSecondValue);
         wobbleDecayPerSecond = Mathf.Max(0f, wobbleDecayPerSecondValue);
+        wobbleCloseRangeTiles = Mathf.Max(0f, wobbleCloseRangeTilesValue);
         pathLookaheadNodes = Mathf.Max(1, pathLookaheadNodesValue);
         wallHugOffset = Mathf.Max(0f, wallHugOffsetValue);
         wallHugProbeRadius = Mathf.Max(0f, wallHugProbeRadiusValue);
@@ -181,6 +184,14 @@ public class HomingMissileGuidance : MonoBehaviour
         }
 
         float rangeScaledWobble = Mathf.Lerp(farRangeWobbleMultiplier, 1f, closeRangeFactor);
+        if (TryResolveMazeGenerator(out MazeGenerator resolvedMaze))
+        {
+            float distanceTiles = Vector2.Distance(rb.position, targetPosition) / Mathf.Max(0.0001f, resolvedMaze.cellSize);
+            if (distanceTiles > wobbleCloseRangeTiles)
+            {
+                rangeScaledWobble = 0f;
+            }
+        }
         float wobbleOffsetDegrees = Mathf.Sin(wobblePhaseRadians) * wobbleAmplitudeDegrees * wobbleStrength * rangeScaledWobble;
         Vector2 wobbledDesiredDirection =
             (Quaternion.Euler(0f, 0f, wobbleOffsetDegrees) * desiredDirection).normalized;

@@ -42,6 +42,8 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
     [SerializeField] private float wobbleBuildUpPerSecond = 1.5f;
     [Tooltip("How quickly wobble fades when turn demand is low. Higher = settles faster. Lower = wobble lingers longer.")]
     [SerializeField] private float wobbleDecayPerSecond = 5f;
+    [Tooltip("Wiggle is only applied when the missile is within this target distance (in tiles).")]
+    [SerializeField] private float wobbleCloseRangeTiles = 2f;
 
     [Header("Path Wall Bias")]
     [Tooltip("How many nodes ahead can be considered on straight corridors. Higher = more forward-looking. Lower = more local tracking.")]
@@ -143,6 +145,7 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
             wobbleBaselineStrength,
             wobbleBuildUpPerSecond,
             wobbleDecayPerSecond,
+            wobbleCloseRangeTiles,
             pathLookaheadNodes,
             wallHugOffset,
             wallHugProbeRadius,
@@ -215,6 +218,7 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
         wobbleBaselineStrength = Mathf.Clamp01(wobbleBaselineStrength);
         wobbleBuildUpPerSecond = Mathf.Max(0f, wobbleBuildUpPerSecond);
         wobbleDecayPerSecond = Mathf.Max(0f, wobbleDecayPerSecond);
+        wobbleCloseRangeTiles = Mathf.Max(0f, wobbleCloseRangeTiles);
         pathLookaheadNodes = Mathf.Max(1, pathLookaheadNodes);
         wallHugOffset = Mathf.Max(0f, wallHugOffset);
         wallHugProbeRadius = Mathf.Max(0f, wallHugProbeRadius);

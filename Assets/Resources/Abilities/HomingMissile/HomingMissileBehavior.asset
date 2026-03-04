@@ -26,6 +26,7 @@ MonoBehaviour:
   wobbleBaselineStrength: 0.25
   wobbleBuildUpPerSecond: 1.5
   wobbleDecayPerSecond: 5
+  wobbleCloseRangeTiles: 2
   pathLookaheadNodes: 5
   wallHugOffset: 0.3
   wallHugProbeRadius: 0.06

@@ -389,7 +389,8 @@ MonoBehaviour:
   maxActivePickups: 10
   blockedTileRadiusAroundPlayers: 1
   maxSpawnPositionAttempts: 32
-  spawnPool: []
+  spawnPool:
+  - {fileID: 11400000, guid: a39a650a850d66248b8b74a7bba11802, type: 2}
 --- !u!1001 &459090433
 PrefabInstance:
   m_ObjectHideFlags: 0
