@@ -9,6 +9,21 @@ public class LazerAbilityBehavior : AbilityBehavior
 {
     public const string LazerAbilityId = "ability.lazer";
 
+    public struct PreviewVisualSettings
+    {
+        public float BeamWidth;
+        public float BeamAlpha;
+        public float FlickerRefreshRate;
+        public int SortingOrder;
+        public int ReflectionSafetyLimit;
+        public float MinRectLength;
+        public float MaxRectLength;
+        public float MinGapLength;
+        public float MaxGapLength;
+        public int MaxRectsPerFrame;
+        public Sprite RectSprite;
+    }
+
     [Header("Tank Visuals")]
     [Tooltip("Body prefab used while this ability is equipped. Must be inside a Resources folder.")]
     [SerializeField] private GameObject lazerTankBodyPrefab;
@@ -27,6 +42,19 @@ public class LazerAbilityBehavior : AbilityBehavior
     [SerializeField] private float extraSpawnDistance = 0.08f;
     [Tooltip("When enabled, projectile color matches the shooter's tank color.")]
     [SerializeField] private bool tintProjectilesWithShooterColor = true;
+
+    [Header("Projected Lazer Preview")]
+    [SerializeField] private float previewBeamWidth = 0.055f;
+    [SerializeField] private float previewBeamAlpha = 0.65f;
+    [SerializeField] private float previewFlickerRefreshRate = 30f;
+    [SerializeField] private int previewSortingOrder = 120;
+    [SerializeField] private int previewReflectionSafetyLimit = 24;
+    [SerializeField] private float previewMinRectLength = 0.04f;
+    [SerializeField] private float previewMaxRectLength = 0.35f;
+    [SerializeField] private float previewMinGapLength = 0.01f;
+    [SerializeField] private float previewMaxGapLength = 0.14f;
+    [SerializeField] private int previewMaxRectsPerFrame = 200;
+    [SerializeField] private Sprite previewRectSprite;
 
     private static LazerAbilityBehavior cachedBehavior;
 
@@ -125,12 +153,14 @@ public class LazerAbilityBehavior : AbilityBehavior
         out GameObject projectilePrefab,
         out float previewLength,
         out float projectileMaxDistance,
-        out float spawnOffset)
+        out float spawnOffset,
+        out PreviewVisualSettings previewVisualSettings)
     {
         projectilePrefab = null;
         previewLength = 0f;
         projectileMaxDistance = 0f;
         spawnOffset = 0f;
+        previewVisualSettings = default;
 
         if (!TryResolveBehavior(out LazerAbilityBehavior behavior) || behavior == null)
         {
@@ -141,6 +171,20 @@ public class LazerAbilityBehavior : AbilityBehavior
         previewLength = behavior.projectedLazerLength;
         projectileMaxDistance = behavior.lazerBulletMaxDistance;
         spawnOffset = behavior.extraSpawnDistance;
+        previewVisualSettings = new PreviewVisualSettings
+        {
+            BeamWidth = behavior.previewBeamWidth,
+            BeamAlpha = behavior.previewBeamAlpha,
+            FlickerRefreshRate = behavior.previewFlickerRefreshRate,
+            SortingOrder = behavior.previewSortingOrder,
+            ReflectionSafetyLimit = behavior.previewReflectionSafetyLimit,
+            MinRectLength = behavior.previewMinRectLength,
+            MaxRectLength = behavior.previewMaxRectLength,
+            MinGapLength = behavior.previewMinGapLength,
+            MaxGapLength = behavior.previewMaxGapLength,
+            MaxRectsPerFrame = behavior.previewMaxRectsPerFrame,
+            RectSprite = behavior.previewRectSprite
+        };
         return projectilePrefab != null;
     }
 
@@ -171,6 +215,16 @@ public class LazerAbilityBehavior : AbilityBehavior
         lazerBulletSpeed = Mathf.Max(0f, lazerBulletSpeed);
         lazerBulletMaxDistance = Mathf.Max(0f, lazerBulletMaxDistance);
         extraSpawnDistance = Mathf.Max(0f, extraSpawnDistance);
+        previewBeamWidth = Mathf.Max(0.001f, previewBeamWidth);
+        previewBeamAlpha = Mathf.Clamp01(previewBeamAlpha);
+        previewFlickerRefreshRate = Mathf.Clamp(previewFlickerRefreshRate, 0.1f, 240f);
+        previewReflectionSafetyLimit = Mathf.Max(0, previewReflectionSafetyLimit);
+        previewMinRectLength = Mathf.Max(0.001f, previewMinRectLength);
+        previewMaxRectLength = Mathf.Max(previewMinRectLength, previewMaxRectLength);
+        previewMinGapLength = Mathf.Max(0f, previewMinGapLength);
+        previewMaxGapLength = Mathf.Max(previewMinGapLength, previewMaxGapLength);
+        previewMaxRectsPerFrame = Mathf.Clamp(previewMaxRectsPerFrame, 1, 1024);
+        previewSortingOrder = Mathf.Clamp(previewSortingOrder, -32768, 32767);
 
 #if UNITY_EDITOR
         if (lazerTankBodyPrefab != null)

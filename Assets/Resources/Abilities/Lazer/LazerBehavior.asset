@@ -20,3 +20,14 @@ MonoBehaviour:
   lazerBulletMaxDistance: 12
   extraSpawnDistance: 0
   tintProjectilesWithShooterColor: 1
+  previewBeamWidth: 0.02
+  previewBeamAlpha: 1
+  previewFlickerRefreshRate: 25
+  previewSortingOrder: 40
+  previewReflectionSafetyLimit: 24
+  previewMinRectLength: 0.03
+  previewMaxRectLength: 0.2
+  previewMinGapLength: 0.1
+  previewMaxGapLength: 0.5
+  previewMaxRectsPerFrame: 500
+  previewRectSprite: {fileID: -302198463023096283, guid: 2138a1bee54e2ad48aa3e9463195a688, type: 3}

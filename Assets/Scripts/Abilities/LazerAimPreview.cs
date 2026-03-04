@@ -4,25 +4,26 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public class LazerAimPreview : MonoBehaviour
 {
-    [Header("Beam")]
-    [SerializeField] private float beamWidth = 0.055f;
-    [SerializeField] private float beamAlpha = 0.65f;
-    [SerializeField] private int sortingOrder = 120;
-    [SerializeField] private int previewReflectionSafetyLimit = 24;
-
-    [Header("Flicker")]
-    [SerializeField] private float minRectLength = 0.04f;
-    [SerializeField] private float maxRectLength = 0.35f;
-    [SerializeField] private float minGapLength = 0.01f;
-    [SerializeField] private float maxGapLength = 0.14f;
-    [SerializeField] private int maxRectsPerFrame = 200;
-
     private TankController ownerTank;
     private readonly List<Vector3> pathPoints = new List<Vector3>(32);
     private readonly List<SpriteRenderer> rectPool = new List<SpriteRenderer>(64);
-    private Sprite runtimeRectSprite;
-    private Texture2D runtimeRectTexture;
+    private Sprite activeRectSprite;
+    private Sprite generatedRectSprite;
+    private Texture2D generatedRectTexture;
     private Material rectMaterial;
+    private float beamWidth = 0.055f;
+    private float beamAlpha = 0.65f;
+    private float flickerRefreshRate = 30f;
+    private int sortingOrder = 120;
+    private int previewReflectionSafetyLimit = 24;
+    private float minRectLength = 0.04f;
+    private float maxRectLength = 0.35f;
+    private float minGapLength = 0.01f;
+    private float maxGapLength = 0.14f;
+    private int maxRectsPerFrame = 200;
+    private int flickerPatternVersion;
+    private float nextFlickerPatternChangeAt;
+    private uint flickerSeed;
 
     private const float MinDistanceEpsilon = 0.0001f;
     private const float SurfacePushEpsilon = 0.002f;
@@ -30,21 +31,25 @@ public class LazerAimPreview : MonoBehaviour
     private void Awake()
     {
         rectMaterial = CreateSpriteMaterial();
-        runtimeRectSprite = CreateRectSprite(out runtimeRectTexture);
+        generatedRectSprite = CreateRectSprite(out generatedRectTexture);
+        activeRectSprite = generatedRectSprite;
+        flickerSeed = (uint)gameObject.GetInstanceID();
+        flickerPatternVersion = 1;
+        nextFlickerPatternChangeAt = Time.unscaledTime;
     }
 
     private void OnDestroy()
     {
-        if (runtimeRectSprite != null)
+        if (generatedRectSprite != null)
         {
-            Destroy(runtimeRectSprite);
-            runtimeRectSprite = null;
+            Destroy(generatedRectSprite);
+            generatedRectSprite = null;
         }
 
-        if (runtimeRectTexture != null)
+        if (generatedRectTexture != null)
         {
-            Destroy(runtimeRectTexture);
-            runtimeRectTexture = null;
+            Destroy(generatedRectTexture);
+            generatedRectTexture = null;
         }
 
         if (rectMaterial != null)
@@ -62,10 +67,13 @@ public class LazerAimPreview : MonoBehaviour
                 out GameObject projectilePrefab,
                 out float previewLength,
                 out float projectileMaxDistance,
-                out float spawnOffset))
+                out float spawnOffset,
+                out LazerAbilityBehavior.PreviewVisualSettings previewVisualSettings))
         {
             return;
         }
+
+        ApplyPreviewSettings(previewVisualSettings);
 
         float clampedPreviewLength = Mathf.Max(0f, previewLength);
         float clampedProjectileMaxDistance = Mathf.Max(0f, projectileMaxDistance);
@@ -121,13 +129,71 @@ public class LazerAimPreview : MonoBehaviour
         out GameObject projectilePrefab,
         out float previewLength,
         out float projectileMaxDistance,
-        out float spawnOffset)
+        out float spawnOffset,
+        out LazerAbilityBehavior.PreviewVisualSettings previewVisualSettings)
     {
         return LazerAbilityBehavior.TryGetRuntimeConfig(
             out projectilePrefab,
             out previewLength,
             out projectileMaxDistance,
-            out spawnOffset);
+            out spawnOffset,
+            out previewVisualSettings);
+    }
+
+    private void ApplyPreviewSettings(LazerAbilityBehavior.PreviewVisualSettings settings)
+    {
+        beamWidth = Mathf.Max(0.001f, settings.BeamWidth);
+        beamAlpha = Mathf.Clamp01(settings.BeamAlpha);
+        previewReflectionSafetyLimit = Mathf.Max(0, settings.ReflectionSafetyLimit);
+        minRectLength = Mathf.Max(0.001f, settings.MinRectLength);
+        maxRectLength = Mathf.Max(minRectLength, settings.MaxRectLength);
+        minGapLength = Mathf.Max(0f, settings.MinGapLength);
+        maxGapLength = Mathf.Max(minGapLength, settings.MaxGapLength);
+        maxRectsPerFrame = Mathf.Clamp(settings.MaxRectsPerFrame, 1, 1024);
+        flickerRefreshRate = Mathf.Clamp(settings.FlickerRefreshRate, 0.1f, 240f);
+
+        int clampedSortingOrder = Mathf.Clamp(settings.SortingOrder, -32768, 32767);
+        if (sortingOrder != clampedSortingOrder)
+        {
+            sortingOrder = clampedSortingOrder;
+            UpdateRectSortingOrder();
+        }
+
+        SetActiveRectSprite(settings.RectSprite);
+    }
+
+    private void SetActiveRectSprite(Sprite rectSprite)
+    {
+        Sprite resolvedSprite = rectSprite != null ? rectSprite : generatedRectSprite;
+        if (activeRectSprite == resolvedSprite)
+        {
+            return;
+        }
+
+        activeRectSprite = resolvedSprite;
+        UpdateRectSprites();
+    }
+
+    private void UpdateRectSprites()
+    {
+        for (int i = 0; i < rectPool.Count; i++)
+        {
+            if (rectPool[i] != null)
+            {
+                rectPool[i].sprite = activeRectSprite;
+            }
+        }
+    }
+
+    private void UpdateRectSortingOrder()
+    {
+        for (int i = 0; i < rectPool.Count; i++)
+        {
+            if (rectPool[i] != null)
+            {
+                rectPool[i].sortingOrder = sortingOrder;
+            }
+        }
     }
 
     private Vector2 ComputePredictedImpactPoint(
@@ -289,12 +355,15 @@ public class LazerAimPreview : MonoBehaviour
 
     private void RenderFlickerPath(List<Vector3> points, Color beamColor)
     {
-        if (runtimeRectSprite == null || rectMaterial == null)
+        if (activeRectSprite == null || rectMaterial == null)
         {
             return;
         }
 
+        UpdateFlickerPatternClock();
+
         int activeRectCount = 0;
+        int sampleIndex = 0;
         for (int i = 0; i < points.Count - 1; i++)
         {
             Vector2 segmentStart = points[i];
@@ -310,7 +379,7 @@ public class LazerAimPreview : MonoBehaviour
             float cursor = 0f;
             while (cursor < segmentLength && activeRectCount < maxRectsPerFrame)
             {
-                float rectLength = Random.Range(minRectLength, maxRectLength);
+                float rectLength = Mathf.Lerp(minRectLength, maxRectLength, SampleFlicker01(sampleIndex++));
                 float clampedRectLength = Mathf.Min(rectLength, segmentLength - cursor);
                 if (clampedRectLength <= MinDistanceEpsilon)
                 {
@@ -329,7 +398,7 @@ public class LazerAimPreview : MonoBehaviour
                 rectRenderer.enabled = true;
                 activeRectCount++;
 
-                float gapLength = Random.Range(minGapLength, maxGapLength);
+                float gapLength = Mathf.Lerp(minGapLength, maxGapLength, SampleFlicker01(sampleIndex++));
                 cursor += clampedRectLength + gapLength;
             }
 
@@ -340,6 +409,30 @@ public class LazerAimPreview : MonoBehaviour
         }
     }
 
+    private void UpdateFlickerPatternClock()
+    {
+        float interval = 1f / Mathf.Max(0.1f, flickerRefreshRate);
+        float now = Time.unscaledTime;
+        while (now >= nextFlickerPatternChangeAt)
+        {
+            flickerPatternVersion++;
+            nextFlickerPatternChangeAt += interval;
+        }
+    }
+
+    private float SampleFlicker01(int sampleIndex)
+    {
+        uint x = flickerSeed;
+        x ^= (uint)flickerPatternVersion * 0x9E3779B9u;
+        x ^= (uint)sampleIndex * 0x85EBCA6Bu;
+        x ^= x >> 16;
+        x *= 0x7FEB352Du;
+        x ^= x >> 15;
+        x *= 0x846CA68Bu;
+        x ^= x >> 16;
+        return (x & 0x00FFFFFFu) / 16777215f;
+    }
+
     private SpriteRenderer GetRectRenderer(int index)
     {
         while (rectPool.Count <= index)
@@ -347,7 +440,7 @@ public class LazerAimPreview : MonoBehaviour
             GameObject rectObject = new GameObject($"PreviewRect_{rectPool.Count:D3}");
             rectObject.transform.SetParent(transform, false);
             SpriteRenderer rectRenderer = rectObject.AddComponent<SpriteRenderer>();
-            rectRenderer.sprite = runtimeRectSprite;
+            rectRenderer.sprite = activeRectSprite;
             rectRenderer.material = rectMaterial;
             rectRenderer.sortingOrder = sortingOrder;
             rectRenderer.drawMode = SpriteDrawMode.Simple;
@@ -394,11 +487,11 @@ public class LazerAimPreview : MonoBehaviour
         beamWidth = Mathf.Max(0.001f, beamWidth);
         beamAlpha = Mathf.Clamp01(beamAlpha);
         previewReflectionSafetyLimit = Mathf.Max(0, previewReflectionSafetyLimit);
-
         minRectLength = Mathf.Max(0.001f, minRectLength);
         maxRectLength = Mathf.Max(minRectLength, maxRectLength);
         minGapLength = Mathf.Max(0f, minGapLength);
         maxGapLength = Mathf.Max(minGapLength, maxGapLength);
         maxRectsPerFrame = Mathf.Clamp(maxRectsPerFrame, 1, 1024);
+        sortingOrder = Mathf.Clamp(sortingOrder, -32768, 32767);
     }
 }
