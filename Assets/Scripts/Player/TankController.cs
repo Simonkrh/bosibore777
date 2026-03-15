@@ -53,6 +53,8 @@ public class TankController : NetworkBehaviour
     private readonly Dictionary<long, ShotVisualProjectile> activeShotVisuals = new Dictionary<long, ShotVisualProjectile>();
     private int nextLocalShotSequence = 0;
     private float serverLastShotTime = float.NegativeInfinity;
+    private bool hasActiveStandardProjectileServer;
+    private int activeStandardProjectileShotSequence = -1;
     private int wallMask;
     private float nextShotVisualPruneTime;
     private const float ShotVisualPruneInterval = 2f;
@@ -117,6 +119,8 @@ public class TankController : NetworkBehaviour
         lastReceivedServerInputSequence = -1;
         nextLocalShotSequence = 0;
         serverLastShotTime = float.NegativeInfinity;
+        hasActiveStandardProjectileServer = false;
+        activeStandardProjectileShotSequence = -1;
         nextShotVisualPruneTime = 0f;
         pendingInputs.Clear();
         ClearAllShotVisuals();
@@ -529,6 +533,11 @@ public class TankController : NetworkBehaviour
             return;
         }
 
+        if (hasActiveStandardProjectileServer)
+        {
+            return;
+        }
+
         if (projectilePrefab == null)
         {
             Debug.LogError("Projectile prefab is not assigned!");
@@ -619,6 +628,8 @@ public class TankController : NetworkBehaviour
             shooterPosition,
             shooterUnlockRadius,
             HandleAuthoritativeProjectileDestroyed);
+        hasActiveStandardProjectileServer = true;
+        activeStandardProjectileShotSequence = shotSequence;
 
         if (showPredictedShotVisual)
         {
@@ -863,6 +874,14 @@ public class TankController : NetworkBehaviour
         if (!IsServer || !IsSpawned)
         {
             return;
+        }
+
+        if (hasActiveStandardProjectileServer &&
+            shooterClientId == OwnerClientId &&
+            shotSequence == activeStandardProjectileShotSequence)
+        {
+            hasActiveStandardProjectileServer = false;
+            activeStandardProjectileShotSequence = -1;
         }
 
         DespawnShotVisualClientRpc(shooterClientId, shotSequence);
