@@ -7,7 +7,8 @@ public class AbilityPickupSpawner : NetworkBehaviour
 {
     [SerializeField] private AbilityPickup pickupPrefab;
     [SerializeField] private float initialSpawnDelaySeconds = 2f;
-    [SerializeField] private float spawnIntervalSeconds = 8f;
+    [SerializeField] private float minSpawnIntervalSeconds = 2f;
+    [SerializeField] private float maxSpawnIntervalSeconds = 4f;
     [Tooltip("When enabled, maxActivePickups is ignored and spawning continues until no valid tiles remain.")]
     [SerializeField] private bool noLimitSpawning;
     [SerializeField] private int maxActivePickups = 3;
@@ -88,7 +89,10 @@ public class AbilityPickupSpawner : NetworkBehaviour
                 TrySpawnPickup();
             }
 
-            yield return new WaitForSeconds(Mathf.Max(0.1f, spawnIntervalSeconds));
+            float minInterval = Mathf.Min(minSpawnIntervalSeconds, maxSpawnIntervalSeconds);
+            float maxInterval = Mathf.Max(minSpawnIntervalSeconds, maxSpawnIntervalSeconds);
+            float nextSpawnDelay = Random.Range(minInterval, maxInterval);
+            yield return new WaitForSeconds(Mathf.Max(0.1f, nextSpawnDelay));
         }
     }
 
@@ -115,7 +119,11 @@ public class AbilityPickupSpawner : NetworkBehaviour
             return;
         }
 
-        AbilityPickup pickupInstance = Instantiate(pickupPrefab, worldPosition, Quaternion.identity);
+        float randomZRotation = Random.Range(-45f, 45f);
+        AbilityPickup pickupInstance = Instantiate(
+            pickupPrefab,
+            worldPosition,
+            Quaternion.Euler(0f, 0f, randomZRotation));
         NetworkObject pickupNetworkObject = pickupInstance.GetComponent<NetworkObject>();
         if (pickupNetworkObject == null)
         {

@@ -354,7 +354,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
-  godMode: 1
+  godMode: 0
 --- !u!114 &9188130456158490771
 MonoBehaviour:
   m_ObjectHideFlags: 0
