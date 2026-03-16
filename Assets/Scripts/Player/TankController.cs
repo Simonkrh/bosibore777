@@ -88,6 +88,11 @@ public class TankController : NetworkBehaviour
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
     );
+    private readonly NetworkVariable<bool> networkHasActiveStandardProjectile = new NetworkVariable<bool>(
+        false,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
 
     public NetworkVariable<Color> tankColor = new NetworkVariable<Color>(
         Color.white,
@@ -148,6 +153,8 @@ public class TankController : NetworkBehaviour
             {
                 Debug.LogError("GameManager is not found in the scene!");
             }
+
+            networkHasActiveStandardProjectile.Value = false;
         }
 
         SetColor(tankColor.Value);
@@ -447,6 +454,11 @@ public class TankController : NetworkBehaviour
             return;
         }
 
+        if (HasActiveStandardProjectileForInput())
+        {
+            return;
+        }
+
         if (!IsServer)
         {
             SpawnPredictedShotVisual(shotSequence);
@@ -630,6 +642,7 @@ public class TankController : NetworkBehaviour
             HandleAuthoritativeProjectileDestroyed);
         hasActiveStandardProjectileServer = true;
         activeStandardProjectileShotSequence = shotSequence;
+        networkHasActiveStandardProjectile.Value = true;
 
         if (showPredictedShotVisual)
         {
@@ -882,6 +895,7 @@ public class TankController : NetworkBehaviour
         {
             hasActiveStandardProjectileServer = false;
             activeStandardProjectileShotSequence = -1;
+            networkHasActiveStandardProjectile.Value = false;
         }
 
         DespawnShotVisualClientRpc(shooterClientId, shotSequence);
@@ -1119,6 +1133,11 @@ public class TankController : NetworkBehaviour
     {
         float oneWaySeconds = (float)rttMs * 0.0005f;
         return Mathf.Clamp(oneWaySeconds, 0f, maxShotLatencyCompensationSeconds);
+    }
+
+    private bool HasActiveStandardProjectileForInput()
+    {
+        return IsServer ? hasActiveStandardProjectileServer : networkHasActiveStandardProjectile.Value;
     }
 
     private float GetShotLatencyCompensationDistanceFromRttMs(ulong rttMs)

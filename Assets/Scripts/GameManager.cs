@@ -20,6 +20,7 @@ public class GameManager : NetworkBehaviour
     private PlayerDisplayManager displayManager;
 
     private HashSet<ulong> alivePlayers = new HashSet<ulong>();
+    private readonly HashSet<ulong> eliminatedPlayersThisRound = new HashSet<ulong>();
 
     private Dictionary<ulong, int> playerScores = new Dictionary<ulong, int>();
 
@@ -222,6 +223,12 @@ public class GameManager : NetworkBehaviour
                 continue;
             }
 
+            // Dead players must wait for the next round before they can spawn again.
+            if (eliminatedPlayersThisRound.Contains(clientId))
+            {
+                continue;
+            }
+
             if (!CanSpawnPlayerNow())
             {
                 Debug.Log($"[GameManager] Auto-spawn delayed for client {clientId}: {GetSpawnReadinessReason()}.");
@@ -366,6 +373,7 @@ public class GameManager : NetworkBehaviour
 
             GameObject player = spawnedPlayerNetworkObject.gameObject;
             ApplyPlayerCollisionSettings(player, clientId);
+            eliminatedPlayersThisRound.Remove(clientId);
             alivePlayers.Add(clientId);
             clientIdToPlayer[clientId] = player;
 
@@ -659,6 +667,8 @@ public class GameManager : NetworkBehaviour
             clientIdToPlayer.Remove(clientId);
         }
 
+        eliminatedPlayersThisRound.Remove(clientId);
+
     }
 
     public void DespawnPlayer(ulong clientId)
@@ -700,6 +710,8 @@ public class GameManager : NetworkBehaviour
         {
             clientIdToPlayer.Remove(clientId);
         }
+
+        eliminatedPlayersThisRound.Remove(clientId);
 
         ReleaseColor(clientId);
 
@@ -834,6 +846,7 @@ public class GameManager : NetworkBehaviour
         // Remove victim from alive list
         alivePlayers.Remove(victimId);
         clientIdToPlayer.Remove(victimId);
+        eliminatedPlayersThisRound.Add(victimId);
 
         Debug.Log($"[Server] Player {victimId} died. Killer: {killerId}");
 
@@ -892,6 +905,7 @@ public class GameManager : NetworkBehaviour
 
         clientIdToPlayer.Clear();
         alivePlayers.Clear();
+        eliminatedPlayersThisRound.Clear();
     }
 
 }
