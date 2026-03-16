@@ -67,7 +67,7 @@ public class MinigunAbilityRuntime : MonoBehaviour
 
     public bool BeginCharge(int initialShotSequence)
     {
-        if (owner == null || !owner.IsServer || projectilePrefab == null)
+        if (owner == null || !owner.IsServer || !owner.IsSpawned || projectilePrefab == null)
         {
             return false;
         }
@@ -106,7 +106,7 @@ public class MinigunAbilityRuntime : MonoBehaviour
 
     private void Update()
     {
-        if (owner == null || !owner.IsServer)
+        if (owner == null || !owner.IsServer || !owner.IsSpawned)
         {
             if (state != RuntimeState.Idle)
             {
@@ -195,7 +195,7 @@ public class MinigunAbilityRuntime : MonoBehaviour
 
     private void SpawnBullet(int bulletIndex)
     {
-        if (projectilePrefab == null || owner == null || !owner.IsServer)
+        if (projectilePrefab == null || owner == null || !owner.IsServer || !owner.IsSpawned)
         {
             return;
         }

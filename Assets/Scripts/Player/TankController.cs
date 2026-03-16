@@ -530,7 +530,7 @@ public class TankController : NetworkBehaviour
 
     private void ServerFireStandardShot(int shotSequence, ulong shooterClientId)
     {
-        if (!IsServer)
+        if (!IsServer || !IsSpawned)
         {
             return;
         }
@@ -613,6 +613,11 @@ public class TankController : NetworkBehaviour
         {
             projectileRb.interpolation = RigidbodyInterpolation2D.None;
             projectileRb.linearVelocity = shootDirection * projectileSpeed;
+        }
+
+        if (gameManager == null)
+        {
+            gameManager = FindFirstObjectByType<GameManager>();
         }
 
         if (gameManager != null && gameManager.projectilesContainer != null)
@@ -733,7 +738,7 @@ public class TankController : NetworkBehaviour
         out Vector2 fireDirection,
         out float projectileRadius)
     {
-        if (!IsServer)
+        if (!IsServer || !IsSpawned)
         {
             spawnPosition2D = default;
             spawnRotation = Quaternion.identity;
@@ -760,7 +765,7 @@ public class TankController : NetworkBehaviour
         out Vector2 fireDirection,
         out float projectileRadius)
     {
-        if (!IsServer || projectileToSpawn == null)
+        if (!IsServer || !IsSpawned || projectileToSpawn == null)
         {
             spawnPosition2D = default;
             spawnRotation = Quaternion.identity;
@@ -816,7 +821,7 @@ public class TankController : NetworkBehaviour
         out NetworkObject spawnedProjectile)
     {
         spawnedProjectile = null;
-        if (!IsServer || projectileToSpawn == null)
+        if (!IsServer || !IsSpawned || projectileToSpawn == null)
         {
             return false;
         }

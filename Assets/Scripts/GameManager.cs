@@ -741,29 +741,76 @@ public class GameManager : NetworkBehaviour
 
     public void DespawnAllProjectiles()
     {
-        if (projectilesContainer == null)
+        if (!IsServer)
         {
-            Debug.LogError("[GameManager] ProjectilesContainer is not assigned.");
             return;
         }
 
-        foreach (Transform projectileTransform in projectilesContainer.transform)
+        HashSet<GameObject> projectileObjectsToDespawn = new HashSet<GameObject>();
+
+        Projectile[] allProjectiles = FindObjectsByType<Projectile>(FindObjectsSortMode.None);
+        for (int i = 0; i < allProjectiles.Length; i++)
         {
-            Projectile projectile = projectileTransform.GetComponent<Projectile>();
-            if (projectile != null && IsServer)
+            if (allProjectiles[i] != null)
+            {
+                projectileObjectsToDespawn.Add(allProjectiles[i].gameObject);
+            }
+        }
+
+        if (projectilesContainer != null)
+        {
+            Transform containerTransform = projectilesContainer.transform;
+            int childCount = containerTransform.childCount;
+            for (int i = 0; i < childCount; i++)
+            {
+                Transform child = containerTransform.GetChild(i);
+                if (child != null)
+                {
+                    projectileObjectsToDespawn.Add(child.gameObject);
+                }
+            }
+        }
+        else
+        {
+            Debug.LogWarning("[GameManager] ProjectilesContainer is not assigned. Falling back to global projectile cleanup.");
+        }
+
+        int bulletLayer = LayerMask.NameToLayer("Bullet");
+        if (bulletLayer >= 0)
+        {
+            NetworkObject[] networkObjects = FindObjectsByType<NetworkObject>(FindObjectsSortMode.None);
+            for (int i = 0; i < networkObjects.Length; i++)
+            {
+                NetworkObject networkObject = networkObjects[i];
+                if (networkObject != null && networkObject.gameObject.layer == bulletLayer)
+                {
+                    projectileObjectsToDespawn.Add(networkObject.gameObject);
+                }
+            }
+        }
+
+        foreach (GameObject projectileObject in projectileObjectsToDespawn)
+        {
+            if (projectileObject == null)
+            {
+                continue;
+            }
+
+            Projectile projectile = projectileObject.GetComponent<Projectile>();
+            if (projectile != null)
             {
                 projectile.ForceDestroy();
                 continue;
             }
 
-            NetworkObject projectileNetObj = projectileTransform.GetComponent<NetworkObject>();
+            NetworkObject projectileNetObj = projectileObject.GetComponent<NetworkObject>();
             if (projectileNetObj != null && projectileNetObj.IsSpawned)
             {
                 projectileNetObj.Despawn(true);
             }
             else
             {
-                Destroy(projectileTransform.gameObject);
+                Destroy(projectileObject);
             }
         }
     }
@@ -801,6 +848,9 @@ public class GameManager : NetworkBehaviour
 
         // Wait for the maze to sync
         yield return new WaitForSeconds(1f); // Adjust based on synchronization speed
+
+        // Safety pass: remove any late/stray projectile objects before spawning the next round.
+        DespawnAllProjectiles();
 
         // Spawn players after the maze has been regenerated and synced
         if (NetworkManager == null)
