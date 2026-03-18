@@ -96,6 +96,7 @@ public class BombAbilityBehavior : AbilityBehavior
                 spawnRotation,
                 fireDirection,
                 bombSpeed,
+                Projectile.AudioProfile.Bomb,
                 out NetworkObject spawnedBomb))
         {
             return false;
@@ -122,6 +123,7 @@ public class BombAbilityBehavior : AbilityBehavior
             }
         }
 
+        owner.ResolveGameManager()?.PlayBulletShootSoundServer(spawnedBomb.transform.position);
         activeBombsByOwner[ownerClientId] = spawnedBomb;
         return true;
     }
@@ -168,6 +170,7 @@ public class BombAbilityBehavior : AbilityBehavior
                     spawnRotation,
                     direction,
                     shardSpeed,
+                    Projectile.AudioProfile.Bomb,
                     out NetworkObject shardNetworkObject))
             {
                 continue;

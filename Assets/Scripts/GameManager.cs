@@ -7,6 +7,15 @@ using System;
 
 public class GameManager : NetworkBehaviour
 {
+    private enum SoundEffectId
+    {
+        BulletBounce1 = 0,
+        BulletBounce2 = 1,
+        BulletDespawn = 2,
+        BulletShoot = 3,
+        PlayerDie = 4
+    }
+
     private struct ClientDisplayState
     {
         public int Score;
@@ -17,6 +26,13 @@ public class GameManager : NetworkBehaviour
     public GameObject playerPrefab;
     public MazeGenerator mazeGenerator;
     public GameObject projectilesContainer;
+    [Header("Audio")]
+    [SerializeField] private AudioClip bulletBounce1Clip;
+    [SerializeField] private AudioClip bulletBounce2Clip;
+    [SerializeField] private AudioClip bulletDespawnClip;
+    [SerializeField] private AudioClip bulletShootClip;
+    [SerializeField] private AudioClip playerDieClip;
+    [SerializeField, Range(0f, 1f)] private float sfxVolume = 1f;
     private PlayerDisplayManager displayManager;
 
     private HashSet<ulong> alivePlayers = new HashSet<ulong>();
@@ -35,6 +51,7 @@ public class GameManager : NetworkBehaviour
     private const float AutoSpawnCheckIntervalSeconds = 0.25f;
     private static bool collisionLayersConfigured;
     private readonly Dictionary<ulong, ClientDisplayState> clientDisplayStates = new Dictionary<ulong, ClientDisplayState>();
+    private readonly System.Random soundRandom = new System.Random();
     private bool clientDisplayStateDirty;
 
     private void Awake()
@@ -92,6 +109,122 @@ public class GameManager : NetworkBehaviour
         }
 
         collisionLayersConfigured = true;
+    }
+
+    public void PlayBulletBounceSoundServer(Vector3 worldPosition)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        if (!TrySelectBounceSoundEffect(out SoundEffectId effectId))
+        {
+            return;
+        }
+
+        PlaySoundEffectClientRpc((int)effectId, worldPosition);
+    }
+
+    public void PlayBulletDespawnSoundServer(Vector3 worldPosition)
+    {
+        PlaySoundEffectServer(SoundEffectId.BulletDespawn, worldPosition);
+    }
+
+    public void PlayBulletShootSoundServer(Vector3 worldPosition)
+    {
+        PlaySoundEffectServer(SoundEffectId.BulletShoot, worldPosition);
+    }
+
+    public void PlayPlayerDieSoundServer(Vector3 worldPosition)
+    {
+        PlaySoundEffectServer(SoundEffectId.PlayerDie, worldPosition);
+    }
+
+    private void PlaySoundEffectServer(SoundEffectId effectId, Vector3 worldPosition)
+    {
+        if (!IsServer || !IsSpawned || ResolveSoundClip(effectId) == null)
+        {
+            return;
+        }
+
+        PlaySoundEffectClientRpc((int)effectId, worldPosition);
+    }
+
+    [ClientRpc]
+    private void PlaySoundEffectClientRpc(int effectIdValue, Vector3 worldPosition)
+    {
+        if (!IsClient)
+        {
+            return;
+        }
+
+        PlaySoundEffectLocal((SoundEffectId)effectIdValue, worldPosition);
+    }
+
+    private void PlaySoundEffectLocal(SoundEffectId effectId, Vector3 worldPosition)
+    {
+        AudioClip clip = ResolveSoundClip(effectId);
+        if (clip == null)
+        {
+            return;
+        }
+
+        GameObject audioObject = new GameObject($"OneShotSfx_{effectId}");
+        audioObject.transform.position = worldPosition;
+
+        AudioSource audioSource = audioObject.AddComponent<AudioSource>();
+        audioSource.playOnAwake = false;
+        audioSource.spatialBlend = 0f;
+        audioSource.volume = Mathf.Clamp01(sfxVolume);
+        audioSource.clip = clip;
+        audioSource.Play();
+
+        Destroy(audioObject, Mathf.Max(clip.length, 0.01f) + 0.1f);
+    }
+
+    private bool TrySelectBounceSoundEffect(out SoundEffectId effectId)
+    {
+        bool hasFirstClip = bulletBounce1Clip != null;
+        bool hasSecondClip = bulletBounce2Clip != null;
+
+        effectId = SoundEffectId.BulletBounce1;
+        if (!hasFirstClip && !hasSecondClip)
+        {
+            return false;
+        }
+
+        if (hasFirstClip && hasSecondClip)
+        {
+            effectId = soundRandom.Next(0, 2) == 0
+                ? SoundEffectId.BulletBounce1
+                : SoundEffectId.BulletBounce2;
+            return true;
+        }
+
+        effectId = hasFirstClip
+            ? SoundEffectId.BulletBounce1
+            : SoundEffectId.BulletBounce2;
+        return true;
+    }
+
+    private AudioClip ResolveSoundClip(SoundEffectId effectId)
+    {
+        switch (effectId)
+        {
+            case SoundEffectId.BulletBounce1:
+                return bulletBounce1Clip;
+            case SoundEffectId.BulletBounce2:
+                return bulletBounce2Clip;
+            case SoundEffectId.BulletDespawn:
+                return bulletDespawnClip;
+            case SoundEffectId.BulletShoot:
+                return bulletShootClip;
+            case SoundEffectId.PlayerDie:
+                return playerDieClip;
+            default:
+                return null;
+        }
     }
 
     public override void OnNetworkSpawn()

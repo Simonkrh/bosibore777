@@ -209,6 +209,16 @@ public class TankController : NetworkBehaviour
         }
     }
 
+    public GameManager ResolveGameManager()
+    {
+        if (gameManager == null)
+        {
+            gameManager = FindFirstObjectByType<GameManager>();
+        }
+
+        return gameManager;
+    }
+
     private void Update()
     {
         if (IsOwner)
@@ -615,14 +625,10 @@ public class TankController : NetworkBehaviour
             projectileRb.linearVelocity = shootDirection * projectileSpeed;
         }
 
-        if (gameManager == null)
+        GameManager resolvedGameManager = ResolveGameManager();
+        if (resolvedGameManager != null && resolvedGameManager.projectilesContainer != null)
         {
-            gameManager = FindFirstObjectByType<GameManager>();
-        }
-
-        if (gameManager != null && gameManager.projectilesContainer != null)
-        {
-            projectile.transform.SetParent(gameManager.projectilesContainer.transform, true);
+            projectile.transform.SetParent(resolvedGameManager.projectilesContainer.transform, true);
         }
         else
         {
@@ -645,9 +651,11 @@ public class TankController : NetworkBehaviour
             shooterPosition,
             shooterUnlockRadius,
             HandleAuthoritativeProjectileDestroyed);
+        projectileComponent.ConfigureAudioProfileServer(Projectile.AudioProfile.Standard);
         hasActiveStandardProjectileServer = true;
         activeStandardProjectileShotSequence = shotSequence;
         networkHasActiveStandardProjectile.Value = true;
+        resolvedGameManager?.PlayBulletShootSoundServer(projectile.transform.position);
 
         if (showPredictedShotVisual)
         {
@@ -818,6 +826,7 @@ public class TankController : NetworkBehaviour
         Quaternion spawnRotation,
         Vector2 shootDirection,
         float launchSpeed,
+        Projectile.AudioProfile audioProfile,
         out NetworkObject spawnedProjectile)
     {
         spawnedProjectile = null;
@@ -860,14 +869,10 @@ public class TankController : NetworkBehaviour
             projectileRb.linearVelocity = shootDirection * launchSpeed;
         }
 
-        if (gameManager == null)
+        GameManager resolvedGameManager = ResolveGameManager();
+        if (resolvedGameManager != null && resolvedGameManager.projectilesContainer != null)
         {
-            gameManager = FindFirstObjectByType<GameManager>();
-        }
-
-        if (gameManager != null && gameManager.projectilesContainer != null)
-        {
-            projectile.transform.SetParent(gameManager.projectilesContainer.transform, true);
+            projectile.transform.SetParent(resolvedGameManager.projectilesContainer.transform, true);
         }
 
         var projectileComponent = projectile.GetComponent<Projectile>();
@@ -881,6 +886,7 @@ public class TankController : NetworkBehaviour
                 shooterPosition,
                 shooterUnlockRadius,
                 HandleAuthoritativeProjectileDestroyed);
+            projectileComponent.ConfigureAudioProfileServer(audioProfile);
         }
 
         spawnedProjectile = projectileNetObj;

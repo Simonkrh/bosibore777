@@ -88,6 +88,7 @@ public class LazerAbilityBehavior : AbilityBehavior
                 spawnRotation,
                 fireDirection,
                 lazerBulletSpeed,
+                Projectile.AudioProfile.Lazer,
                 out NetworkObject spawnedProjectile))
         {
             return AbilityActivationResult.NotActivated;

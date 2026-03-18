@@ -225,6 +225,7 @@ public class MinigunAbilityRuntime : MonoBehaviour
                 spawnRotation,
                 spreadDirection,
                 bulletSpeed,
+                Projectile.AudioProfile.Minigun,
                 out NetworkObject spawnedProjectile))
         {
             return;

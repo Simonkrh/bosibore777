@@ -16,6 +16,15 @@ public class Projectile : NetworkBehaviour
         Forced = 5
     }
 
+    public enum AudioProfile
+    {
+        Standard = 0,
+        Bomb = 1,
+        Minigun = 2,
+        Rocket = 3,
+        Lazer = 4
+    }
+
     public float lifetime = 10f;
     [Tooltip("How many wall bounces before despawn. -1 means unlimited.")]
     public int maxWallBounces = -1;
@@ -38,6 +47,8 @@ public class Projectile : NetworkBehaviour
     private SpriteRenderer[] visualRenderers;
     private bool allowImmediateSelfHit;
     private DestroyCause pendingDestroyCause = DestroyCause.Unknown;
+    private AudioProfile audioProfile = AudioProfile.Standard;
+    private GameManager gameManager;
 
     public ulong ShooterClientId => shooterId;
 
@@ -227,6 +238,16 @@ public class Projectile : NetworkBehaviour
         preDestroyServerCallback += callback;
     }
 
+    public void ConfigureAudioProfileServer(AudioProfile profile)
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        audioProfile = profile;
+    }
+
     public void SetVisualColorServer(Color color)
     {
         if (!IsServer)
@@ -283,6 +304,48 @@ public class Projectile : NetworkBehaviour
         DespawnOrDestroyProjectile();
     }
 
+    private GameManager ResolveGameManager()
+    {
+        if (gameManager == null)
+        {
+            gameManager = FindFirstObjectByType<GameManager>();
+        }
+
+        return gameManager;
+    }
+
+    private void TryPlayBounceSoundServer()
+    {
+        if (!IsServer || audioProfile == AudioProfile.Lazer)
+        {
+            return;
+        }
+
+        ResolveGameManager()?.PlayBulletBounceSoundServer(transform.position);
+    }
+
+    private void TryPlayDespawnSoundServer(DestroyCause destroyCause)
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        if (audioProfile != AudioProfile.Standard && audioProfile != AudioProfile.Rocket)
+        {
+            return;
+        }
+
+        if (destroyCause == DestroyCause.Unknown ||
+            destroyCause == DestroyCause.PlayerHit ||
+            destroyCause == DestroyCause.Forced)
+        {
+            return;
+        }
+
+        ResolveGameManager()?.PlayBulletDespawnSoundServer(transform.position);
+    }
+
     private void DespawnOrDestroyProjectile()
     {
         if (destroyInvoked)
@@ -291,6 +354,7 @@ public class Projectile : NetworkBehaviour
         }
 
         destroyInvoked = true;
+        TryPlayDespawnSoundServer(pendingDestroyCause);
         preDestroyServerCallback?.Invoke(this, pendingDestroyCause);
         destroyedCallback?.Invoke(shooterId, shotSequence);
 
@@ -354,13 +418,16 @@ public class Projectile : NetworkBehaviour
         {
             hasBouncedOffWall = true;
             wallBounceCount++;
-
-            if (maxWallBounces >= 0 && wallBounceCount > maxWallBounces)
+            bool shouldDespawnFromBounce = maxWallBounces >= 0 && wallBounceCount > maxWallBounces;
+            if (shouldDespawnFromBounce)
             {
                 hasCollided = true;
                 pendingDestroyCause = DestroyCause.WallBounceLimit;
                 DespawnOrDestroyProjectile();
+                return;
             }
+
+            TryPlayBounceSoundServer();
             return;
         }
 

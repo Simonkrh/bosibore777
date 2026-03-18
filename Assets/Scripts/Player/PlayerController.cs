@@ -4,6 +4,7 @@ using UnityEngine;
 public class PlayerController : NetworkBehaviour
 {
     private ulong lastAttackerId = 0;
+    private GameManager gameManager;
     [Header("Debug")]
     [Tooltip("When enabled, this player cannot die. Server-authoritative.")]
     [SerializeField] private bool godMode;
@@ -25,12 +26,15 @@ public class PlayerController : NetworkBehaviour
         if (!IsServer || !IsSpawned) return;  // Only the server kills spawned players
         if (godMode) return;
 
-        // Grab the GameManager from the scene
-        var GameManager = FindFirstObjectByType<GameManager>();
-        if (GameManager != null)
+        if (gameManager == null)
         {
-            // Notify it that "this player" died, with the given killer
-            GameManager.PlayerDied(OwnerClientId, killerId);
+            gameManager = FindFirstObjectByType<GameManager>();
+        }
+
+        if (gameManager != null)
+        {
+            gameManager.PlayPlayerDieSoundServer(transform.position);
+            gameManager.PlayerDied(OwnerClientId, killerId);
         }
 
         // Despawn the player object

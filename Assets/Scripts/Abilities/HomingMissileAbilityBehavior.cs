@@ -102,6 +102,7 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
                 spawnRotation,
                 fireDirection,
                 missileSpeed,
+                Projectile.AudioProfile.Rocket,
                 out NetworkObject spawnedProjectile))
         {
             return AbilityActivationResult.NotActivated;
