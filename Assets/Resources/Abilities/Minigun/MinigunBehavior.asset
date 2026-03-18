@@ -19,7 +19,7 @@ MonoBehaviour:
   bulletCount: 20
   firingDurationSeconds: 2.5
   bulletSpeed: 2.4
-  chargeUpSeconds: 1
+  chargeUpSeconds: 0.57
   clearAfterSeconds: 2
   extraSpawnDistance: 0.03
   shotSequenceStride: 1000

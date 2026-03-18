@@ -20,7 +20,10 @@ public class GameManager : NetworkBehaviour
         LazerShoot = 8,
         MissileShoot = 9,
         MissileLock = 10,
-        MissileTarget = 11
+        MissileTarget = 11,
+        MinigunStart = 12,
+        MinigunFirstBullet = 13,
+        MinigunCooldown = 14
     }
 
     private struct ClientDisplayState
@@ -28,6 +31,15 @@ public class GameManager : NetworkBehaviour
         public int Score;
         public Color IconColor;
         public bool HasIconColor;
+    }
+
+    private sealed class MinigunAudioSequenceState
+    {
+        public GameObject RootObject;
+        public AudioSource LoopSource;
+        public double NextOneShotEndDspTime;
+        public bool FiringStarted;
+        public bool LoopScheduledOrPlaying;
     }
 
     public GameObject playerPrefab;
@@ -43,11 +55,23 @@ public class GameManager : NetworkBehaviour
     [Header("Player Audio")]
     [SerializeField] private AudioClip playerDieClip;
 
-    [Header("Ability Audio")]
+    [Header("General Ability Audio")]
     [SerializeField] private AudioClip abilitySpawnClip;
     [SerializeField] private AudioClip abilityPickupClip;
+
+    [Header("Bomb Audio")]
     [SerializeField] private AudioClip bombExplodeClip;
+
+    [Header("Lazer Audio")]
     [SerializeField] private AudioClip lazerShootClip;
+
+    [Header("Minigun Audio")]
+    [SerializeField] private AudioClip minigunStartClip;
+    [SerializeField] private AudioClip minigunFirstBulletClip;
+    [SerializeField] private AudioClip minigunBulletLoopClip;
+    [SerializeField] private AudioClip minigunCooldownClip;
+
+    [Header("Missile Audio")]
     [SerializeField] private AudioClip missileShootClip;
     [SerializeField] private AudioClip missileLockClip;
     [SerializeField] private AudioClip missileTargetClip;
@@ -73,6 +97,7 @@ public class GameManager : NetworkBehaviour
     private static bool collisionLayersConfigured;
     private readonly Dictionary<ulong, ClientDisplayState> clientDisplayStates = new Dictionary<ulong, ClientDisplayState>();
     private readonly System.Random soundRandom = new System.Random();
+    private readonly Dictionary<ulong, MinigunAudioSequenceState> activeMinigunAudioStates = new Dictionary<ulong, MinigunAudioSequenceState>();
     private bool clientDisplayStateDirty;
 
     private void Awake()
@@ -88,6 +113,11 @@ public class GameManager : NetworkBehaviour
         {
             Debug.LogError("PlayerDisplayManager not found in the scene!");
         }
+    }
+
+    private void OnDestroy()
+    {
+        ResetAllMinigunAudioStatesLocal();
     }
 
     private void ConfigureCollisionLayers()
@@ -197,6 +227,46 @@ public class GameManager : NetworkBehaviour
         PlaySoundEffectForClientsServer(SoundEffectId.MissileTarget, worldPosition, clientId);
     }
 
+    public void PlayMinigunStartSoundServer(ulong ownerClientId, Vector3 worldPosition)
+    {
+        if (!IsServer || !IsSpawned || minigunStartClip == null)
+        {
+            return;
+        }
+
+        PlayMinigunStartClientRpc(ownerClientId, worldPosition);
+    }
+
+    public void PlayMinigunFirstBulletSoundServer(ulong ownerClientId, Vector3 worldPosition)
+    {
+        if (!IsServer || !IsSpawned || (minigunFirstBulletClip == null && minigunBulletLoopClip == null))
+        {
+            return;
+        }
+
+        PlayMinigunFirstBulletClientRpc(ownerClientId, worldPosition);
+    }
+
+    public void PlayMinigunCooldownSoundServer(ulong ownerClientId, Vector3 worldPosition)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        PlayMinigunCooldownClientRpc(ownerClientId, worldPosition);
+    }
+
+    public void StopMinigunAudioSequenceServer(ulong ownerClientId)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        StopMinigunAudioSequenceClientRpc(ownerClientId);
+    }
+
     private void PlaySoundEffectServer(
         SoundEffectId effectId,
         Vector3 worldPosition,
@@ -242,6 +312,61 @@ public class GameManager : NetworkBehaviour
         PlaySoundEffectLocal((SoundEffectId)effectIdValue, worldPosition);
     }
 
+    [ClientRpc]
+    private void PlayMinigunStartClientRpc(
+        ulong ownerClientId,
+        Vector3 worldPosition,
+        ClientRpcParams clientRpcParams = default)
+    {
+        if (!IsClient)
+        {
+            return;
+        }
+
+        PlayMinigunStartLocal(ownerClientId, worldPosition);
+    }
+
+    [ClientRpc]
+    private void PlayMinigunFirstBulletClientRpc(
+        ulong ownerClientId,
+        Vector3 worldPosition,
+        ClientRpcParams clientRpcParams = default)
+    {
+        if (!IsClient)
+        {
+            return;
+        }
+
+        PlayMinigunFirstBulletLocal(ownerClientId, worldPosition);
+    }
+
+    [ClientRpc]
+    private void PlayMinigunCooldownClientRpc(
+        ulong ownerClientId,
+        Vector3 worldPosition,
+        ClientRpcParams clientRpcParams = default)
+    {
+        if (!IsClient)
+        {
+            return;
+        }
+
+        PlayMinigunCooldownLocal(ownerClientId, worldPosition);
+    }
+
+    [ClientRpc]
+    private void StopMinigunAudioSequenceClientRpc(
+        ulong ownerClientId,
+        ClientRpcParams clientRpcParams = default)
+    {
+        if (!IsClient)
+        {
+            return;
+        }
+
+        ResetMinigunAudioStateLocal(ownerClientId);
+    }
+
     private void PlaySoundEffectLocal(SoundEffectId effectId, Vector3 worldPosition)
     {
         AudioClip clip = ResolveSoundClip(effectId);
@@ -261,6 +386,183 @@ public class GameManager : NetworkBehaviour
         audioSource.Play();
 
         Destroy(audioObject, Mathf.Max(clip.length, 0.01f) + 0.1f);
+    }
+
+    private void PlayMinigunStartLocal(ulong ownerClientId, Vector3 worldPosition)
+    {
+        ResetMinigunAudioStateLocal(ownerClientId);
+        if (minigunStartClip == null)
+        {
+            return;
+        }
+
+        MinigunAudioSequenceState state = GetOrCreateMinigunAudioStateLocal(ownerClientId, worldPosition);
+        double startTime = AudioSettings.dspTime;
+        ScheduleMinigunOneShotLocal(state, minigunStartClip, startTime, worldPosition, "Start");
+        state.NextOneShotEndDspTime = startTime + minigunStartClip.length;
+        state.FiringStarted = false;
+        state.LoopScheduledOrPlaying = false;
+    }
+
+    private void PlayMinigunFirstBulletLocal(ulong ownerClientId, Vector3 worldPosition)
+    {
+        MinigunAudioSequenceState state = GetOrCreateMinigunAudioStateLocal(ownerClientId, worldPosition);
+        double startTime = Math.Max(AudioSettings.dspTime, state.NextOneShotEndDspTime);
+
+        if (!state.FiringStarted)
+        {
+            if (minigunFirstBulletClip != null)
+            {
+                ScheduleMinigunOneShotLocal(state, minigunFirstBulletClip, startTime, worldPosition, "FirstBullet");
+                state.NextOneShotEndDspTime = startTime + minigunFirstBulletClip.length;
+            }
+            else
+            {
+                state.NextOneShotEndDspTime = startTime;
+            }
+
+            state.FiringStarted = true;
+        }
+
+        if (!state.LoopScheduledOrPlaying && minigunBulletLoopClip != null && state.LoopSource != null)
+        {
+            state.LoopSource.transform.position = worldPosition;
+            state.LoopSource.clip = minigunBulletLoopClip;
+            state.LoopSource.loop = true;
+            state.LoopSource.PlayScheduled(state.NextOneShotEndDspTime);
+            state.LoopScheduledOrPlaying = true;
+        }
+    }
+
+    private void PlayMinigunCooldownLocal(ulong ownerClientId, Vector3 worldPosition)
+    {
+        MinigunAudioSequenceState state = GetOrCreateMinigunAudioStateLocal(ownerClientId, worldPosition);
+        double cooldownStartTime = Math.Max(AudioSettings.dspTime, state.NextOneShotEndDspTime);
+
+        if (state.LoopScheduledOrPlaying && state.LoopSource != null)
+        {
+            state.LoopSource.SetScheduledEndTime(cooldownStartTime);
+            state.LoopScheduledOrPlaying = false;
+        }
+
+        if (minigunCooldownClip != null)
+        {
+            ScheduleMinigunOneShotLocal(state, minigunCooldownClip, cooldownStartTime, worldPosition, "Cooldown");
+            state.NextOneShotEndDspTime = cooldownStartTime + minigunCooldownClip.length;
+        }
+        else
+        {
+            state.NextOneShotEndDspTime = cooldownStartTime;
+        }
+
+        StartCoroutine(CleanupMinigunAudioStateAfterDelay(ownerClientId, state, state.NextOneShotEndDspTime));
+    }
+
+    private MinigunAudioSequenceState GetOrCreateMinigunAudioStateLocal(ulong ownerClientId, Vector3 worldPosition)
+    {
+        if (activeMinigunAudioStates.TryGetValue(ownerClientId, out MinigunAudioSequenceState existingState) &&
+            existingState != null &&
+            existingState.RootObject != null)
+        {
+            existingState.RootObject.transform.position = worldPosition;
+            return existingState;
+        }
+
+        GameObject rootObject = new GameObject($"MinigunAudio_{ownerClientId}");
+        rootObject.transform.position = worldPosition;
+
+        AudioSource loopSource = rootObject.AddComponent<AudioSource>();
+        loopSource.playOnAwake = false;
+        loopSource.spatialBlend = 0f;
+        loopSource.volume = Mathf.Clamp01(sfxVolume);
+        loopSource.loop = true;
+
+        MinigunAudioSequenceState state = new MinigunAudioSequenceState
+        {
+            RootObject = rootObject,
+            LoopSource = loopSource,
+            NextOneShotEndDspTime = AudioSettings.dspTime,
+            FiringStarted = false,
+            LoopScheduledOrPlaying = false
+        };
+
+        activeMinigunAudioStates[ownerClientId] = state;
+        return state;
+    }
+
+    private void ScheduleMinigunOneShotLocal(
+        MinigunAudioSequenceState state,
+        AudioClip clip,
+        double startTime,
+        Vector3 worldPosition,
+        string clipLabel)
+    {
+        if (state == null || state.RootObject == null || clip == null)
+        {
+            return;
+        }
+
+        GameObject audioObject = new GameObject($"Minigun_{clipLabel}");
+        audioObject.transform.SetParent(state.RootObject.transform, false);
+        audioObject.transform.position = worldPosition;
+
+        AudioSource audioSource = audioObject.AddComponent<AudioSource>();
+        audioSource.playOnAwake = false;
+        audioSource.spatialBlend = 0f;
+        audioSource.volume = Mathf.Clamp01(sfxVolume);
+        audioSource.clip = clip;
+        audioSource.PlayScheduled(startTime);
+
+        float destroyDelaySeconds = Mathf.Max(
+            0.1f,
+            (float)(startTime - AudioSettings.dspTime) + clip.length + 0.1f);
+        Destroy(audioObject, destroyDelaySeconds);
+    }
+
+    private System.Collections.IEnumerator CleanupMinigunAudioStateAfterDelay(
+        ulong ownerClientId,
+        MinigunAudioSequenceState state,
+        double sequenceEndDspTime)
+    {
+        float waitSeconds = Mathf.Max(0.02f, (float)(sequenceEndDspTime - AudioSettings.dspTime) + 0.15f);
+        yield return new WaitForSeconds(waitSeconds);
+
+        if (!activeMinigunAudioStates.TryGetValue(ownerClientId, out MinigunAudioSequenceState activeState) ||
+            !ReferenceEquals(activeState, state))
+        {
+            yield break;
+        }
+
+        ResetMinigunAudioStateLocal(ownerClientId);
+    }
+
+    private void ResetMinigunAudioStateLocal(ulong ownerClientId)
+    {
+        if (!activeMinigunAudioStates.TryGetValue(ownerClientId, out MinigunAudioSequenceState state))
+        {
+            return;
+        }
+
+        if (state != null && state.RootObject != null)
+        {
+            Destroy(state.RootObject);
+        }
+
+        activeMinigunAudioStates.Remove(ownerClientId);
+    }
+
+    private void ResetAllMinigunAudioStatesLocal()
+    {
+        foreach (KeyValuePair<ulong, MinigunAudioSequenceState> entry in activeMinigunAudioStates)
+        {
+            MinigunAudioSequenceState state = entry.Value;
+            if (state != null && state.RootObject != null)
+            {
+                Destroy(state.RootObject);
+            }
+        }
+
+        activeMinigunAudioStates.Clear();
     }
 
     private bool TrySelectBounceSoundEffect(out SoundEffectId effectId)
@@ -316,6 +618,12 @@ public class GameManager : NetworkBehaviour
                 return missileLockClip;
             case SoundEffectId.MissileTarget:
                 return missileTargetClip;
+            case SoundEffectId.MinigunStart:
+                return minigunStartClip;
+            case SoundEffectId.MinigunFirstBullet:
+                return minigunFirstBulletClip;
+            case SoundEffectId.MinigunCooldown:
+                return minigunCooldownClip;
             default:
                 return null;
         }

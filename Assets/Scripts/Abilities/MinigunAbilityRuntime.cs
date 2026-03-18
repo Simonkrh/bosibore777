@@ -24,6 +24,8 @@ public class MinigunAbilityRuntime : MonoBehaviour
     private int shotSequenceStride;
     private bool tintProjectilesWithShooterColor;
     private Action<TankController> completedCallback;
+    private GameManager gameManager;
+    private ulong ownerClientId;
 
     private RuntimeState state;
     private bool releasedDuringCharge;
@@ -52,6 +54,8 @@ public class MinigunAbilityRuntime : MonoBehaviour
         Action<TankController> onCompleted)
     {
         owner = ownerTank;
+        ownerClientId = ownerTank != null ? ownerTank.OwnerClientId : 0ul;
+        gameManager = ownerTank != null ? ownerTank.ResolveGameManager() : null;
         projectilePrefab = projectilePrefabToSpawn;
         spreadDegrees = Mathf.Max(0f, spreadAngleDegrees);
         bulletCount = Mathf.Max(0, totalBullets);
@@ -81,6 +85,9 @@ public class MinigunAbilityRuntime : MonoBehaviour
         clearAtTime = float.PositiveInfinity;
         perBulletIntervalSeconds = 0f;
         state = RuntimeState.Charging;
+        ResolveGameManager()?.PlayMinigunStartSoundServer(
+            ownerClientId,
+            owner != null ? owner.transform.position : transform.position);
         return true;
     }
 
@@ -110,6 +117,7 @@ public class MinigunAbilityRuntime : MonoBehaviour
         {
             if (state != RuntimeState.Idle)
             {
+                ResolveGameManager()?.StopMinigunAudioSequenceServer(ownerClientId);
                 ResetRuntime();
             }
 
@@ -170,6 +178,7 @@ public class MinigunAbilityRuntime : MonoBehaviour
             ? firingDurationSeconds / (bulletCount - 1)
             : 0f;
         state = RuntimeState.Firing;
+        FireDueBullets(now);
     }
 
     private void FireDueBullets(float now)
@@ -231,6 +240,11 @@ public class MinigunAbilityRuntime : MonoBehaviour
             return;
         }
 
+        if (bulletIndex == 0)
+        {
+            ResolveGameManager()?.PlayMinigunFirstBulletSoundServer(ownerClientId, spawnedProjectile.transform.position);
+        }
+
         if (!tintProjectilesWithShooterColor || spawnedProjectile == null)
         {
             return;
@@ -245,6 +259,9 @@ public class MinigunAbilityRuntime : MonoBehaviour
 
     private void BeginClearCountdown(float now)
     {
+        ResolveGameManager()?.PlayMinigunCooldownSoundServer(
+            ownerClientId,
+            owner != null ? owner.transform.position : transform.position);
         state = RuntimeState.WaitingToClear;
         clearAtTime = now + clearDelaySeconds;
     }
@@ -269,5 +286,20 @@ public class MinigunAbilityRuntime : MonoBehaviour
         clearAtTime = float.PositiveInfinity;
         perBulletIntervalSeconds = 0f;
         completedCallback = null;
+    }
+
+    private GameManager ResolveGameManager()
+    {
+        if (gameManager == null && owner != null)
+        {
+            gameManager = owner.ResolveGameManager();
+        }
+
+        if (gameManager == null)
+        {
+            gameManager = FindFirstObjectByType<GameManager>();
+        }
+
+        return gameManager;
     }
 }
