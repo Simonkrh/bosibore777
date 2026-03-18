@@ -19,6 +19,7 @@ public class AbilityPickupSpawner : NetworkBehaviour
 
     private readonly List<AbilityPickup> activePickups = new List<AbilityPickup>();
     private MazeGenerator mazeGenerator;
+    private GameManager gameManager;
     private Coroutine spawnRoutine;
 
     public override void OnNetworkSpawn()
@@ -135,6 +136,17 @@ public class AbilityPickupSpawner : NetworkBehaviour
         pickupNetworkObject.Spawn(true);
         pickupInstance.InitializeServer(definition);
         activePickups.Add(pickupInstance);
+        ResolveGameManager()?.PlayAbilitySpawnSoundServer(pickupInstance.transform.position);
+    }
+
+    private GameManager ResolveGameManager()
+    {
+        if (gameManager == null)
+        {
+            gameManager = FindFirstObjectByType<GameManager>();
+        }
+
+        return gameManager;
     }
 
     private AbilityDefinition SelectRandomDefinition()

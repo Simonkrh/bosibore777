@@ -10,6 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 3141141662086723735}
   - component: {fileID: 8351468527027829580}
+  - component: {fileID: 3688857767765860866}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -44,8 +45,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 2586928712
-  InScenePlacedSourceGlobalObjectIdHash: 0
+  GlobalObjectIdHash: 1886518399
+  InScenePlacedSourceGlobalObjectIdHash: 1886518399
   DeferredDespawnTick: 0
   Ownership: 1
   AlwaysReplicateAsRoot: 0
@@ -57,3 +58,27 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
+--- !u!114 &3688857767765860866
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3284378637524569027}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 67ed792268aedb24b9431a20e33104de, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ShowTopMostFoldoutHeaderGroup: 1
+  playerPrefab: {fileID: 6318536330381436049, guid: b07d8162f8a8d6f48ac20baa95e12b13, type: 3}
+  mazeGenerator: {fileID: 0}
+  projectilesContainer: {fileID: 0}
+  bulletBounce1Clip: {fileID: 8300000, guid: 500170a94c8e8644fbe4c8886b3169df, type: 3}
+  bulletBounce2Clip: {fileID: 8300000, guid: 99786983fa5320f4a8393eaaa27acd00, type: 3}
+  bulletDespawnClip: {fileID: 8300000, guid: e66a78d4f5b8fbc4ebed2e262ececeb5, type: 3}
+  bulletShootClip: {fileID: 8300000, guid: ba91677a536ae634ab0282ae4dc03d0e, type: 3}
+  playerDieClip: {fileID: 8300000, guid: 9165e394a6baa0044a361afcf3d6a9eb, type: 3}
+  abilitySpawnClip: {fileID: 8300000, guid: ed34185f3ac68724385f88d792b3483e, type: 3}
+  abilityPickupClip: {fileID: 8300000, guid: c9af1f4d18b226a4e8e0f5c0fd40bd3c, type: 3}
+  sfxVolume: 1

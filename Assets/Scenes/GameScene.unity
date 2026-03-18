@@ -210,27 +210,6 @@ MonoBehaviour:
   includeInactiveChildren: 0
   scaleChildrenToCell: 1
   fallbackRowCount: 1
---- !u!1 &238337798 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 3284378637524569027, guid: 46f2546b5c1f8a340b66bfbf8d697ff7, type: 3}
-  m_PrefabInstance: {fileID: 6610057492376058931}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &238337801
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 238337798}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 67ed792268aedb24b9431a20e33104de, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  ShowTopMostFoldoutHeaderGroup: 1
-  playerPrefab: {fileID: 6318536330381436049, guid: b07d8162f8a8d6f48ac20baa95e12b13, type: 3}
-  mazeGenerator: {fileID: 6465956146593022757}
-  projectilesContainer: {fileID: 858256638}
 --- !u!1 &399656609 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 1836822273453505515, guid: e6bd9e49486c2e54f9e22c83df37aa9e, type: 3}
@@ -384,7 +363,8 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   pickupPrefab: {fileID: 1447832014731761121, guid: 583be123a31e7cf40b72d8b4cba2dac6, type: 3}
   initialSpawnDelaySeconds: 1
-  spawnIntervalSeconds: 1
+  minSpawnIntervalSeconds: 2
+  maxSpawnIntervalSeconds: 4
   noLimitSpawning: 1
   maxActivePickups: 10
   blockedTileRadiusAroundPlayers: 1
@@ -1665,25 +1645,22 @@ PrefabInstance:
       propertyPath: m_Name
       value: GameManager
       objectReference: {fileID: 0}
+    - target: {fileID: 3688857767765860866, guid: 46f2546b5c1f8a340b66bfbf8d697ff7, type: 3}
+      propertyPath: mazeGenerator
+      value: 
+      objectReference: {fileID: 6465956146593022757}
+    - target: {fileID: 3688857767765860866, guid: 46f2546b5c1f8a340b66bfbf8d697ff7, type: 3}
+      propertyPath: projectilesContainer
+      value: 
+      objectReference: {fileID: 858256638}
     - target: {fileID: 8351468527027829580, guid: 46f2546b5c1f8a340b66bfbf8d697ff7, type: 3}
       propertyPath: GlobalObjectIdHash
       value: 1716872533
       objectReference: {fileID: 0}
-    - target: {fileID: 8351468527027829580, guid: 46f2546b5c1f8a340b66bfbf8d697ff7, type: 3}
-      propertyPath: ActiveSceneSynchronization
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 8351468527027829580, guid: 46f2546b5c1f8a340b66bfbf8d697ff7, type: 3}
-      propertyPath: InScenePlacedSourceGlobalObjectIdHash
-      value: 1886518399
-      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 3284378637524569027, guid: 46f2546b5c1f8a340b66bfbf8d697ff7, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 238337801}
+    m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 46f2546b5c1f8a340b66bfbf8d697ff7, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:

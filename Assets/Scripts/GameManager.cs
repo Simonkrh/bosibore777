@@ -13,7 +13,9 @@ public class GameManager : NetworkBehaviour
         BulletBounce2 = 1,
         BulletDespawn = 2,
         BulletShoot = 3,
-        PlayerDie = 4
+        PlayerDie = 4,
+        AbilitySpawn = 5,
+        AbilityPickup = 6
     }
 
     private struct ClientDisplayState
@@ -32,6 +34,8 @@ public class GameManager : NetworkBehaviour
     [SerializeField] private AudioClip bulletDespawnClip;
     [SerializeField] private AudioClip bulletShootClip;
     [SerializeField] private AudioClip playerDieClip;
+    [SerializeField] private AudioClip abilitySpawnClip;
+    [SerializeField] private AudioClip abilityPickupClip;
     [SerializeField, Range(0f, 1f)] private float sfxVolume = 1f;
     private PlayerDisplayManager displayManager;
 
@@ -141,6 +145,16 @@ public class GameManager : NetworkBehaviour
         PlaySoundEffectServer(SoundEffectId.PlayerDie, worldPosition);
     }
 
+    public void PlayAbilitySpawnSoundServer(Vector3 worldPosition)
+    {
+        PlaySoundEffectServer(SoundEffectId.AbilitySpawn, worldPosition);
+    }
+
+    public void PlayAbilityPickupSoundServer(Vector3 worldPosition)
+    {
+        PlaySoundEffectServer(SoundEffectId.AbilityPickup, worldPosition);
+    }
+
     private void PlaySoundEffectServer(SoundEffectId effectId, Vector3 worldPosition)
     {
         if (!IsServer || !IsSpawned || ResolveSoundClip(effectId) == null)
@@ -222,6 +236,10 @@ public class GameManager : NetworkBehaviour
                 return bulletShootClip;
             case SoundEffectId.PlayerDie:
                 return playerDieClip;
+            case SoundEffectId.AbilitySpawn:
+                return abilitySpawnClip;
+            case SoundEffectId.AbilityPickup:
+                return abilityPickupClip;
             default:
                 return null;
         }

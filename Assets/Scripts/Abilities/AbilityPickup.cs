@@ -16,6 +16,7 @@ public class AbilityPickup : NetworkBehaviour
 
     private GameObject runtimeVisual;
     private bool warnedDefaultVisualIsRoot;
+    private GameManager gameManager;
 
     public override void OnNetworkSpawn()
     {
@@ -89,6 +90,8 @@ public class AbilityPickup : NetworkBehaviour
             return;
         }
 
+        ResolveGameManager()?.PlayAbilityPickupSoundServer(transform.position);
+
         if (NetworkObject != null && NetworkObject.IsSpawned)
         {
             NetworkObject.Despawn(true);
@@ -137,6 +140,16 @@ public class AbilityPickup : NetworkBehaviour
 
         Destroy(runtimeVisual);
         runtimeVisual = null;
+    }
+
+    private GameManager ResolveGameManager()
+    {
+        if (gameManager == null)
+        {
+            gameManager = FindFirstObjectByType<GameManager>();
+        }
+
+        return gameManager;
     }
 
     private void SetDefaultVisualActiveSafely(bool isActive)
