@@ -8,6 +8,7 @@ public class HomingMissileGuidance : MonoBehaviour
     private const float MinDirectionSqrMagnitude = 0.0001f;
     private const float TwoPi = Mathf.PI * 2f;
     private const float MinRangeBandTiles = 0.01f;
+    private const ulong InvalidClientId = ulong.MaxValue;
 
     private Rigidbody2D rb;
     private GameManager gameManager;
@@ -40,14 +41,19 @@ public class HomingMissileGuidance : MonoBehaviour
     private float farRangeTurnRateMultiplier = 1.15f;
     private float farRangeCornerTurnRateMultiplier = 1f;
     private float farRangeLineOfSightProbeMultiplier = 1.5f;
+    private float targetWarningFarIntervalSeconds = 0.7f;
+    private float targetWarningNearIntervalSeconds = 0.18f;
+    private float targetWarningFarDistanceTiles = 8f;
 
     private int wallMask;
 
     private float spawnTime;
     private float nextTargetRefreshTime;
+    private float nextTargetWarningTime = float.PositiveInfinity;
     private float wobbleStrength;
     private float wobblePhaseRadians;
     private bool isConfigured;
+    private ulong currentTargetClientId = InvalidClientId;
 
     private void Awake()
     {
@@ -76,7 +82,10 @@ public class HomingMissileGuidance : MonoBehaviour
         float farRangeWallHugMultiplierValue,
         float farRangeTurnRateMultiplierValue,
         float farRangeCornerTurnRateMultiplierValue,
-        float farRangeLineOfSightProbeMultiplierValue)
+        float farRangeLineOfSightProbeMultiplierValue,
+        float targetWarningFarIntervalSecondsValue,
+        float targetWarningNearIntervalSecondsValue,
+        float targetWarningFarDistanceTilesValue)
     {
         homingDelaySeconds = Mathf.Max(0f, homingDelay);
         targetRefreshIntervalSeconds = Mathf.Max(0.02f, targetRefreshInterval);
@@ -101,14 +110,22 @@ public class HomingMissileGuidance : MonoBehaviour
         farRangeTurnRateMultiplier = Mathf.Max(0.05f, farRangeTurnRateMultiplierValue);
         farRangeCornerTurnRateMultiplier = Mathf.Clamp(farRangeCornerTurnRateMultiplierValue, 0.05f, 1f);
         farRangeLineOfSightProbeMultiplier = Mathf.Max(0.05f, farRangeLineOfSightProbeMultiplierValue);
+        targetWarningFarIntervalSeconds = Mathf.Max(0.02f, targetWarningFarIntervalSecondsValue);
+        targetWarningNearIntervalSeconds = Mathf.Clamp(
+            targetWarningNearIntervalSecondsValue,
+            0.02f,
+            targetWarningFarIntervalSeconds);
+        targetWarningFarDistanceTiles = Mathf.Max(0.01f, targetWarningFarDistanceTilesValue);
 
         wallMask = LayerMask.GetMask("Wall");
 
         spawnTime = Time.time;
         nextTargetRefreshTime = spawnTime;
+        nextTargetWarningTime = float.PositiveInfinity;
         wobbleStrength = wobbleBaselineStrength;
         wobblePhaseRadians = Random.Range(0f, TwoPi);
         isConfigured = true;
+        currentTargetClientId = InvalidClientId;
     }
 
     private void FixedUpdate()
@@ -142,6 +159,8 @@ public class HomingMissileGuidance : MonoBehaviour
                     out float closeRangeFactor);
                 currentVelocity = SteerTowardsTarget(currentVelocity, steeringTarget, turnRateScale, closeRangeFactor);
             }
+
+            UpdateTargetWarningAudio();
         }
 
         if (currentVelocity.sqrMagnitude >= MinDirectionSqrMagnitude)
@@ -461,8 +480,45 @@ public class HomingMissileGuidance : MonoBehaviour
             return;
         }
 
+        ulong previousTargetClientId = IsTargetValid(currentTarget)
+            ? currentTargetClientId
+            : InvalidClientId;
+
         currentTarget = FindNearestTarget();
+        currentTargetClientId = ResolveTargetClientId(currentTarget);
+        if (currentTargetClientId == InvalidClientId)
+        {
+            nextTargetWarningTime = float.PositiveInfinity;
+        }
+        else if (currentTargetClientId != previousTargetClientId)
+        {
+            ResolveGameManager()?.PlayMissileLockSoundForClientServer(
+                currentTargetClientId,
+                currentTarget.position);
+            nextTargetWarningTime = Time.time + GetTargetWarningIntervalSeconds(GetTargetDistanceTiles(currentTarget.position));
+        }
+        else if (float.IsInfinity(nextTargetWarningTime))
+        {
+            nextTargetWarningTime = Time.time + GetTargetWarningIntervalSeconds(GetTargetDistanceTiles(currentTarget.position));
+        }
+
         nextTargetRefreshTime = Time.time + targetRefreshIntervalSeconds;
+    }
+
+    private void UpdateTargetWarningAudio()
+    {
+        if (!IsTargetValid(currentTarget) || currentTargetClientId == InvalidClientId)
+        {
+            return;
+        }
+
+        if (Time.time < nextTargetWarningTime)
+        {
+            return;
+        }
+
+        ResolveGameManager()?.PlayMissileTargetSoundForClientServer(currentTargetClientId, currentTarget.position);
+        nextTargetWarningTime = Time.time + GetTargetWarningIntervalSeconds(GetTargetDistanceTiles(currentTarget.position));
     }
 
     private bool IsTargetValid(Transform target)
@@ -480,10 +536,7 @@ public class HomingMissileGuidance : MonoBehaviour
     {
         if (mazeGenerator == null)
         {
-            if (gameManager == null)
-            {
-                gameManager = Object.FindFirstObjectByType<GameManager>();
-            }
+            ResolveGameManager();
 
             if (gameManager != null && gameManager.mazeGenerator != null)
             {
@@ -500,6 +553,51 @@ public class HomingMissileGuidance : MonoBehaviour
         return resolvedMaze != null;
     }
 
+    private GameManager ResolveGameManager()
+    {
+        if (gameManager == null)
+        {
+            gameManager = Object.FindFirstObjectByType<GameManager>();
+        }
+
+        return gameManager;
+    }
+
+    private static ulong ResolveTargetClientId(Transform target)
+    {
+        if (target == null)
+        {
+            return InvalidClientId;
+        }
+
+        NetworkObject targetNetworkObject = target.GetComponent<NetworkObject>();
+        if (targetNetworkObject == null || !targetNetworkObject.IsSpawned)
+        {
+            return InvalidClientId;
+        }
+
+        return targetNetworkObject.OwnerClientId;
+    }
+
+    private float GetTargetDistanceTiles(Vector2 targetPosition)
+    {
+        Vector2 origin = rb != null ? rb.position : (Vector2)transform.position;
+        float worldDistance = Vector2.Distance(origin, targetPosition);
+
+        if (!TryResolveMazeGenerator(out MazeGenerator resolvedMaze))
+        {
+            return worldDistance;
+        }
+
+        return worldDistance / Mathf.Max(0.0001f, resolvedMaze.cellSize);
+    }
+
+    private float GetTargetWarningIntervalSeconds(float targetDistanceTiles)
+    {
+        float normalizedDistance = Mathf.Clamp01(targetDistanceTiles / Mathf.Max(0.01f, targetWarningFarDistanceTiles));
+        return Mathf.Lerp(targetWarningNearIntervalSeconds, targetWarningFarIntervalSeconds, normalizedDistance);
+    }
+
     private Transform FindNearestTarget()
     {
         NetworkManager manager = NetworkManager.Singleton;
@@ -508,12 +606,7 @@ public class HomingMissileGuidance : MonoBehaviour
             return null;
         }
 
-        if (gameManager == null)
-        {
-            gameManager = Object.FindFirstObjectByType<GameManager>();
-        }
-
-        if (gameManager == null)
+        if (ResolveGameManager() == null)
         {
             return null;
         }

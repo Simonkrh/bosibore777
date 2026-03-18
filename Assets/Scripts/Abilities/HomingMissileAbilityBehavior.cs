@@ -70,6 +70,15 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
     [SerializeField] private float farRangeCornerTurnRateMultiplier = 1f;
     [Tooltip("Line-of-sight probe scale at long range. Higher = more conservative wall clearance when far.")]
     [SerializeField] private float farRangeLineOfSightProbeMultiplier = 1.5f;
+
+    [Header("Target Audio")]
+    [Tooltip("Warning beep interval when the missile is far from its current target.")]
+    [SerializeField] private float targetWarningFarIntervalSeconds = 0.7f;
+    [Tooltip("Warning beep interval when the missile is very close to its current target.")]
+    [SerializeField] private float targetWarningNearIntervalSeconds = 0.18f;
+    [Tooltip("Distance in maze tiles where the warning reaches its slowest cadence.")]
+    [SerializeField] private float targetWarningFarDistanceTiles = 8f;
+
     private readonly Dictionary<ulong, NetworkObject> activeMissilesByOwner = new Dictionary<ulong, NetworkObject>();
 
     public override AbilityActivationResult TryActivateServer(TankController owner, int shotSequence)
@@ -159,7 +168,10 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
             farRangeWallHugMultiplier,
             farRangeTurnRateMultiplier,
             farRangeCornerTurnRateMultiplier,
-            farRangeLineOfSightProbeMultiplier);
+            farRangeLineOfSightProbeMultiplier,
+            targetWarningFarIntervalSeconds,
+            targetWarningNearIntervalSeconds,
+            targetWarningFarDistanceTiles);
 
         return AbilityActivationResult.ActivatedKeep;
     }
@@ -233,6 +245,9 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
         farRangeTurnRateMultiplier = Mathf.Max(0.05f, farRangeTurnRateMultiplier);
         farRangeCornerTurnRateMultiplier = Mathf.Clamp(farRangeCornerTurnRateMultiplier, 0.05f, 1f);
         farRangeLineOfSightProbeMultiplier = Mathf.Max(0.05f, farRangeLineOfSightProbeMultiplier);
+        targetWarningFarIntervalSeconds = Mathf.Max(0.02f, targetWarningFarIntervalSeconds);
+        targetWarningNearIntervalSeconds = Mathf.Clamp(targetWarningNearIntervalSeconds, 0.02f, targetWarningFarIntervalSeconds);
+        targetWarningFarDistanceTiles = Mathf.Max(0.01f, targetWarningFarDistanceTiles);
 
 #if UNITY_EDITOR
         if (firedTankBodyPrefab != null)

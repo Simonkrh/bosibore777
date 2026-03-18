@@ -18,7 +18,9 @@ public class GameManager : NetworkBehaviour
         AbilityPickup = 6,
         BombExplode = 7,
         LazerShoot = 8,
-        MissileShoot = 9
+        MissileShoot = 9,
+        MissileLock = 10,
+        MissileTarget = 11
     }
 
     private struct ClientDisplayState
@@ -47,6 +49,8 @@ public class GameManager : NetworkBehaviour
     [SerializeField] private AudioClip bombExplodeClip;
     [SerializeField] private AudioClip lazerShootClip;
     [SerializeField] private AudioClip missileShootClip;
+    [SerializeField] private AudioClip missileLockClip;
+    [SerializeField] private AudioClip missileTargetClip;
 
     [Header("Audio Settings")]
     [SerializeField, Range(0f, 1f)] private float sfxVolume = 1f;
@@ -183,18 +187,52 @@ public class GameManager : NetworkBehaviour
         PlaySoundEffectServer(SoundEffectId.MissileShoot, worldPosition);
     }
 
-    private void PlaySoundEffectServer(SoundEffectId effectId, Vector3 worldPosition)
+    public void PlayMissileLockSoundForClientServer(ulong clientId, Vector3 worldPosition)
+    {
+        PlaySoundEffectForClientsServer(SoundEffectId.MissileLock, worldPosition, clientId);
+    }
+
+    public void PlayMissileTargetSoundForClientServer(ulong clientId, Vector3 worldPosition)
+    {
+        PlaySoundEffectForClientsServer(SoundEffectId.MissileTarget, worldPosition, clientId);
+    }
+
+    private void PlaySoundEffectServer(
+        SoundEffectId effectId,
+        Vector3 worldPosition,
+        ClientRpcParams clientRpcParams = default)
     {
         if (!IsServer || !IsSpawned || ResolveSoundClip(effectId) == null)
         {
             return;
         }
 
-        PlaySoundEffectClientRpc((int)effectId, worldPosition);
+        PlaySoundEffectClientRpc((int)effectId, worldPosition, clientRpcParams);
+    }
+
+    private void PlaySoundEffectForClientsServer(SoundEffectId effectId, Vector3 worldPosition, params ulong[] targetClientIds)
+    {
+        if (targetClientIds == null || targetClientIds.Length == 0)
+        {
+            return;
+        }
+
+        ClientRpcParams clientRpcParams = new ClientRpcParams
+        {
+            Send = new ClientRpcSendParams
+            {
+                TargetClientIds = targetClientIds
+            }
+        };
+
+        PlaySoundEffectServer(effectId, worldPosition, clientRpcParams);
     }
 
     [ClientRpc]
-    private void PlaySoundEffectClientRpc(int effectIdValue, Vector3 worldPosition)
+    private void PlaySoundEffectClientRpc(
+        int effectIdValue,
+        Vector3 worldPosition,
+        ClientRpcParams clientRpcParams = default)
     {
         if (!IsClient)
         {
@@ -274,6 +312,10 @@ public class GameManager : NetworkBehaviour
                 return lazerShootClip;
             case SoundEffectId.MissileShoot:
                 return missileShootClip;
+            case SoundEffectId.MissileLock:
+                return missileLockClip;
+            case SoundEffectId.MissileTarget:
+                return missileTargetClip;
             default:
                 return null;
         }
