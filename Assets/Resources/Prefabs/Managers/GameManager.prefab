@@ -81,4 +81,7 @@ MonoBehaviour:
   playerDieClip: {fileID: 8300000, guid: 9165e394a6baa0044a361afcf3d6a9eb, type: 3}
   abilitySpawnClip: {fileID: 8300000, guid: ed34185f3ac68724385f88d792b3483e, type: 3}
   abilityPickupClip: {fileID: 8300000, guid: c9af1f4d18b226a4e8e0f5c0fd40bd3c, type: 3}
+  bombExplodeClip: {fileID: 8300000, guid: aff2f635bd4a3f74faa5b1407129cf5a, type: 3}
+  lazerShootClip: {fileID: 8300000, guid: d5da3a2a9cfcc734eb429ebeafb8ce4e, type: 3}
+  missileShootClip: {fileID: 8300000, guid: 13f933227e195f44b98e7b7969fbb93d, type: 3}
   sfxVolume: 1

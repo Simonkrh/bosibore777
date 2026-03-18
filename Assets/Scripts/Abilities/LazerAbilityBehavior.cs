@@ -147,6 +147,8 @@ public class LazerAbilityBehavior : AbilityBehavior
             abilityController.RegisterAbilityProjectileServer(spawnedProjectile);
         }
 
+        owner.ResolveGameManager()?.PlayLazerShootSoundServer(spawnedProjectile.transform.position);
+
         return AbilityActivationResult.ActivatedConsume;
     }
 

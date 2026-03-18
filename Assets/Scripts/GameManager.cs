@@ -15,7 +15,10 @@ public class GameManager : NetworkBehaviour
         BulletShoot = 3,
         PlayerDie = 4,
         AbilitySpawn = 5,
-        AbilityPickup = 6
+        AbilityPickup = 6,
+        BombExplode = 7,
+        LazerShoot = 8,
+        MissileShoot = 9
     }
 
     private struct ClientDisplayState
@@ -28,14 +31,24 @@ public class GameManager : NetworkBehaviour
     public GameObject playerPrefab;
     public MazeGenerator mazeGenerator;
     public GameObject projectilesContainer;
-    [Header("Audio")]
+
+    [Header("Projectile Audio")]
     [SerializeField] private AudioClip bulletBounce1Clip;
     [SerializeField] private AudioClip bulletBounce2Clip;
     [SerializeField] private AudioClip bulletDespawnClip;
     [SerializeField] private AudioClip bulletShootClip;
+
+    [Header("Player Audio")]
     [SerializeField] private AudioClip playerDieClip;
+
+    [Header("Ability Audio")]
     [SerializeField] private AudioClip abilitySpawnClip;
     [SerializeField] private AudioClip abilityPickupClip;
+    [SerializeField] private AudioClip bombExplodeClip;
+    [SerializeField] private AudioClip lazerShootClip;
+    [SerializeField] private AudioClip missileShootClip;
+
+    [Header("Audio Settings")]
     [SerializeField, Range(0f, 1f)] private float sfxVolume = 1f;
     private PlayerDisplayManager displayManager;
 
@@ -155,6 +168,21 @@ public class GameManager : NetworkBehaviour
         PlaySoundEffectServer(SoundEffectId.AbilityPickup, worldPosition);
     }
 
+    public void PlayBombExplodeSoundServer(Vector3 worldPosition)
+    {
+        PlaySoundEffectServer(SoundEffectId.BombExplode, worldPosition);
+    }
+
+    public void PlayLazerShootSoundServer(Vector3 worldPosition)
+    {
+        PlaySoundEffectServer(SoundEffectId.LazerShoot, worldPosition);
+    }
+
+    public void PlayMissileShootSoundServer(Vector3 worldPosition)
+    {
+        PlaySoundEffectServer(SoundEffectId.MissileShoot, worldPosition);
+    }
+
     private void PlaySoundEffectServer(SoundEffectId effectId, Vector3 worldPosition)
     {
         if (!IsServer || !IsSpawned || ResolveSoundClip(effectId) == null)
@@ -240,6 +268,12 @@ public class GameManager : NetworkBehaviour
                 return abilitySpawnClip;
             case SoundEffectId.AbilityPickup:
                 return abilityPickupClip;
+            case SoundEffectId.BombExplode:
+                return bombExplodeClip;
+            case SoundEffectId.LazerShoot:
+                return lazerShootClip;
+            case SoundEffectId.MissileShoot:
+                return missileShootClip;
             default:
                 return null;
         }

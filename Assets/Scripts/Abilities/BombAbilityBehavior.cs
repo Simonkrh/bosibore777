@@ -137,6 +137,10 @@ public class BombAbilityBehavior : AbilityBehavior
 
         Vector2 detonationPosition = bombNetworkObject.transform.position;
         bool spawnedAnyShard = TrySpawnShards(owner, detonationPosition, shotSequence);
+        if (spawnedAnyShard)
+        {
+            owner.ResolveGameManager()?.PlayBombExplodeSoundServer(detonationPosition);
+        }
 
         activeBombsByOwner.Remove(ownerClientId);
         ForceDespawnBomb(bombNetworkObject.gameObject);
@@ -228,7 +232,11 @@ public class BombAbilityBehavior : AbilityBehavior
 
         int autoSequenceBase = nextAutoDetonationSequence++;
         Vector2 detonationPosition = bombProjectile.transform.position;
-        TrySpawnShards(owner, detonationPosition, autoSequenceBase);
+        bool spawnedAnyShard = TrySpawnShards(owner, detonationPosition, autoSequenceBase);
+        if (spawnedAnyShard)
+        {
+            owner.ResolveGameManager()?.PlayBombExplodeSoundServer(detonationPosition);
+        }
         activeBombsByOwner.Remove(ownerClientId);
 
         if ((destroyCause == Projectile.DestroyCause.LifetimeExpired ||

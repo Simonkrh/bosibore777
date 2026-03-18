@@ -15,7 +15,7 @@ MonoBehaviour:
   firedTankBodyPrefab: {fileID: 6225562633387485068, guid: 2f9f5b64d9a14acaa167e3db0cd7e7df, type: 3}
   firedTankBodyPrefabResourcePath: Prefabs/Abilities/HomingMissile/HomingMissileFiredTankBody
   homingMissilePrefab: {fileID: 6673431591696494813, guid: 7eca8aab8dcb4754eba9c2289aff83ec, type: 3}
-  missileSpeed: 1.95
+  missileSpeed: 1.7
   extraSpawnDistance: 0.15
   homingDelaySeconds: 3
   targetRefreshIntervalSeconds: 0.15

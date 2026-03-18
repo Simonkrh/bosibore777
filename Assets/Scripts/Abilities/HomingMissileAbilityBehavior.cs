@@ -121,6 +121,8 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
             abilityController.SetModelOverridePrefabResourceServer(firedTankBodyPrefabResourcePath);
         }
 
+        owner.ResolveGameManager()?.PlayMissileShootSoundServer(spawnedProjectile.transform.position);
+
         Projectile missileProjectile = spawnedProjectile.gameObject.GetComponent<Projectile>();
         if (missileProjectile != null)
         {
