@@ -240,10 +240,7 @@ public class MinigunAbilityRuntime : MonoBehaviour
             return;
         }
 
-        if (bulletIndex == 0)
-        {
-            ResolveGameManager()?.PlayMinigunFirstBulletSoundServer(ownerClientId, spawnedProjectile.transform.position);
-        }
+        ResolveGameManager()?.PlayMinigunShotSoundServer(ownerClientId, spawnedProjectile.transform.position);
 
         if (!tintProjectilesWithShooterColor || spawnedProjectile == null)
         {

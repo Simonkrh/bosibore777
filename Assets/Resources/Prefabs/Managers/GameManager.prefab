@@ -84,8 +84,14 @@ MonoBehaviour:
   bombExplodeClip: {fileID: 8300000, guid: aff2f635bd4a3f74faa5b1407129cf5a, type: 3}
   lazerShootClip: {fileID: 8300000, guid: d5da3a2a9cfcc734eb429ebeafb8ce4e, type: 3}
   minigunStartClip: {fileID: 8300000, guid: 0762480488f9a03418ea9b3fcdfae37f, type: 3}
-  minigunFirstBulletClip: {fileID: 8300000, guid: 5e1acbec23893244588036b8664363ec, type: 3}
-  minigunBulletLoopClip: {fileID: 8300000, guid: 677ea36ed06185240855176add5375ee, type: 3}
+  minigunShotClips:
+  - {fileID: 8300000, guid: 1a4b1fcd995c57d44b0bcc983f874f7c, type: 3}
+  - {fileID: 8300000, guid: b3a566b6684e00744ab2fe7b865047d4, type: 3}
+  - {fileID: 8300000, guid: ba1e8d6cb90efc94cbd3cdeb3dc4b6e7, type: 3}
+  - {fileID: 8300000, guid: 653695d2854c0bf4aa15c8c505abc852, type: 3}
+  - {fileID: 8300000, guid: bdf8a458f23be4745b539a949baabbc0, type: 3}
+  - {fileID: 8300000, guid: 627d3c873d05e7b4c9c3cbf47d81362c, type: 3}
+  - {fileID: 8300000, guid: 52359da13faf3244f958685385b7ba60, type: 3}
   minigunCooldownClip: {fileID: 8300000, guid: 0f5e0f4b189a50846b33dd45087acd40, type: 3}
   missileShootClip: {fileID: 8300000, guid: 13f933227e195f44b98e7b7969fbb93d, type: 3}
   missileLockClip: {fileID: 8300000, guid: 68966930f0d9b7c47b47287dc9ccb6f7, type: 3}
