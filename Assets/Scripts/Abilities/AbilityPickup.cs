@@ -7,6 +7,8 @@ public class AbilityPickup : NetworkBehaviour
 {
     [SerializeField] private Transform visualRoot;
     [SerializeField] private GameObject defaultVisual;
+    [SerializeField] private SmokeEffect spawnSmokeEffect;
+    [SerializeField] private SpawnScaleAnimation spawnScaleAnimation;
 
     private readonly NetworkVariable<FixedString64Bytes> abilityId = new NetworkVariable<FixedString64Bytes>(
         default,
@@ -16,17 +18,29 @@ public class AbilityPickup : NetworkBehaviour
 
     private GameObject runtimeVisual;
     private bool warnedDefaultVisualIsRoot;
+    private bool hasPlayedSpawnSmokeEffect;
     private GameManager gameManager;
+
+    private void Awake()
+    {
+        ResolveSpawnSmokeEffect();
+        ResolveSpawnScaleAnimation();
+    }
 
     public override void OnNetworkSpawn()
     {
         abilityId.OnValueChanged += HandleAbilityIdChanged;
-        ApplyVisual(abilityId.Value.ToString());
+        hasPlayedSpawnSmokeEffect = false;
+
+        string id = abilityId.Value.ToString();
+        ApplyVisual(id);
+        TryPlaySpawnSmokeEffect(id);
     }
 
     public override void OnNetworkDespawn()
     {
         abilityId.OnValueChanged -= HandleAbilityIdChanged;
+        hasPlayedSpawnSmokeEffect = false;
         ClearRuntimeVisual();
     }
 
@@ -104,7 +118,9 @@ public class AbilityPickup : NetworkBehaviour
 
     private void HandleAbilityIdChanged(FixedString64Bytes _, FixedString64Bytes newValue)
     {
-        ApplyVisual(newValue.ToString());
+        string id = newValue.ToString();
+        ApplyVisual(id);
+        TryPlaySpawnSmokeEffect(id);
     }
 
     private void ApplyVisual(string id)
@@ -129,6 +145,7 @@ public class AbilityPickup : NetworkBehaviour
         runtimeVisual.transform.localRotation = Quaternion.identity;
 
         SetDefaultVisualActiveSafely(false);
+        PlaySpawnScaleAnimation();
     }
 
     private void ClearRuntimeVisual()
@@ -152,6 +169,28 @@ public class AbilityPickup : NetworkBehaviour
         return gameManager;
     }
 
+    private void TryPlaySpawnSmokeEffect(string id)
+    {
+        if (hasPlayedSpawnSmokeEffect || string.IsNullOrWhiteSpace(id))
+        {
+            return;
+        }
+
+        if (!AbilityRuntimeDatabase.TryGetById(id, out AbilityDefinition definition) || definition == null)
+        {
+            return;
+        }
+
+        SmokeEffect smokeEffect = ResolveSpawnSmokeEffect();
+        if (smokeEffect == null)
+        {
+            return;
+        }
+
+        hasPlayedSpawnSmokeEffect = true;
+        smokeEffect.Play();
+    }
+
     private void SetDefaultVisualActiveSafely(bool isActive)
     {
         if (defaultVisual == null)
@@ -171,5 +210,43 @@ public class AbilityPickup : NetworkBehaviour
         }
 
         defaultVisual.SetActive(isActive);
+    }
+
+    private SmokeEffect ResolveSpawnSmokeEffect()
+    {
+        if (spawnSmokeEffect == null)
+        {
+            spawnSmokeEffect = GetComponent<SmokeEffect>();
+        }
+
+        return spawnSmokeEffect;
+    }
+
+    private SpawnScaleAnimation ResolveSpawnScaleAnimation()
+    {
+        if (spawnScaleAnimation == null)
+        {
+            spawnScaleAnimation = GetComponent<SpawnScaleAnimation>();
+        }
+
+        return spawnScaleAnimation;
+    }
+
+    private void PlaySpawnScaleAnimation()
+    {
+        SpawnScaleAnimation scaleAnimation = ResolveSpawnScaleAnimation();
+        if (scaleAnimation == null || runtimeVisual == null)
+        {
+            return;
+        }
+
+        scaleAnimation.SetTarget(runtimeVisual.transform);
+        scaleAnimation.Play();
+    }
+
+    private void OnValidate()
+    {
+        ResolveSpawnSmokeEffect();
+        ResolveSpawnScaleAnimation();
     }
 }

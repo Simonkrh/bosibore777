@@ -10,6 +10,8 @@ GameObject:
   m_Component:
   - component: {fileID: 62395642110086236}
   - component: {fileID: 2934791910346493623}
+  - component: {fileID: 6571082465371901123}
+  - component: {fileID: 2020304050607080901}
   - component: {fileID: 3502452792735504442}
   - component: {fileID: 1447832014731761121}
   m_Layer: 0
@@ -59,6 +61,152 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
+--- !u!114 &6571082465371901123
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8099488342849084595}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f53911a966a01c74e9c633e1cf943eda, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  playOnEnable: 0
+  destroyWhenFinished: 0
+  useUnscaledTime: 0
+  circleCount: 10
+  smokeSprite: {fileID: -9087577266532155448, guid: f3d04deda499e8146b7a8d54e940b07d, type: 3}
+  sortingLayerName: Default
+  sortingOrder: 0
+  smokeColor: {r: 0.4331962, g: 0.21440013, b: 0.6226415, a: 0.78}
+  lifetimeRange: {x: 0.5, y: 2}
+  alphaOverLifetime:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  scaleOverLifetime:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  startScaleRange: {x: 0.05, y: 0.1}
+  endScaleMultiplierRange: {x: 0.001, y: 2.3}
+  startOpacityMultiplierRange: {x: 0.75, y: 1}
+  spreadInAllDirections: 1
+  baseDirection: {x: 0, y: 0}
+  directionVariationDegrees: 0
+  speedRange: {x: 0.08, y: 0.2}
+  spawnRadiusRange: {x: 0, y: 0}
+  angularVelocityRange: {x: -25, y: 25}
+--- !u!114 &2020304050607080901
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8099488342849084595}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3f36c4b759595924a8d140dc67cd2c0d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  target: {fileID: 0}
+  playOnEnable: 0
+  useUnscaledTime: 0
+  startScaleMultiplier: 0.25
+  peakScaleMultiplier: 1.18
+  settleScaleMultiplier: 1
+  growDuration: 0.3
+  settleDuration: 0.2
+  growCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  settleCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
 --- !u!61 &3502452792735504442
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -120,3 +268,5 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   visualRoot: {fileID: 62395642110086236}
   defaultVisual: {fileID: 0}
+  spawnSmokeEffect: {fileID: 6571082465371901123}
+  spawnScaleAnimation: {fileID: 2020304050607080901}
