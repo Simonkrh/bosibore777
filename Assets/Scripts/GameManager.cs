@@ -107,6 +107,18 @@ public class GameManager : NetworkBehaviour
     {
         ConfigureCollisionLayers();
         availablePrimaryColors.AddRange(primaryColors);
+        AudioSettingsStore.EnsureInitialized();
+        sfxVolume = AudioSettingsStore.SfxVolume;
+    }
+
+    private void OnEnable()
+    {
+        AudioSettingsStore.SfxVolumeChanged += HandleSfxVolumeChanged;
+    }
+
+    private void OnDisable()
+    {
+        AudioSettingsStore.SfxVolumeChanged -= HandleSfxVolumeChanged;
     }
 
     private void Start()
@@ -120,7 +132,32 @@ public class GameManager : NetworkBehaviour
 
     private void OnDestroy()
     {
+        AudioSettingsStore.SfxVolumeChanged -= HandleSfxVolumeChanged;
         ResetAllMinigunAudioStatesLocal();
+    }
+
+    private void HandleSfxVolumeChanged(float volume)
+    {
+        sfxVolume = Mathf.Clamp01(volume);
+
+        foreach (KeyValuePair<ulong, MinigunAudioSequenceState> entry in activeMinigunAudioStates)
+        {
+            MinigunAudioSequenceState state = entry.Value;
+            if (state == null)
+            {
+                continue;
+            }
+
+            if (state.ShotSourceA != null)
+            {
+                state.ShotSourceA.volume = state.ShotSourceA.isPlaying ? sfxVolume : 0f;
+            }
+
+            if (state.ShotSourceB != null)
+            {
+                state.ShotSourceB.volume = state.ShotSourceB.isPlaying ? sfxVolume : 0f;
+            }
+        }
     }
 
     private void ConfigureCollisionLayers()

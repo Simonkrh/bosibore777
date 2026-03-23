@@ -14,6 +14,7 @@ public class MenuDisplaySettings : MonoBehaviour
 
     [Header("UI")]
     [SerializeField] private Slider soundSlider;
+    [SerializeField] private Slider musicSlider;
     [SerializeField] private TMP_Dropdown resolutionDropdown;
     [SerializeField] private Toggle fullscreenToggle;
 
@@ -26,7 +27,6 @@ public class MenuDisplaySettings : MonoBehaviour
     [Tooltip("If no saved resolution exists, keep whatever resolution the game launched with and save it.")]
     [SerializeField] private bool saveLaunchResolutionWhenNoPreference = true;
 
-    private const string VolumePrefKey = "settings.volume";
     private const string FullscreenPrefKey = "settings.fullscreen";
     private const string ResolutionWidthPrefKey = "settings.resolution.width";
     private const string ResolutionHeightPrefKey = "settings.resolution.height";
@@ -108,10 +108,12 @@ public class MenuDisplaySettings : MonoBehaviour
 
     public void OnSoundSliderChanged(float value)
     {
-        float clamped = Mathf.Clamp01(value);
-        AudioListener.volume = clamped;
-        PlayerPrefs.SetFloat(VolumePrefKey, clamped);
-        PlayerPrefs.Save();
+        AudioSettingsStore.SetSfxVolume(value);
+    }
+
+    public void OnMusicSliderChanged(float value)
+    {
+        AudioSettingsStore.SetMusicVolume(value);
     }
 
     public void OnResolutionDropdownChanged(int index)
@@ -164,8 +166,7 @@ public class MenuDisplaySettings : MonoBehaviour
 
     private void ApplySavedVolume()
     {
-        float volume = PlayerPrefs.GetFloat(VolumePrefKey, 1f);
-        AudioListener.volume = Mathf.Clamp01(volume);
+        AudioSettingsStore.EnsureInitialized();
     }
 
     private void LoadFullscreenPreference()
@@ -275,7 +276,12 @@ public class MenuDisplaySettings : MonoBehaviour
     {
         if (soundSlider != null)
         {
-            soundSlider.SetValueWithoutNotify(AudioListener.volume);
+            soundSlider.SetValueWithoutNotify(AudioSettingsStore.SfxVolume);
+        }
+
+        if (musicSlider != null)
+        {
+            musicSlider.SetValueWithoutNotify(AudioSettingsStore.MusicVolume);
         }
 
         if (fullscreenToggle != null)
@@ -333,6 +339,11 @@ public class MenuDisplaySettings : MonoBehaviour
             soundSlider.onValueChanged.AddListener(OnSoundSliderChanged);
         }
 
+        if (musicSlider != null)
+        {
+            musicSlider.onValueChanged.AddListener(OnMusicSliderChanged);
+        }
+
         if (resolutionDropdown != null)
         {
             resolutionDropdown.onValueChanged.AddListener(OnResolutionDropdownChanged);
@@ -349,6 +360,11 @@ public class MenuDisplaySettings : MonoBehaviour
         if (soundSlider != null)
         {
             soundSlider.onValueChanged.RemoveListener(OnSoundSliderChanged);
+        }
+
+        if (musicSlider != null)
+        {
+            musicSlider.onValueChanged.RemoveListener(OnMusicSliderChanged);
         }
 
         if (resolutionDropdown != null)
