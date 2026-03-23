@@ -13,6 +13,7 @@ public class HomingMissileGuidance : MonoBehaviour
     private Rigidbody2D rb;
     private GameManager gameManager;
     private MazeGenerator mazeGenerator;
+    private MissileTrailSmoke trailSmoke;
     private Transform currentTarget;
     private readonly List<Vector2> pathBuffer = new List<Vector2>(32);
     private readonly List<Vector2> targetEvaluationPathBuffer = new List<Vector2>(32);
@@ -58,6 +59,7 @@ public class HomingMissileGuidance : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
+        trailSmoke = GetComponent<MissileTrailSmoke>();
     }
 
     public void Configure(
@@ -486,6 +488,7 @@ public class HomingMissileGuidance : MonoBehaviour
 
         currentTarget = FindNearestTarget();
         currentTargetClientId = ResolveTargetClientId(currentTarget);
+        UpdateTrailSmokeColorForCurrentTarget();
         if (currentTargetClientId == InvalidClientId)
         {
             nextTargetWarningTime = float.PositiveInfinity;
@@ -577,6 +580,34 @@ public class HomingMissileGuidance : MonoBehaviour
         }
 
         return targetNetworkObject.OwnerClientId;
+    }
+
+    private void UpdateTrailSmokeColorForCurrentTarget()
+    {
+        if (trailSmoke == null)
+        {
+            trailSmoke = GetComponent<MissileTrailSmoke>();
+        }
+
+        if (trailSmoke == null)
+        {
+            return;
+        }
+
+        if (currentTarget == null)
+        {
+            trailSmoke.SetNoTargetColorServer();
+            return;
+        }
+
+        TankController targetTank = currentTarget.GetComponent<TankController>();
+        if (targetTank == null)
+        {
+            trailSmoke.SetNoTargetColorServer();
+            return;
+        }
+
+        trailSmoke.SetTargetColorServer(targetTank.tankColor.Value);
     }
 
     private float GetTargetDistanceTiles(Vector2 targetPosition)

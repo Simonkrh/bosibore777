@@ -1,0 +1,182 @@
+using Unity.Netcode;
+using UnityEngine;
+
+[DisallowMultipleComponent]
+public class MissileTrailSmoke : NetworkBehaviour
+{
+    private static readonly Color DefaultUntargetedSmokeColor = new Color(0.12f, 0.12f, 0.12f, 1f);
+
+    [Header("Smoke Sprite")]
+    [Tooltip("Sprite used for each smoke puff burst.")]
+    [SerializeField] private Sprite smokeSprite;
+    [Tooltip("Sorting layer used by the smoke bursts.")]
+    [SerializeField] private string sortingLayerName = "Default";
+    [Tooltip("Sorting order used by the smoke bursts.")]
+    [SerializeField] private int sortingOrder = 55;
+
+    [Header("Spawn")]
+    [Tooltip("Seconds between smoke burst spawns.")]
+    [SerializeField] private float spawnIntervalSeconds = 0.06f;
+    [Tooltip("How far behind the missile each smoke burst is spawned.")]
+    [SerializeField] private float backwardOffset = 0.22f;
+    [Tooltip("Alpha applied to the target color when tinting the smoke.")]
+    [SerializeField] private float smokeAlpha = 0.55f;
+
+    [Header("Color")]
+    [Tooltip("Smoke color used before the missile has a target.")]
+    [SerializeField] private Color untargetedSmokeColor = DefaultUntargetedSmokeColor;
+    [Tooltip("How much of the target player's color is kept after mixing it with black. 0.7 = 70% player color, 30% black.")]
+    [SerializeField, Range(0f, 1f)] private float targetColorWeight = 0.7f;
+
+    [Header("Burst")]
+    [Tooltip("How many circles each trail burst uses.")]
+    [SerializeField] private int circleCount = 4;
+    [Tooltip("Lifetime range for each smoke circle.")]
+    [SerializeField] private Vector2 lifetimeRange = new Vector2(0.2f, 0.45f);
+    [Tooltip("Starting size range for each smoke circle.")]
+    [SerializeField] private Vector2 startScaleRange = new Vector2(0.03f, 0.06f);
+    [Tooltip("Growth multiplier range for each smoke circle.")]
+    [SerializeField] private Vector2 endScaleMultiplierRange = new Vector2(1.8f, 2.8f);
+    [Tooltip("Random opacity multiplier range for each smoke circle.")]
+    [SerializeField] private Vector2 startOpacityMultiplierRange = new Vector2(0.45f, 0.8f);
+
+    [Header("Motion")]
+    [Tooltip("If enabled, each trail burst spreads in all directions.")]
+    [SerializeField] private bool spreadInAllDirections = true;
+    [Tooltip("Directional drift when radial spread is disabled.")]
+    [SerializeField] private Vector2 baseDirection = Vector2.zero;
+    [Tooltip("Direction variation in degrees when not using full radial spread.")]
+    [SerializeField] private float directionVariationDegrees = 45f;
+    [Tooltip("Speed range for each smoke circle.")]
+    [SerializeField] private Vector2 speedRange = new Vector2(0.03f, 0.08f);
+    [Tooltip("Spawn radius range around the burst origin.")]
+    [SerializeField] private Vector2 spawnRadiusRange = new Vector2(0f, 0.02f);
+    [Tooltip("Angular velocity range for each smoke circle.")]
+    [SerializeField] private Vector2 angularVelocityRange = new Vector2(-18f, 18f);
+
+    private readonly NetworkVariable<Color> currentSmokeColor = new NetworkVariable<Color>(
+        new Color(0.12f, 0.12f, 0.12f, 0.55f),
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
+
+    private float nextSpawnTime;
+
+    public override void OnNetworkSpawn()
+    {
+        if (IsServer)
+        {
+            SetNoTargetColorServer();
+        }
+    }
+
+    public void SetTargetColorServer(Color color)
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        Color mixedColor = Color.Lerp(Color.black, color, Mathf.Clamp01(targetColorWeight));
+        SetSmokeColorServer(mixedColor);
+    }
+
+    public void SetNoTargetColorServer()
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        SetSmokeColorServer(untargetedSmokeColor);
+    }
+
+    private void Update()
+    {
+        if (!IsSpawned)
+        {
+            return;
+        }
+
+        if (spawnIntervalSeconds <= 0f)
+        {
+            return;
+        }
+
+        float now = Time.time;
+        if (now < nextSpawnTime)
+        {
+            return;
+        }
+
+        nextSpawnTime = now + spawnIntervalSeconds;
+        SpawnTrailBurst();
+    }
+
+    private void SpawnTrailBurst()
+    {
+        if (smokeSprite == null)
+        {
+            return;
+        }
+
+        Vector3 spawnPosition = transform.position - transform.up * backwardOffset;
+        GameObject burstObject = new GameObject("MissileTrailSmokeBurst");
+        burstObject.SetActive(false);
+        burstObject.transform.position = spawnPosition;
+        burstObject.transform.rotation = Quaternion.identity;
+
+        SmokeEffect smokeEffect = burstObject.AddComponent<SmokeEffect>();
+        smokeEffect.ConfigureBurst(
+            smokeSprite,
+            currentSmokeColor.Value,
+            sortingLayerName,
+            sortingOrder,
+            circleCount,
+            lifetimeRange,
+            startScaleRange,
+            endScaleMultiplierRange,
+            startOpacityMultiplierRange,
+            spreadInAllDirections,
+            baseDirection,
+            directionVariationDegrees,
+            speedRange,
+            spawnRadiusRange,
+            angularVelocityRange,
+            true,
+            false);
+
+        burstObject.SetActive(true);
+        smokeEffect.Play();
+    }
+
+    private void SetSmokeColorServer(Color color)
+    {
+        color.a = Mathf.Clamp01(smokeAlpha);
+        currentSmokeColor.Value = color;
+    }
+
+    private void OnValidate()
+    {
+        sortingOrder = Mathf.Clamp(sortingOrder, -32768, 32767);
+        spawnIntervalSeconds = Mathf.Max(0.01f, spawnIntervalSeconds);
+        backwardOffset = Mathf.Max(0f, backwardOffset);
+        smokeAlpha = Mathf.Clamp01(smokeAlpha);
+        targetColorWeight = Mathf.Clamp01(targetColorWeight);
+        untargetedSmokeColor.a = 1f;
+        circleCount = Mathf.Clamp(circleCount, 1, 32);
+        directionVariationDegrees = Mathf.Clamp(directionVariationDegrees, 0f, 180f);
+        lifetimeRange = ClampRange(lifetimeRange, 0.01f);
+        startScaleRange = ClampRange(startScaleRange, 0.001f);
+        endScaleMultiplierRange = ClampRange(endScaleMultiplierRange, 0.001f);
+        startOpacityMultiplierRange = ClampRange(startOpacityMultiplierRange, 0f);
+        speedRange = ClampRange(speedRange, 0f);
+        spawnRadiusRange = ClampRange(spawnRadiusRange, 0f);
+    }
+
+    private static Vector2 ClampRange(Vector2 range, float minimumValue)
+    {
+        float min = Mathf.Max(minimumValue, Mathf.Min(range.x, range.y));
+        float max = Mathf.Max(min, Mathf.Max(range.x, range.y));
+        return new Vector2(min, max);
+    }
+}

@@ -128,6 +128,54 @@ public class SmokeEffect : MonoBehaviour
         spreadInAllDirections = value;
     }
 
+    public void ConfigureBurst(
+        Sprite sprite,
+        Color color,
+        string layerName,
+        int order,
+        int circles,
+        Vector2 lifetime,
+        Vector2 startScale,
+        Vector2 endScaleMultiplier,
+        Vector2 opacityRange,
+        bool radialSpread,
+        Vector2 direction,
+        float variationDegrees,
+        Vector2 speed,
+        Vector2 spawnRadius,
+        Vector2 angularVelocity,
+        bool destroyAfterFinish,
+        bool useUnscaled)
+    {
+        playOnEnable = false;
+        destroyWhenFinished = destroyAfterFinish;
+        useUnscaledTime = useUnscaled;
+        circleCount = Mathf.Clamp(circles, 1, 128);
+
+        smokeSprite = sprite;
+        sortingLayerName = string.IsNullOrWhiteSpace(layerName) ? "Default" : layerName;
+        sortingOrder = Mathf.Clamp(order, -32768, 32767);
+        smokeColor = color;
+
+        lifetimeRange = ClampRange(lifetime, 0.01f);
+        startScaleRange = ClampRange(startScale, 0.001f);
+        endScaleMultiplierRange = ClampRange(endScaleMultiplier, 0.001f);
+        startOpacityMultiplierRange = ClampRange(opacityRange, 0f);
+
+        spreadInAllDirections = radialSpread;
+        baseDirection = direction.sqrMagnitude > MinDirectionSqrMagnitude
+            ? direction.normalized
+            : Vector2.zero;
+        directionVariationDegrees = Mathf.Clamp(variationDegrees, 0f, 180f);
+        speedRange = ClampRange(speed, 0f);
+        spawnRadiusRange = ClampRange(spawnRadius, 0f);
+        angularVelocityRange = angularVelocity;
+
+        EnsurePool();
+        ApplySharedRendererSettings();
+        RefreshActiveCircles();
+    }
+
     public void Play()
     {
         if (!gameObject.activeInHierarchy)

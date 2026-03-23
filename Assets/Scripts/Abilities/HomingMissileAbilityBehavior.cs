@@ -123,6 +123,12 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
             projectile.SetVisualColorServer(owner.tankColor.Value);
         }
 
+        MissileTrailSmoke trailSmoke = spawnedProjectile.gameObject.GetComponent<MissileTrailSmoke>();
+        if (trailSmoke != null)
+        {
+            trailSmoke.SetNoTargetColorServer();
+        }
+
         TankAbilityController abilityController = owner.GetComponent<TankAbilityController>();
         if (abilityController != null)
         {
