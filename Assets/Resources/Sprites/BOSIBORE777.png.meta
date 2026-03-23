@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: d6c0c922b44a72940b67f09a4e3f77af
+guid: 0a8b8defc420c2d43ab89c7c3c93c795
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -3069525235140300384
-    second: 54114926_430020814410662_1232900186569703424_n_0
+      213: 3846872724774444276
+    second: BOSIBORE777-23-3-2026_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -75,7 +75,7 @@ TextureImporter:
     maxTextureSize: 2048
     resizeAlgorithm: 0
     textureFormat: -1
-    textureCompression: 1
+    textureCompression: 2
     compressionQuality: 50
     crunchedCompression: 0
     allowsAlphaSplitting: 0
@@ -100,13 +100,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: 54114926_430020814410662_1232900186569703424_n_0
+      name: BOSIBORE777-23-3-2026_0
       rect:
         serializedVersion: 2
-        x: 0
-        y: 0
-        width: 343
-        height: 737
+        x: 45
+        y: 45
+        width: 934
+        height: 188
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -115,8 +115,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 0a17d5acf0bd665d0800000000000000
-      internalID: -3069525235140300384
+      spriteID: 4fcd1509c56d26530800000000000000
+      internalID: 3846872724774444276
       vertices: []
       indices: 
       edges: []
@@ -135,7 +135,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      54114926_430020814410662_1232900186569703424_n_0: -3069525235140300384
+      BOSIBORE777-23-3-2026_0: 3846872724774444276
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
