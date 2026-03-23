@@ -63,6 +63,10 @@ public class TankController : NetworkBehaviour
     private int nextInputSequence = 0;
     private int lastReceivedServerInputSequence = -1;
     private readonly List<MovementInput> pendingInputs = new List<MovementInput>();
+    private MovementInput latestRemoteInput;
+    private int lastReceivedRemoteInputSequence = -1;
+    private float lastRemoteInputReceiveTime = float.NegativeInfinity;
+    private bool hasRemoteInput;
 
     private const int MaxPendingInputs = 128;
     private const float ReconciliationPositionThreshold = 0.04f;
@@ -75,6 +79,7 @@ public class TankController : NetworkBehaviour
     private const float MovementWallBlockDotThreshold = 0.0001f;
     private const float ActiveControlPositionTolerance = 0.03f;
     private const float ActiveControlRotationTolerance = 1.5f;
+    private const float RemoteInputStaleTimeoutSeconds = 0.2f;
 
     // Server-authoritative state replicated for non-owner interpolation
     private readonly NetworkVariable<Vector2> networkPosition = new NetworkVariable<Vector2>(
@@ -128,6 +133,10 @@ public class TankController : NetworkBehaviour
         activeStandardProjectileShotSequence = -1;
         nextShotVisualPruneTime = 0f;
         pendingInputs.Clear();
+        latestRemoteInput = default;
+        lastReceivedRemoteInputSequence = -1;
+        lastRemoteInputReceiveTime = float.NegativeInfinity;
+        hasRemoteInput = false;
         ClearAllShotVisuals();
 
         // This controller already implements prediction + reconciliation + remote interpolation.
@@ -243,25 +252,34 @@ public class TankController : NetworkBehaviour
 
     private void FixedUpdate()
     {
-        if (IsOwner)
+        if (IsServer)
         {
-            if (IsServer)
+            if (IsOwner)
             {
                 ProcessOwnerInputOnServer();
             }
             else
             {
-                ProcessOwnerInputOnClient();
+                ProcessRemoteOwnerInputOnServer();
             }
-        }
 
-        if (IsServer)
-        {
             networkPosition.Value = rb.position;
             if (rotationChild != null)
             {
                 networkChildRotation.Value = rotationChild.eulerAngles.z;
             }
+
+            if (!IsOwner)
+            {
+                SendAuthoritativeStateToOwningClient();
+            }
+
+            return;
+        }
+
+        if (IsOwner)
+        {
+            ProcessOwnerInputOnClient();
         }
     }
 
@@ -319,6 +337,28 @@ public class TankController : NetworkBehaviour
         }
 
         SendInputToServerRpc(inputData);
+    }
+
+    private void ProcessRemoteOwnerInputOnServer()
+    {
+        if (!hasRemoteInput)
+        {
+            return;
+        }
+
+        MovementInput inputToApply = latestRemoteInput;
+        if (Time.unscaledTime - lastRemoteInputReceiveTime > RemoteInputStaleTimeoutSeconds)
+        {
+            inputToApply.moveInput = 0f;
+            inputToApply.rotationInput = 0f;
+        }
+
+        if (Mathf.Abs(inputToApply.moveInput) <= 0f && Mathf.Abs(inputToApply.rotationInput) <= 0f)
+        {
+            return;
+        }
+
+        ApplyMovement(inputToApply);
     }
 
     private void ApplyMovementInput(MovementInput input)
@@ -1267,7 +1307,7 @@ public class TankController : NetworkBehaviour
 
     #region Server RPCs & Reconciliation
 
-    [ServerRpc]
+    [ServerRpc(Delivery = RpcDelivery.Unreliable)]
     private void SendInputToServerRpc(MovementInput input, ServerRpcParams serverRpcParams = default)
     {
         // Safety: only allow the owner to submit movement for this object.
@@ -1276,20 +1316,36 @@ public class TankController : NetworkBehaviour
             return;
         }
 
-        ApplyMovement(input);
+        if (input.inputSequence <= lastReceivedRemoteInputSequence)
+        {
+            return;
+        }
+
+        latestRemoteInput = input;
+        lastReceivedRemoteInputSequence = input.inputSequence;
+        lastRemoteInputReceiveTime = Time.unscaledTime;
+        hasRemoteInput = true;
+    }
+
+    private void SendAuthoritativeStateToOwningClient()
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
 
         ServerState newState = new ServerState
         {
             position = rb.position,
             rotation = rotationChild != null ? rotationChild.eulerAngles.z : 0f,
-            lastProcessedInput = input.inputSequence
+            lastProcessedInput = lastReceivedRemoteInputSequence
         };
 
         ClientRpcParams ownerOnlyRpcParams = new ClientRpcParams
         {
             Send = new ClientRpcSendParams
             {
-                TargetClientIds = new[] { serverRpcParams.Receive.SenderClientId }
+                TargetClientIds = new[] { OwnerClientId }
             }
         };
 
