@@ -1521,7 +1521,7 @@ public class GameManager : NetworkBehaviour
 
         HashSet<GameObject> projectileObjectsToDespawn = new HashSet<GameObject>();
 
-        Projectile[] allProjectiles = FindObjectsByType<Projectile>(FindObjectsSortMode.None);
+        Projectile[] allProjectiles = FindObjectsByType<Projectile>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         for (int i = 0; i < allProjectiles.Length; i++)
         {
             if (allProjectiles[i] != null)
@@ -1551,7 +1551,7 @@ public class GameManager : NetworkBehaviour
         int bulletLayer = LayerMask.NameToLayer("Bullet");
         if (bulletLayer >= 0)
         {
-            NetworkObject[] networkObjects = FindObjectsByType<NetworkObject>(FindObjectsSortMode.None);
+            NetworkObject[] networkObjects = FindObjectsByType<NetworkObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             for (int i = 0; i < networkObjects.Length; i++)
             {
                 NetworkObject networkObject = networkObjects[i];
@@ -1588,6 +1588,48 @@ public class GameManager : NetworkBehaviour
         }
     }
 
+    private void DespawnAllRoundRuntimeObjects()
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        DespawnAllAbilityPickups();
+        DespawnAllProjectiles();
+
+        NetworkObject[] networkObjects = FindObjectsByType<NetworkObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < networkObjects.Length; i++)
+        {
+            NetworkObject networkObject = networkObjects[i];
+            if (networkObject == null || networkObject.IsSceneObject)
+            {
+                continue;
+            }
+
+            if (networkObject.GetComponent<PlayerController>() != null)
+            {
+                continue;
+            }
+
+            Projectile projectile = networkObject.GetComponent<Projectile>();
+            if (projectile != null)
+            {
+                projectile.ForceDestroy();
+                continue;
+            }
+
+            if (networkObject.IsSpawned)
+            {
+                networkObject.Despawn(true);
+            }
+            else
+            {
+                Destroy(networkObject.gameObject);
+            }
+        }
+    }
+
     private void StartNewRound()
     {
         if (!IsServer) return;
@@ -1599,10 +1641,8 @@ public class GameManager : NetworkBehaviour
     {
         Debug.Log("[Server] Starting new round...");
 
+        DespawnAllRoundRuntimeObjects();
         DespawnAllPlayersForNewRound();
-
-        DespawnAllProjectiles();
-        DespawnAllAbilityPickups();
 
         if (mazeGenerator == null)
         {
@@ -1622,8 +1662,8 @@ public class GameManager : NetworkBehaviour
         // Wait for the maze to sync
         yield return new WaitForSeconds(1f); // Adjust based on synchronization speed
 
-        // Safety pass: remove any late/stray projectile objects before spawning the next round.
-        DespawnAllProjectiles();
+        // Safety pass: remove any late or inactive runtime objects before the next round spawns.
+        DespawnAllRoundRuntimeObjects();
 
         // Spawn players after the maze has been regenerated and synced
         if (NetworkManager == null)

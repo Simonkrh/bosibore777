@@ -202,7 +202,7 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
 
     private void HandleMissilePreDestroyServer(TankController owner, ulong ownerClientId, Projectile projectile)
     {
-        if (owner == null || projectile == null)
+        if (projectile == null)
         {
             return;
         }
@@ -219,10 +219,13 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
 
         activeMissilesByOwner.Remove(ownerClientId);
 
-        TankAbilityController abilityController = owner.GetComponent<TankAbilityController>();
-        if (abilityController != null)
+        if (owner != null)
         {
-            abilityController.ClearEquippedAbilityServer();
+            TankAbilityController abilityController = owner.GetComponent<TankAbilityController>();
+            if (abilityController != null)
+            {
+                abilityController.ClearEquippedAbilityServer();
+            }
         }
     }
 
