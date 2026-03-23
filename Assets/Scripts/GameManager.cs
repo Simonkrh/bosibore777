@@ -1602,7 +1602,7 @@ public class GameManager : NetworkBehaviour
         for (int i = 0; i < networkObjects.Length; i++)
         {
             NetworkObject networkObject = networkObjects[i];
-            if (networkObject == null || networkObject.IsSceneObject)
+            if (networkObject == null || networkObject.IsSceneObject == true)
             {
                 continue;
             }

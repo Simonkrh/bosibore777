@@ -145,15 +145,16 @@ public class TankAbilityController : NetworkBehaviour
             return false;
         }
 
+        TankAbilityController controller = this;
         activeAbilityUsageCount.Value = Mathf.Max(0, activeAbilityUsageCount.Value) + 1;
         projectile.SetPreDestroyServerCallback((_, __) =>
         {
-            if (!IsServer)
+            if (controller == null || !controller.IsServer || !controller.IsSpawned)
             {
                 return;
             }
 
-            activeAbilityUsageCount.Value = Mathf.Max(0, activeAbilityUsageCount.Value - 1);
+            controller.activeAbilityUsageCount.Value = Mathf.Max(0, controller.activeAbilityUsageCount.Value - 1);
         });
 
         return true;

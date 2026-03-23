@@ -355,8 +355,23 @@ public class Projectile : NetworkBehaviour
 
         destroyInvoked = true;
         TryPlayDespawnSoundServer(pendingDestroyCause);
-        preDestroyServerCallback?.Invoke(this, pendingDestroyCause);
-        destroyedCallback?.Invoke(shooterId, shotSequence);
+        try
+        {
+            preDestroyServerCallback?.Invoke(this, pendingDestroyCause);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogException(ex, this);
+        }
+
+        try
+        {
+            destroyedCallback?.Invoke(shooterId, shotSequence);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogException(ex, this);
+        }
 
         if (NetworkObject != null && NetworkObject.IsSpawned)
         {
