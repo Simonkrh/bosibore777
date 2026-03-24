@@ -718,43 +718,159 @@ public class MazeGenerator : NetworkBehaviour
 
                 // Instantiate floor
                 Instantiate(floorPrefab, cellPosition, Quaternion.identity, mazeParent);
+            }
+        }
 
-                // Instantiate walls based on the cell's walls
-                Cell cell = grid[x, y];
+        DrawMergedHorizontalWalls(offsetX, offsetY);
+        DrawMergedVerticalWalls(offsetX, offsetY);
 
-                // North wall
-                if (cell.walls[0])
-                {
-                    Vector3 position = cellPosition + new Vector3(0, cellSize / 2, 0);
-                    Instantiate(wallPrefab, position, Quaternion.Euler(0, 0, 90), mazeParent);
-                }
-
-                // East wall
-                if (cell.walls[1])
-                {
-                    Vector3 position = cellPosition + new Vector3(cellSize / 2, 0, 0);
-                    Instantiate(wallPrefab, position, Quaternion.identity, mazeParent);
-                }
-
-                // South wall
-                if (cell.walls[2])
-                {
-                    Vector3 position = cellPosition + new Vector3(0, -cellSize / 2, 0);
-                    Instantiate(wallPrefab, position, Quaternion.Euler(0, 0, 90), mazeParent);
-                }
-
-                // West wall
-                if (cell.walls[3])
-                {
-                    Vector3 position = cellPosition + new Vector3(-cellSize / 2, 0, 0);
-                    Instantiate(wallPrefab, position, Quaternion.identity, mazeParent);
-                }
-
-                InstantiateCornerPrefabs(x, y, cell, offsetX, offsetY);
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                InstantiateCornerPrefabs(x, y, grid[x, y], offsetX, offsetY);
             }
         }
 
         AdjustCamera();
+    }
+
+    private void DrawMergedHorizontalWalls(float offsetX, float offsetY)
+    {
+        for (int boundaryY = 0; boundaryY <= height; boundaryY++)
+        {
+            int runStartX = -1;
+
+            for (int x = 0; x <= width; x++)
+            {
+                bool hasWall = x < width && HasHorizontalWallAt(x, boundaryY);
+                if (hasWall)
+                {
+                    if (runStartX < 0)
+                    {
+                        runStartX = x;
+                    }
+
+                    continue;
+                }
+
+                if (runStartX >= 0)
+                {
+                    int runLength = x - runStartX;
+                    InstantiateHorizontalWallRun(runStartX, boundaryY, runLength, offsetX, offsetY);
+                    runStartX = -1;
+                }
+            }
+        }
+    }
+
+    private void DrawMergedVerticalWalls(float offsetX, float offsetY)
+    {
+        for (int boundaryX = 0; boundaryX <= width; boundaryX++)
+        {
+            int runStartY = -1;
+
+            for (int y = 0; y <= height; y++)
+            {
+                bool hasWall = y < height && HasVerticalWallAt(boundaryX, y);
+                if (hasWall)
+                {
+                    if (runStartY < 0)
+                    {
+                        runStartY = y;
+                    }
+
+                    continue;
+                }
+
+                if (runStartY >= 0)
+                {
+                    int runLength = y - runStartY;
+                    InstantiateVerticalWallRun(boundaryX, runStartY, runLength, offsetX, offsetY);
+                    runStartY = -1;
+                }
+            }
+        }
+    }
+
+    private bool HasHorizontalWallAt(int cellX, int boundaryY)
+    {
+        if (grid == null || cellX < 0 || cellX >= width || boundaryY < 0 || boundaryY > height)
+        {
+            return false;
+        }
+
+        if (boundaryY == 0)
+        {
+            return grid[cellX, 0].walls[2];
+        }
+
+        if (boundaryY == height)
+        {
+            return grid[cellX, height - 1].walls[0];
+        }
+
+        return grid[cellX, boundaryY - 1].walls[0];
+    }
+
+    private bool HasVerticalWallAt(int boundaryX, int cellY)
+    {
+        if (grid == null || boundaryX < 0 || boundaryX > width || cellY < 0 || cellY >= height)
+        {
+            return false;
+        }
+
+        if (boundaryX == 0)
+        {
+            return grid[0, cellY].walls[3];
+        }
+
+        if (boundaryX == width)
+        {
+            return grid[width - 1, cellY].walls[1];
+        }
+
+        return grid[boundaryX - 1, cellY].walls[1];
+    }
+
+    private void InstantiateHorizontalWallRun(int startCellX, int boundaryY, int runLength, float offsetX, float offsetY)
+    {
+        if (wallPrefab == null || runLength <= 0)
+        {
+            return;
+        }
+
+        float centerX = offsetX + (startCellX + runLength * 0.5f - 0.5f) * cellSize;
+        float y = offsetY - cellSize * 0.5f + boundaryY * cellSize;
+        GameObject wall = Instantiate(wallPrefab, new Vector3(centerX, y, 0f), Quaternion.Euler(0f, 0f, 90f), mazeParent);
+        ApplyWallRunScale(wall.transform, runLength);
+    }
+
+    private void InstantiateVerticalWallRun(int boundaryX, int startCellY, int runLength, float offsetX, float offsetY)
+    {
+        if (wallPrefab == null || runLength <= 0)
+        {
+            return;
+        }
+
+        float x = offsetX - cellSize * 0.5f + boundaryX * cellSize;
+        float centerY = offsetY + (startCellY + runLength * 0.5f - 0.5f) * cellSize;
+        GameObject wall = Instantiate(wallPrefab, new Vector3(x, centerY, 0f), Quaternion.identity, mazeParent);
+        ApplyWallRunScale(wall.transform, runLength);
+    }
+
+    private void ApplyWallRunScale(Transform wallTransform, int runLength)
+    {
+        if (wallTransform == null)
+        {
+            return;
+        }
+
+        Vector3 baseScale = wallPrefab.transform.localScale;
+        wallTransform.localScale = new Vector3(
+            baseScale.x,
+            baseScale.y * Mathf.Max(1, runLength) * cellSize,
+            baseScale.z);
     }
 
    // Serialize maze data into a format that can be sent to clients
