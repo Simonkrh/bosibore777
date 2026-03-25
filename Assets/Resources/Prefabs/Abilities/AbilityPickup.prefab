@@ -76,7 +76,7 @@ MonoBehaviour:
   playOnEnable: 0
   destroyWhenFinished: 0
   useUnscaledTime: 0
-  circleCount: 10
+  circleCount: 20
   smokeSprite: {fileID: -9087577266532155448, guid: f3d04deda499e8146b7a8d54e940b07d, type: 3}
   sortingLayerName: Default
   sortingOrder: 0

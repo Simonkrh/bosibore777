@@ -260,20 +260,20 @@ MonoBehaviour:
   smokeSprite: {fileID: -9087577266532155448, guid: f3d04deda499e8146b7a8d54e940b07d, type: 3}
   sortingLayerName: Default
   sortingOrder: 58
-  spawnIntervalSeconds: 0.05
+  spawnIntervalSeconds: 0.03
   backwardOffset: 0.18
   smokeAlpha: 0.55
-  untargetedSmokeColor: {r: 0.12, g: 0.12, b: 0.12, a: 1}
-  targetColorWeight: 0.7
-  circleCount: 4
-  lifetimeRange: {x: 0.18, y: 0.36}
+  untargetedSmokeColor: {r: 0.4433962, g: 0.4413047, b: 0.4413047, a: 1}
+  targetColorWeight: 0.55
+  circleCount: 1
+  lifetimeRange: {x: 3.5, y: 4}
   startScaleRange: {x: 0.025, y: 0.055}
   endScaleMultiplierRange: {x: 1.8, y: 2.8}
   startOpacityMultiplierRange: {x: 0.45, y: 0.75}
   spreadInAllDirections: 1
   baseDirection: {x: 0, y: 0}
-  directionVariationDegrees: 45
-  speedRange: {x: 0.02, y: 0.07}
+  directionVariationDegrees: 30
+  speedRange: {x: 0.07, y: 0.1}
   spawnRadiusRange: {x: 0, y: 0.01}
   angularVelocityRange: {x: -14, y: 14}
 --- !u!114 &-3522215255666235687

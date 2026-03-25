@@ -10,6 +10,7 @@ public class SmokeEffect : MonoBehaviour
     {
         public Transform Transform;
         public SpriteRenderer Renderer;
+        public Color BaseColor;
         public Vector2 StartLocalPosition;
         public Vector2 Velocity;
         public float Lifetime;
@@ -41,6 +42,10 @@ public class SmokeEffect : MonoBehaviour
     [SerializeField] private int sortingOrder = 110;
     [Tooltip("Base color of the smoke before per-circle opacity variation and fade are applied.")]
     [SerializeField] private Color smokeColor = new Color(1f, 1f, 1f, 0.7f);
+    [Tooltip("Optional alternate color that circles can use instead of the base smoke color.")]
+    [SerializeField] private Color secondarySmokeColor = new Color(1f, 1f, 1f, 0.7f);
+    [Tooltip("Chance that a spawned circle uses the base smoke color instead of the alternate color.")]
+    [SerializeField, Range(0f, 1f)] private float primaryColorWeight = 1f;
 
     [Header("Lifetime")]
     [Tooltip("How long each circle lives. Lower values make the smoke fade and finish faster.")]
@@ -103,6 +108,8 @@ public class SmokeEffect : MonoBehaviour
     public void Configure(Color color, Vector2 direction)
     {
         smokeColor = color;
+        secondarySmokeColor = color;
+        primaryColorWeight = 1f;
         baseDirection = direction.sqrMagnitude > MinDirectionSqrMagnitude
             ? direction.normalized
             : Vector2.zero;
@@ -113,6 +120,8 @@ public class SmokeEffect : MonoBehaviour
     public void SetColor(Color color)
     {
         smokeColor = color;
+        secondarySmokeColor = color;
+        primaryColorWeight = 1f;
         RefreshActiveCircles();
     }
 
@@ -131,6 +140,8 @@ public class SmokeEffect : MonoBehaviour
     public void ConfigureBurst(
         Sprite sprite,
         Color color,
+        Color secondaryColor,
+        float primaryWeight,
         string layerName,
         int order,
         int circles,
@@ -156,6 +167,8 @@ public class SmokeEffect : MonoBehaviour
         sortingLayerName = string.IsNullOrWhiteSpace(layerName) ? "Default" : layerName;
         sortingOrder = Mathf.Clamp(order, -32768, 32767);
         smokeColor = color;
+        secondarySmokeColor = secondaryColor;
+        primaryColorWeight = Mathf.Clamp01(primaryWeight);
 
         lifetimeRange = ClampRange(lifetime, 0.01f);
         startScaleRange = ClampRange(startScale, 0.001f);
@@ -262,6 +275,7 @@ public class SmokeEffect : MonoBehaviour
         {
             SmokeCircle circle = circlePool[i];
             circle.StartLocalPosition = SampleSpawnOffset();
+            circle.BaseColor = SampleCircleColor();
             circle.Velocity = SampleVelocity();
             circle.Lifetime = SampleRange(lifetimeRange, 0.01f);
             circle.Age = 0f;
@@ -288,7 +302,7 @@ public class SmokeEffect : MonoBehaviour
         circle.Transform.localScale = new Vector3(scale, scale, 1f);
 
         float alphaT = EvaluateCurve(alphaOverLifetime, normalizedAge, 1f - normalizedAge);
-        Color color = smokeColor;
+        Color color = circle.BaseColor;
         color.a *= circle.StartAlphaMultiplier * Mathf.Clamp01(alphaT);
         circle.Renderer.color = color;
         circle.Renderer.enabled = smokeSprite != null && color.a > 0.0001f;
@@ -408,6 +422,13 @@ public class SmokeEffect : MonoBehaviour
         return Quaternion.Euler(0f, 0f, angle) * Vector2.right * radius;
     }
 
+    private Color SampleCircleColor()
+    {
+        return Random.value <= Mathf.Clamp01(primaryColorWeight)
+            ? smokeColor
+            : secondarySmokeColor;
+    }
+
     private static float SampleRange(Vector2 range, float minimumValue)
     {
         float min = Mathf.Min(range.x, range.y);
@@ -442,6 +463,7 @@ public class SmokeEffect : MonoBehaviour
         startOpacityMultiplierRange = ClampRange(startOpacityMultiplierRange, 0f);
         speedRange = ClampRange(speedRange, 0f);
         spawnRadiusRange = ClampRange(spawnRadiusRange, 0f);
+        primaryColorWeight = Mathf.Clamp01(primaryColorWeight);
 
         if (!Application.isPlaying)
         {

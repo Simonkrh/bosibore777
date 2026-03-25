@@ -19,13 +19,13 @@ public class MissileTrailSmoke : NetworkBehaviour
     [SerializeField] private float spawnIntervalSeconds = 0.06f;
     [Tooltip("How far behind the missile each smoke burst is spawned.")]
     [SerializeField] private float backwardOffset = 0.22f;
-    [Tooltip("Alpha applied to the target color when tinting the smoke.")]
+    [Tooltip("Alpha applied to all trail smoke circles.")]
     [SerializeField] private float smokeAlpha = 0.55f;
 
     [Header("Color")]
     [Tooltip("Smoke color used before the missile has a target.")]
     [SerializeField] private Color untargetedSmokeColor = DefaultUntargetedSmokeColor;
-    [Tooltip("How much of the target player's color is kept after mixing it with black. 0.7 = 70% player color, 30% black.")]
+    [Tooltip("When targeting, chance that each spawned circle uses the target color. The rest use the untargeted smoke color.")]
     [SerializeField, Range(0f, 1f)] private float targetColorWeight = 0.7f;
 
     [Header("Burst")]
@@ -54,8 +54,12 @@ public class MissileTrailSmoke : NetworkBehaviour
     [Tooltip("Angular velocity range for each smoke circle.")]
     [SerializeField] private Vector2 angularVelocityRange = new Vector2(-18f, 18f);
 
-    private readonly NetworkVariable<Color> currentSmokeColor = new NetworkVariable<Color>(
+    private readonly NetworkVariable<Color> currentTargetSmokeColor = new NetworkVariable<Color>(
         new Color(0.12f, 0.12f, 0.12f, 0.55f),
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
+    private readonly NetworkVariable<bool> hasTargetColor = new NetworkVariable<bool>(
+        false,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server);
 
@@ -76,8 +80,9 @@ public class MissileTrailSmoke : NetworkBehaviour
             return;
         }
 
-        Color mixedColor = Color.Lerp(Color.black, color, Mathf.Clamp01(targetColorWeight));
-        SetSmokeColorServer(mixedColor);
+        color.a = Mathf.Clamp01(smokeAlpha);
+        currentTargetSmokeColor.Value = color;
+        hasTargetColor.Value = true;
     }
 
     public void SetNoTargetColorServer()
@@ -87,7 +92,7 @@ public class MissileTrailSmoke : NetworkBehaviour
             return;
         }
 
-        SetSmokeColorServer(untargetedSmokeColor);
+        hasTargetColor.Value = false;
     }
 
     private void Update()
@@ -126,9 +131,18 @@ public class MissileTrailSmoke : NetworkBehaviour
         burstObject.transform.rotation = Quaternion.identity;
 
         SmokeEffect smokeEffect = burstObject.AddComponent<SmokeEffect>();
+        Color untargetedColor = GetUntargetedSmokeColor();
+        Color targetColor = hasTargetColor.Value
+            ? currentTargetSmokeColor.Value
+            : untargetedColor;
+        float targetCircleWeight = hasTargetColor.Value
+            ? Mathf.Clamp01(targetColorWeight)
+            : 0f;
         smokeEffect.ConfigureBurst(
             smokeSprite,
-            currentSmokeColor.Value,
+            targetColor,
+            untargetedColor,
+            targetCircleWeight,
             sortingLayerName,
             sortingOrder,
             circleCount,
@@ -149,10 +163,11 @@ public class MissileTrailSmoke : NetworkBehaviour
         smokeEffect.Play();
     }
 
-    private void SetSmokeColorServer(Color color)
+    private Color GetUntargetedSmokeColor()
     {
+        Color color = untargetedSmokeColor;
         color.a = Mathf.Clamp01(smokeAlpha);
-        currentSmokeColor.Value = color;
+        return color;
     }
 
     private void OnValidate()
