@@ -263,19 +263,28 @@ MonoBehaviour:
   spawnIntervalSeconds: 0.03
   backwardOffset: 0.18
   smokeAlpha: 0.55
-  untargetedSmokeColor: {r: 0.4433962, g: 0.4413047, b: 0.4413047, a: 1}
-  targetColorWeight: 0.55
+  untargetedSmokeColor: {r: 0.084905684, g: 0.084505185, b: 0.084505185, a: 1}
+  targetColorWeight: 0.6
   circleCount: 1
   lifetimeRange: {x: 3.5, y: 4}
   startScaleRange: {x: 0.025, y: 0.055}
   endScaleMultiplierRange: {x: 1.8, y: 2.8}
-  startOpacityMultiplierRange: {x: 0.45, y: 0.75}
+  startOpacityMultiplierRange: {x: 0, y: 0.7}
   spreadInAllDirections: 1
   baseDirection: {x: 0, y: 0}
   directionVariationDegrees: 30
   speedRange: {x: 0.07, y: 0.1}
   spawnRadiusRange: {x: 0, y: 0.01}
   angularVelocityRange: {x: -14, y: 14}
+  despawnCircleCount: 15
+  despawnLifetimeRange: {x: 0.3, y: 0.55}
+  despawnStartScaleRange: {x: 0.017, y: 0.02}
+  despawnEndScaleMultiplierRange: {x: 2.2, y: 3.3}
+  despawnStartOpacityMultiplierRange: {x: 0.4, y: 0.7}
+  despawnDirectionVariationDegrees: 55
+  despawnSpeedRange: {x: 0.5, y: 0.5}
+  despawnSpawnRadiusRange: {x: 0, y: 0.05}
+  despawnAngularVelocityRange: {x: -30, y: 30}
 --- !u!114 &-3522215255666235687
 MonoBehaviour:
   m_ObjectHideFlags: 0

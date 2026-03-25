@@ -54,6 +54,26 @@ public class MissileTrailSmoke : NetworkBehaviour
     [Tooltip("Angular velocity range for each smoke circle.")]
     [SerializeField] private Vector2 angularVelocityRange = new Vector2(-18f, 18f);
 
+    [Header("Despawn Burst")]
+    [Tooltip("How many circles are spawned when the missile despawns.")]
+    [SerializeField] private int despawnCircleCount = 10;
+    [Tooltip("How long each despawn smoke circle lives.")]
+    [SerializeField] private Vector2 despawnLifetimeRange = new Vector2(0.3f, 0.55f);
+    [Tooltip("Starting size range for each despawn smoke circle.")]
+    [SerializeField] private Vector2 despawnStartScaleRange = new Vector2(0.05f, 0.09f);
+    [Tooltip("Growth multiplier range for each despawn smoke circle.")]
+    [SerializeField] private Vector2 despawnEndScaleMultiplierRange = new Vector2(2.2f, 3.3f);
+    [Tooltip("Random opacity multiplier range for each despawn smoke circle.")]
+    [SerializeField] private Vector2 despawnStartOpacityMultiplierRange = new Vector2(0.65f, 1f);
+    [Tooltip("Spread angle in degrees around the missile's facing direction when it despawns.")]
+    [SerializeField] private float despawnDirectionVariationDegrees = 55f;
+    [Tooltip("Speed range for each despawn smoke circle.")]
+    [SerializeField] private Vector2 despawnSpeedRange = new Vector2(0.08f, 0.18f);
+    [Tooltip("Spawn radius around the despawn point for each smoke circle.")]
+    [SerializeField] private Vector2 despawnSpawnRadiusRange = new Vector2(0f, 0.03f);
+    [Tooltip("Angular velocity range for each despawn smoke circle.")]
+    [SerializeField] private Vector2 despawnAngularVelocityRange = new Vector2(-30f, 30f);
+
     private readonly NetworkVariable<Color> currentTargetSmokeColor = new NetworkVariable<Color>(
         new Color(0.12f, 0.12f, 0.12f, 0.55f),
         NetworkVariableReadPermission.Everyone,
@@ -163,6 +183,51 @@ public class MissileTrailSmoke : NetworkBehaviour
         smokeEffect.Play();
     }
 
+    public void PlayDespawnBurst(Vector2 facingDirection)
+    {
+        if (smokeSprite == null)
+        {
+            return;
+        }
+
+        Vector2 resolvedDirection = facingDirection.sqrMagnitude > 0.0001f
+            ? facingDirection.normalized
+            : (Vector2)transform.up;
+        Color burstColor = hasTargetColor.Value
+            ? currentTargetSmokeColor.Value
+            : GetUntargetedSmokeColor();
+
+        GameObject burstObject = new GameObject("MissileDespawnSmokeBurst");
+        burstObject.SetActive(false);
+        burstObject.transform.position = transform.position;
+        burstObject.transform.rotation = Quaternion.identity;
+
+        SmokeEffect smokeEffect = burstObject.AddComponent<SmokeEffect>();
+        smokeEffect.ConfigureBurst(
+            smokeSprite,
+            burstColor,
+            burstColor,
+            1f,
+            sortingLayerName,
+            sortingOrder,
+            despawnCircleCount,
+            despawnLifetimeRange,
+            despawnStartScaleRange,
+            despawnEndScaleMultiplierRange,
+            despawnStartOpacityMultiplierRange,
+            false,
+            resolvedDirection,
+            despawnDirectionVariationDegrees,
+            despawnSpeedRange,
+            despawnSpawnRadiusRange,
+            despawnAngularVelocityRange,
+            true,
+            false);
+
+        burstObject.SetActive(true);
+        smokeEffect.Play();
+    }
+
     private Color GetUntargetedSmokeColor()
     {
         Color color = untargetedSmokeColor;
@@ -179,13 +244,21 @@ public class MissileTrailSmoke : NetworkBehaviour
         targetColorWeight = Mathf.Clamp01(targetColorWeight);
         untargetedSmokeColor.a = 1f;
         circleCount = Mathf.Clamp(circleCount, 1, 32);
+        despawnCircleCount = Mathf.Clamp(despawnCircleCount, 1, 64);
         directionVariationDegrees = Mathf.Clamp(directionVariationDegrees, 0f, 180f);
+        despawnDirectionVariationDegrees = Mathf.Clamp(despawnDirectionVariationDegrees, 0f, 180f);
         lifetimeRange = ClampRange(lifetimeRange, 0.01f);
         startScaleRange = ClampRange(startScaleRange, 0.001f);
         endScaleMultiplierRange = ClampRange(endScaleMultiplierRange, 0.001f);
         startOpacityMultiplierRange = ClampRange(startOpacityMultiplierRange, 0f);
         speedRange = ClampRange(speedRange, 0f);
         spawnRadiusRange = ClampRange(spawnRadiusRange, 0f);
+        despawnLifetimeRange = ClampRange(despawnLifetimeRange, 0.01f);
+        despawnStartScaleRange = ClampRange(despawnStartScaleRange, 0.001f);
+        despawnEndScaleMultiplierRange = ClampRange(despawnEndScaleMultiplierRange, 0.001f);
+        despawnStartOpacityMultiplierRange = ClampRange(despawnStartOpacityMultiplierRange, 0f);
+        despawnSpeedRange = ClampRange(despawnSpeedRange, 0f);
+        despawnSpawnRadiusRange = ClampRange(despawnSpawnRadiusRange, 0f);
     }
 
     private static Vector2 ClampRange(Vector2 range, float minimumValue)

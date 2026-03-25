@@ -217,6 +217,12 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
             return;
         }
 
+        MissileTrailSmoke trailSmoke = projectile.GetComponent<MissileTrailSmoke>();
+        if (trailSmoke != null)
+        {
+            trailSmoke.PlayDespawnBurst(projectile.transform.up);
+        }
+
         activeMissilesByOwner.Remove(ownerClientId);
 
         if (owner != null)
