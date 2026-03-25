@@ -76,12 +76,14 @@ MonoBehaviour:
   playOnEnable: 0
   destroyWhenFinished: 0
   useUnscaledTime: 0
-  circleCount: 20
+  circleCount: 10
   smokeSprite: {fileID: -9087577266532155448, guid: f3d04deda499e8146b7a8d54e940b07d, type: 3}
   sortingLayerName: Default
   sortingOrder: 0
   smokeColor: {r: 0.4331962, g: 0.21440013, b: 0.6226415, a: 0.78}
-  lifetimeRange: {x: 0.5, y: 2}
+  secondarySmokeColor: {r: 1, g: 1, b: 1, a: 0.7}
+  primaryColorWeight: 1
+  lifetimeRange: {x: 0.5, y: 1.5}
   alphaOverLifetime:
     serializedVersion: 2
     m_Curve:
@@ -131,7 +133,7 @@ MonoBehaviour:
     m_PostInfinity: 2
     m_RotationOrder: 4
   startScaleRange: {x: 0.05, y: 0.1}
-  endScaleMultiplierRange: {x: 0.001, y: 2.3}
+  endScaleMultiplierRange: {x: 2, y: 2.3}
   startOpacityMultiplierRange: {x: 0.75, y: 1}
   spreadInAllDirections: 1
   baseDirection: {x: 0, y: 0}

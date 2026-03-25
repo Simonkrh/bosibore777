@@ -37,6 +37,10 @@ public class MinigunAbilityBehavior : AbilityBehavior
     [Tooltip("When enabled, mini bullets are tinted to the shooter's tank color.")]
     [SerializeField] private bool tintProjectilesWithShooterColor = true;
 
+    [Header("Minigun Despawn Smoke")]
+    [Tooltip("Directional smoke burst played when a minigun bullet despawns.")]
+    [SerializeField] private DirectionalSmokeBurst.Config minigunBulletDespawnSmoke = new DirectionalSmokeBurst.Config();
+
     public override AbilityActivationResult TryActivateServer(TankController owner, int shotSequence)
     {
         if (owner == null || !owner.IsServer || miniBulletPrefab == null)
@@ -67,6 +71,7 @@ public class MinigunAbilityBehavior : AbilityBehavior
             extraSpawnDistance,
             shotSequenceStride,
             tintProjectilesWithShooterColor,
+            minigunBulletDespawnSmoke,
             HandleRuntimeCompletedServer);
 
         if (!runtime.BeginCharge(shotSequence))
@@ -123,6 +128,7 @@ public class MinigunAbilityBehavior : AbilityBehavior
         clearAfterSeconds = Mathf.Max(0f, clearAfterSeconds);
         extraSpawnDistance = Mathf.Max(0f, extraSpawnDistance);
         shotSequenceStride = Mathf.Max(1, shotSequenceStride);
+        minigunBulletDespawnSmoke?.ClampInEditor();
 
 #if UNITY_EDITOR
         if (minigunTankBodyPrefab != null)

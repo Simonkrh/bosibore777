@@ -37,6 +37,10 @@ public class TankController : NetworkBehaviour
     [SerializeField] private float shotLatencyCompensationFactor = 1f;
     [SerializeField] private float maxShotLatencyCompensationSeconds = 0.12f;
 
+    [Header("Bullet Despawn Smoke")]
+    [Tooltip("Directional smoke burst played when a normal bullet despawns.")]
+    [SerializeField] private DirectionalSmokeBurst.Config standardBulletDespawnSmoke = new DirectionalSmokeBurst.Config();
+
     private Rigidbody2D rb;
     private float lastShotTime;
     private GameManager gameManager;
@@ -692,6 +696,7 @@ public class TankController : NetworkBehaviour
             shooterUnlockRadius,
             HandleAuthoritativeProjectileDestroyed);
         projectileComponent.ConfigureAudioProfileServer(Projectile.AudioProfile.Standard);
+        projectileComponent.ConfigureDirectionalDespawnSmokeServer(standardBulletDespawnSmoke);
         hasActiveStandardProjectileServer = true;
         activeStandardProjectileShotSequence = shotSequence;
         networkHasActiveStandardProjectile.Value = true;
@@ -1433,4 +1438,16 @@ public class TankController : NetworkBehaviour
     }
 
     #endregion
+
+    private void OnValidate()
+    {
+        shootCooldown = Mathf.Max(0f, shootCooldown);
+        projectileSpeed = Mathf.Max(0f, projectileSpeed);
+        shootingOffsetDistance = Mathf.Max(0f, shootingOffsetDistance);
+        predictedShotVisualLifetime = Mathf.Max(0.01f, predictedShotVisualLifetime);
+        predictedShotVisualAlpha = Mathf.Clamp01(predictedShotVisualAlpha);
+        shotLatencyCompensationFactor = Mathf.Clamp01(shotLatencyCompensationFactor);
+        maxShotLatencyCompensationSeconds = Mathf.Max(0f, maxShotLatencyCompensationSeconds);
+        standardBulletDespawnSmoke?.ClampInEditor();
+    }
 }

@@ -24,3 +24,17 @@ MonoBehaviour:
   extraSpawnDistance: 0.03
   shotSequenceStride: 1000
   tintProjectilesWithShooterColor: 0
+  minigunBulletDespawnSmoke:
+    smokeSprite: {fileID: -9087577266532155448, guid: f3d04deda499e8146b7a8d54e940b07d, type: 3}
+    smokeColor: {r: 0.084905684, g: 0.084505185, b: 0.084505185, a: 0.55}
+    sortingLayerName: Default
+    sortingOrder: 58
+    circleCount: 10
+    lifetimeRange: {x: 0.3, y: 0.55}
+    startScaleRange: {x: 0.01, y: 0.015}
+    endScaleMultiplierRange: {x: 2.2, y: 3.3}
+    startOpacityMultiplierRange: {x: 0.4, y: 0.7}
+    directionVariationDegrees: 55
+    speedRange: {x: 0.5, y: 0.5}
+    spawnRadiusRange: {x: 0, y: 0.05}
+    angularVelocityRange: {x: -30, y: 30}

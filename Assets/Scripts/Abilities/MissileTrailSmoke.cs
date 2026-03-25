@@ -185,47 +185,31 @@ public class MissileTrailSmoke : NetworkBehaviour
 
     public void PlayDespawnBurst(Vector2 facingDirection)
     {
-        if (smokeSprite == null)
+        if (!TryCreateCurrentDespawnBurstSettings(transform.position, facingDirection, out DirectionalSmokeBurst.Settings settings))
         {
             return;
         }
 
-        Vector2 resolvedDirection = facingDirection.sqrMagnitude > 0.0001f
-            ? facingDirection.normalized
-            : (Vector2)transform.up;
+        DirectionalSmokeBurst.Spawn(settings, "MissileDespawnSmokeBurst");
+    }
+
+    public bool TryCreateCurrentDespawnBurstSettings(
+        Vector3 position,
+        Vector2 facingDirection,
+        out DirectionalSmokeBurst.Settings settings)
+    {
         Color burstColor = hasTargetColor.Value
             ? currentTargetSmokeColor.Value
             : GetUntargetedSmokeColor();
+        return TryCreateDespawnBurstSettings(position, facingDirection, burstColor, out settings);
+    }
 
-        GameObject burstObject = new GameObject("MissileDespawnSmokeBurst");
-        burstObject.SetActive(false);
-        burstObject.transform.position = transform.position;
-        burstObject.transform.rotation = Quaternion.identity;
-
-        SmokeEffect smokeEffect = burstObject.AddComponent<SmokeEffect>();
-        smokeEffect.ConfigureBurst(
-            smokeSprite,
-            burstColor,
-            burstColor,
-            1f,
-            sortingLayerName,
-            sortingOrder,
-            despawnCircleCount,
-            despawnLifetimeRange,
-            despawnStartScaleRange,
-            despawnEndScaleMultiplierRange,
-            despawnStartOpacityMultiplierRange,
-            false,
-            resolvedDirection,
-            despawnDirectionVariationDegrees,
-            despawnSpeedRange,
-            despawnSpawnRadiusRange,
-            despawnAngularVelocityRange,
-            true,
-            false);
-
-        burstObject.SetActive(true);
-        smokeEffect.Play();
+    public bool TryCreateUntargetedDespawnBurstSettings(
+        Vector3 position,
+        Vector2 facingDirection,
+        out DirectionalSmokeBurst.Settings settings)
+    {
+        return TryCreateDespawnBurstSettings(position, facingDirection, GetUntargetedSmokeColor(), out settings);
     }
 
     private Color GetUntargetedSmokeColor()
@@ -233,6 +217,41 @@ public class MissileTrailSmoke : NetworkBehaviour
         Color color = untargetedSmokeColor;
         color.a = Mathf.Clamp01(smokeAlpha);
         return color;
+    }
+
+    private bool TryCreateDespawnBurstSettings(
+        Vector3 position,
+        Vector2 facingDirection,
+        Color burstColor,
+        out DirectionalSmokeBurst.Settings settings)
+    {
+        if (smokeSprite == null)
+        {
+            settings = default;
+            return false;
+        }
+
+        Vector2 resolvedDirection = facingDirection.sqrMagnitude > 0.0001f
+            ? facingDirection.normalized
+            : (Vector2)transform.up;
+
+        settings = new DirectionalSmokeBurst.Settings(
+            position,
+            resolvedDirection,
+            smokeSprite,
+            burstColor,
+            sortingLayerName,
+            sortingOrder,
+            despawnCircleCount,
+            despawnLifetimeRange,
+            despawnStartScaleRange,
+            despawnEndScaleMultiplierRange,
+            despawnStartOpacityMultiplierRange,
+            despawnDirectionVariationDegrees,
+            despawnSpeedRange,
+            despawnSpawnRadiusRange,
+            despawnAngularVelocityRange);
+        return true;
     }
 
     private void OnValidate()

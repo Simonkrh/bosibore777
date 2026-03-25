@@ -49,6 +49,7 @@ public class Projectile : NetworkBehaviour
     private DestroyCause pendingDestroyCause = DestroyCause.Unknown;
     private AudioProfile audioProfile = AudioProfile.Standard;
     private GameManager gameManager;
+    private DirectionalSmokeBurst.Config directionalDespawnSmokeConfig;
 
     public ulong ShooterClientId => shooterId;
 
@@ -248,6 +249,16 @@ public class Projectile : NetworkBehaviour
         audioProfile = profile;
     }
 
+    public void ConfigureDirectionalDespawnSmokeServer(DirectionalSmokeBurst.Config config)
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        directionalDespawnSmokeConfig = config;
+    }
+
     public void SetVisualColorServer(Color color)
     {
         if (!IsServer)
@@ -346,6 +357,30 @@ public class Projectile : NetworkBehaviour
         ResolveGameManager()?.PlayBulletDespawnSoundServer(transform.position);
     }
 
+    private void TryPlayDirectionalDespawnSmokeServer()
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        if (directionalDespawnSmokeConfig == null)
+        {
+            return;
+        }
+
+        Vector2 facingDirection = transform.up;
+        if (rb != null && rb.linearVelocity.sqrMagnitude > 0.0001f)
+        {
+            facingDirection = rb.linearVelocity.normalized;
+        }
+
+        if (directionalDespawnSmokeConfig.TryCreateSettings(transform.position, facingDirection, out DirectionalSmokeBurst.Settings settings))
+        {
+            DirectionalSmokeBurst.Spawn(settings, "ProjectileDespawnSmokeBurst");
+        }
+    }
+
     private void DespawnOrDestroyProjectile()
     {
         if (destroyInvoked)
@@ -355,6 +390,7 @@ public class Projectile : NetworkBehaviour
 
         destroyInvoked = true;
         TryPlayDespawnSoundServer(pendingDestroyCause);
+        TryPlayDirectionalDespawnSmokeServer();
         try
         {
             preDestroyServerCallback?.Invoke(this, pendingDestroyCause);

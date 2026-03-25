@@ -23,6 +23,7 @@ public class MinigunAbilityRuntime : MonoBehaviour
     private float extraSpawnDistance;
     private int shotSequenceStride;
     private bool tintProjectilesWithShooterColor;
+    private DirectionalSmokeBurst.Config directionalDespawnSmokeConfig;
     private Action<TankController> completedCallback;
     private GameManager gameManager;
     private ulong ownerClientId;
@@ -51,6 +52,7 @@ public class MinigunAbilityRuntime : MonoBehaviour
         float spawnDistanceOffset,
         int sequenceStride,
         bool tintProjectiles,
+        DirectionalSmokeBurst.Config despawnSmokeConfig,
         Action<TankController> onCompleted)
     {
         owner = ownerTank;
@@ -66,6 +68,7 @@ public class MinigunAbilityRuntime : MonoBehaviour
         extraSpawnDistance = Mathf.Max(0f, spawnDistanceOffset);
         shotSequenceStride = Mathf.Max(1, sequenceStride);
         tintProjectilesWithShooterColor = tintProjectiles;
+        directionalDespawnSmokeConfig = despawnSmokeConfig;
         completedCallback = onCompleted;
     }
 
@@ -242,12 +245,17 @@ public class MinigunAbilityRuntime : MonoBehaviour
 
         ResolveGameManager()?.PlayMinigunShotSoundServer(ownerClientId, spawnedProjectile.transform.position);
 
+        Projectile projectile = spawnedProjectile.GetComponent<Projectile>();
+        if (projectile != null)
+        {
+            projectile.ConfigureDirectionalDespawnSmokeServer(directionalDespawnSmokeConfig);
+        }
+
         if (!tintProjectilesWithShooterColor || spawnedProjectile == null)
         {
             return;
         }
 
-        Projectile projectile = spawnedProjectile.GetComponent<Projectile>();
         if (projectile != null)
         {
             projectile.SetVisualColorServer(owner.tankColor.Value);
