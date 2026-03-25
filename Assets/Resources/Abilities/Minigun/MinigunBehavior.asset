@@ -34,7 +34,7 @@ MonoBehaviour:
     startScaleRange: {x: 0.01, y: 0.015}
     endScaleMultiplierRange: {x: 2.2, y: 3.3}
     startOpacityMultiplierRange: {x: 0.4, y: 0.7}
-    directionVariationDegrees: 55
-    speedRange: {x: 0.5, y: 0.5}
+    directionVariationDegrees: 10
+    speedRange: {x: 1, y: 1}
     spawnRadiusRange: {x: 0, y: 0.05}
     angularVelocityRange: {x: -30, y: 30}
