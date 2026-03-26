@@ -426,7 +426,28 @@ public class MazeGenerator : NetworkBehaviour
 
     void GenerateMaze()
     {
+        const int maxGenerationAttempts = 128;
+
+        for (int attempt = 1; attempt <= maxGenerationAttempts; attempt++)
+        {
+            InitializeGrid();
+            GenerateMazeWithDepthFirstSearch();
+
+            if (!HasFullyOpenCells())
+            {
+                return;
+            }
+        }
+
+        Debug.LogWarning("[MazeGenerator] Falling back to snake maze generation to guarantee every tile keeps at least one wall.");
+        InitializeGrid();
+        GenerateSnakeMaze();
+    }
+
+    private void InitializeGrid()
+    {
         grid = new Cell[width, height];
+        stack.Clear();
 
         for (int x = 0; x < width; x++)
         {
@@ -435,7 +456,10 @@ public class MazeGenerator : NetworkBehaviour
                 grid[x, y] = new Cell();
             }
         }
+    }
 
+    private void GenerateMazeWithDepthFirstSearch()
+    {
         // Start maze generation from the top-left cell
         Vector2Int currentCell = new Vector2Int(0, 0);
         grid[currentCell.x, currentCell.y].visited = true;
@@ -463,6 +487,41 @@ public class MazeGenerator : NetworkBehaviour
                 stack.Push(chosenNeighbor);
             }
         }
+    }
+
+    private void GenerateSnakeMaze()
+    {
+        Vector2Int? previousCell = null;
+
+        for (int y = 0; y < height; y++)
+        {
+            if ((y & 1) == 0)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    ConnectSnakeCell(new Vector2Int(x, y), ref previousCell);
+                }
+            }
+            else
+            {
+                for (int x = width - 1; x >= 0; x--)
+                {
+                    ConnectSnakeCell(new Vector2Int(x, y), ref previousCell);
+                }
+            }
+        }
+    }
+
+    private void ConnectSnakeCell(Vector2Int currentCell, ref Vector2Int? previousCell)
+    {
+        grid[currentCell.x, currentCell.y].visited = true;
+
+        if (previousCell.HasValue)
+        {
+            RemoveWall(previousCell.Value, currentCell);
+        }
+
+        previousCell = currentCell;
     }
     
     List<Vector2Int> GetUnvisitedNeighbors(Vector2Int cell)
@@ -532,52 +591,99 @@ public class MazeGenerator : NetworkBehaviour
 
     void RemoveRandomWalls()
     {
-        // Step 1: Collect all internal walls
+        // Step 1: Collect all eligible internal walls
         List<(Vector2Int cell, int direction)> internalWalls = new List<(Vector2Int, int)>();
-        
+
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
             {
                 // Skip perimeter cells for outer walls
                 if (x == 0 || y == 0 || x == width - 1 || y == height - 1)
+                {
                     continue;
-                
-                // East wall (1)
-                if (x < width - 1)
-                {
-                    internalWalls.Add((new Vector2Int(x, y), 1)); // 1: East
                 }
-                
-                // South wall (2)
-                if (y < height - 1)
+
+                // East wall (1)
+                if (x < width - 1 && grid[x, y].walls[1])
                 {
-                    internalWalls.Add((new Vector2Int(x, y), 2)); // 2: South
+                    internalWalls.Add((new Vector2Int(x, y), 1));
+                }
+
+                // South wall (2)
+                if (y > 0 && grid[x, y].walls[2])
+                {
+                    internalWalls.Add((new Vector2Int(x, y), 2));
                 }
             }
         }
-        
+
         // Step 2: Shuffle the list to ensure randomness
         Shuffle(internalWalls);
-        
+
         // Step 3: Calculate the number of walls to remove
         int totalInternalWalls = internalWalls.Count;
         int wallsToRemove = Mathf.RoundToInt(totalInternalWalls * wallRemovalPercentage);
-        
-        // Step 4: Remove the walls
-        for (int i = 0; i < wallsToRemove && i < internalWalls.Count; i++)
+
+        // Step 4: Remove the walls without creating fully open tiles
+        int removedWallCount = 0;
+        for (int i = 0; i < internalWalls.Count && removedWallCount < wallsToRemove; i++)
         {
             var (cell, direction) = internalWalls[i];
-            
-            Vector2Int neighbor = GetNeighbor(cell, direction);
-            
-            // Remove the wall in the current cell
-            grid[cell.x, cell.y].walls[direction] = false;
-            
-            // Remove the corresponding wall in the neighboring cell
-            int oppositeDirection = GetOppositeDirection(direction);
-            grid[neighbor.x, neighbor.y].walls[oppositeDirection] = false;
+            if (TryRemoveWallIfTileKeepsAtLeastOneWall(cell, direction))
+            {
+                removedWallCount++;
+            }
         }
+    }
+
+    private bool TryRemoveWallIfTileKeepsAtLeastOneWall(Vector2Int cell, int direction)
+    {
+        if (!IsCellInBounds(cell))
+        {
+            return false;
+        }
+
+        Vector2Int neighbor = GetNeighbor(cell, direction);
+        if (!IsCellInBounds(neighbor))
+        {
+            return false;
+        }
+
+        Cell currentCell = grid[cell.x, cell.y];
+        Cell neighborCell = grid[neighbor.x, neighbor.y];
+        if (currentCell == null || neighborCell == null || currentCell.walls == null || neighborCell.walls == null)
+        {
+            return false;
+        }
+
+        int oppositeDirection = GetOppositeDirection(direction);
+        if (direction < 0 ||
+            direction >= currentCell.walls.Length ||
+            oppositeDirection < 0 ||
+            oppositeDirection >= neighborCell.walls.Length)
+        {
+            return false;
+        }
+
+        if (!currentCell.walls[direction] || !neighborCell.walls[oppositeDirection])
+        {
+            return false;
+        }
+
+        if (CountWalls(currentCell) <= 1 || CountWalls(neighborCell) <= 1)
+        {
+            return false;
+        }
+
+        if (WouldCreateOpenTwoByTwoArea(cell, direction))
+        {
+            return false;
+        }
+
+        currentCell.walls[direction] = false;
+        neighborCell.walls[oppositeDirection] = false;
+        return true;
     }
 
     Vector2Int GetNeighbor(Vector2Int cell, int direction)
@@ -605,6 +711,131 @@ public class MazeGenerator : NetworkBehaviour
     private bool IsCellInBounds(Vector2Int cell)
     {
         return cell.x >= 0 && cell.y >= 0 && cell.x < width && cell.y < height;
+    }
+
+    private bool WouldCreateOpenTwoByTwoArea(Vector2Int cell, int direction)
+    {
+        Vector2Int neighbor = GetNeighbor(cell, direction);
+        if (!IsCellInBounds(cell) || !IsCellInBounds(neighbor))
+        {
+            return false;
+        }
+
+        if (direction == 0 || direction == 2)
+        {
+            int blockOriginY = Mathf.Min(cell.y, neighbor.y);
+            return IsFullyOpenTwoByTwoAfterWallRemoval(new Vector2Int(cell.x - 1, blockOriginY), cell, direction) ||
+                   IsFullyOpenTwoByTwoAfterWallRemoval(new Vector2Int(cell.x, blockOriginY), cell, direction);
+        }
+
+        int blockOriginX = Mathf.Min(cell.x, neighbor.x);
+        return IsFullyOpenTwoByTwoAfterWallRemoval(new Vector2Int(blockOriginX, cell.y - 1), cell, direction) ||
+               IsFullyOpenTwoByTwoAfterWallRemoval(new Vector2Int(blockOriginX, cell.y), cell, direction);
+    }
+
+    private bool IsFullyOpenTwoByTwoAfterWallRemoval(Vector2Int blockOrigin, Vector2Int removedWallCell, int removedWallDirection)
+    {
+        if (blockOrigin.x < 0 || blockOrigin.y < 0 || blockOrigin.x >= width - 1 || blockOrigin.y >= height - 1)
+        {
+            return false;
+        }
+
+        Vector2Int bottomLeft = blockOrigin;
+        Vector2Int bottomRight = new Vector2Int(blockOrigin.x + 1, blockOrigin.y);
+        Vector2Int topLeft = new Vector2Int(blockOrigin.x, blockOrigin.y + 1);
+        Vector2Int topRight = new Vector2Int(blockOrigin.x + 1, blockOrigin.y + 1);
+
+        return HasPassageAfterWallRemoval(bottomLeft, 1, removedWallCell, removedWallDirection) &&
+               HasPassageAfterWallRemoval(topLeft, 1, removedWallCell, removedWallDirection) &&
+               HasPassageAfterWallRemoval(bottomLeft, 0, removedWallCell, removedWallDirection) &&
+               HasPassageAfterWallRemoval(bottomRight, 0, removedWallCell, removedWallDirection);
+    }
+
+    private bool HasPassageAfterWallRemoval(Vector2Int fromCell, int direction, Vector2Int removedWallCell, int removedWallDirection)
+    {
+        Vector2Int toCell = GetNeighbor(fromCell, direction);
+        if (!IsCellInBounds(fromCell) || !IsCellInBounds(toCell))
+        {
+            return false;
+        }
+
+        if (IsSameWall(fromCell, direction, removedWallCell, removedWallDirection))
+        {
+            return true;
+        }
+
+        Cell from = grid[fromCell.x, fromCell.y];
+        Cell to = grid[toCell.x, toCell.y];
+        if (from == null || to == null || from.walls == null || to.walls == null)
+        {
+            return false;
+        }
+
+        int oppositeDirection = GetOppositeDirection(direction);
+        if (direction < 0 ||
+            direction >= from.walls.Length ||
+            oppositeDirection < 0 ||
+            oppositeDirection >= to.walls.Length)
+        {
+            return false;
+        }
+
+        return !from.walls[direction] && !to.walls[oppositeDirection];
+    }
+
+    private bool IsSameWall(Vector2Int cellA, int directionA, Vector2Int cellB, int directionB)
+    {
+        if (cellA == cellB && directionA == directionB)
+        {
+            return true;
+        }
+
+        Vector2Int neighborA = GetNeighbor(cellA, directionA);
+        Vector2Int neighborB = GetNeighbor(cellB, directionB);
+        return cellA == neighborB &&
+               neighborA == cellB &&
+               directionA == GetOppositeDirection(directionB);
+    }
+
+    private bool HasFullyOpenCells()
+    {
+        if (grid == null)
+        {
+            return false;
+        }
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                if (CountWalls(grid[x, y]) == 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static int CountWalls(Cell cell)
+    {
+        if (cell == null || cell.walls == null)
+        {
+            return 0;
+        }
+
+        int wallCount = 0;
+        int wallCountLength = Mathf.Min(4, cell.walls.Length);
+        for (int i = 0; i < wallCountLength; i++)
+        {
+            if (cell.walls[i])
+            {
+                wallCount++;
+            }
+        }
+
+        return wallCount;
     }
 
     private bool TryGetTraversableNeighbor(Vector2Int fromCell, int direction, out Vector2Int neighbor)
