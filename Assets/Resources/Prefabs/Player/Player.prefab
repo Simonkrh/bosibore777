@@ -393,8 +393,8 @@ MonoBehaviour:
     sortingOrder: 58
     circleCount: 10
     lifetimeRange: {x: 0.3, y: 0.55}
-    startScaleRange: {x: 0.2, y: 1}
-    endScaleMultiplierRange: {x: 2.2, y: 3.3}
+    startScaleRange: {x: 0.02, y: 0.03}
+    endScaleMultiplierRange: {x: 0.001, y: 2.8}
     startOpacityMultiplierRange: {x: 0.4, y: 0.7}
     directionVariationDegrees: 10
     speedRange: {x: 1, y: 1}

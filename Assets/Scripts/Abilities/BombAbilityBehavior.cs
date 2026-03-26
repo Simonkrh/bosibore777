@@ -29,6 +29,13 @@ public class BombAbilityBehavior : AbilityBehavior
     [Tooltip("When enabled, both bomb and shards are tinted to the shooter's tank color.")]
     [SerializeField] private bool tintProjectilesWithShooterColor = false;
 
+    [Header("Explosion Smoke")]
+    [Tooltip("Smoke burst played when the bomb explodes.")]
+    [SerializeField] private DirectionalSmokeBurst.Config explosionSmoke = new DirectionalSmokeBurst.Config
+    {
+        directionVariationDegrees = 180f
+    };
+
     [Header("Shard Motion")]
     [Tooltip("Minimum random spin speed for shards (degrees/second).")]
     [SerializeField] private float shardSpinSpeedMinDegreesPerSecond = -540f;
@@ -139,7 +146,7 @@ public class BombAbilityBehavior : AbilityBehavior
         bool spawnedAnyShard = TrySpawnShards(owner, detonationPosition, shotSequence);
         if (spawnedAnyShard)
         {
-            owner.ResolveGameManager()?.PlayBombExplodeSoundServer(detonationPosition);
+            PlayExplosionEffects(owner, detonationPosition);
         }
 
         activeBombsByOwner.Remove(ownerClientId);
@@ -235,7 +242,7 @@ public class BombAbilityBehavior : AbilityBehavior
         bool spawnedAnyShard = TrySpawnShards(owner, detonationPosition, autoSequenceBase);
         if (spawnedAnyShard)
         {
-            owner.ResolveGameManager()?.PlayBombExplodeSoundServer(detonationPosition);
+            PlayExplosionEffects(owner, detonationPosition);
         }
         activeBombsByOwner.Remove(ownerClientId);
 
@@ -274,6 +281,17 @@ public class BombAbilityBehavior : AbilityBehavior
             Mathf.Clamp01(overWallSpeedMultiplier),
             Mathf.Max(0f, overWallProbeRadius),
             Mathf.Max(0f, overWallSpeedTransitionPerSecond));
+    }
+
+    private void PlayExplosionEffects(TankController owner, Vector2 detonationPosition)
+    {
+        owner?.ResolveGameManager()?.PlayBombExplodeSoundServer(detonationPosition);
+
+        if (explosionSmoke != null &&
+            explosionSmoke.TryCreateSettings(detonationPosition, Vector2.up, out DirectionalSmokeBurst.Settings settings))
+        {
+            DirectionalSmokeBurst.Spawn(settings, "BombExplosionSmokeBurst");
+        }
     }
 
     private bool TryGetActiveBomb(ulong ownerClientId, out NetworkObject activeBomb)
@@ -352,5 +370,6 @@ public class BombAbilityBehavior : AbilityBehavior
         overWallSpeedMultiplier = Mathf.Clamp01(overWallSpeedMultiplier);
         overWallProbeRadius = Mathf.Max(0f, overWallProbeRadius);
         overWallSpeedTransitionPerSecond = Mathf.Max(0f, overWallSpeedTransitionPerSecond);
+        explosionSmoke?.ClampInEditor();
     }
 }

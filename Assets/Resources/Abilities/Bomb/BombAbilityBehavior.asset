@@ -22,6 +22,20 @@ MonoBehaviour:
   shardSequenceStride: 1000
   shardsPassThroughWalls: 1
   tintProjectilesWithShooterColor: 0
+  explosionSmoke:
+    smokeSprite: {fileID: -9087577266532155448, guid: f3d04deda499e8146b7a8d54e940b07d, type: 3}
+    smokeColor: {r: 0.084905684, g: 0.084505185, b: 0.084505185, a: 0.55}
+    sortingLayerName: Default
+    sortingOrder: 58
+    circleCount: 15
+    lifetimeRange: {x: 1, y: 2}
+    startScaleRange: {x: 0.1, y: 0.2}
+    endScaleMultiplierRange: {x: 0.4, y: 0.7}
+    startOpacityMultiplierRange: {x: 0.7, y: 1}
+    directionVariationDegrees: 180
+    speedRange: {x: 0.2, y: 0.2}
+    spawnRadiusRange: {x: 0, y: 0.05}
+    angularVelocityRange: {x: -30, y: 30}
   shardSpinSpeedMinDegreesPerSecond: -540
   shardSpinSpeedMaxDegreesPerSecond: 540
   overWallSpeedMultiplier: 0.15
