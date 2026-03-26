@@ -95,6 +95,7 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
         }
 
         if (!owner.TryComputeAbilityProjectileSpawn(
+                homingMissilePrefab,
                 extraSpawnDistance,
                 out Vector2 spawnPosition2D,
                 out Quaternion spawnRotation,

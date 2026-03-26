@@ -5,6 +5,13 @@ using UnityEngine;
 [CreateAssetMenu(menuName = "Abilities/Behaviors/Bomb", fileName = "BombAbilityBehavior")]
 public class BombAbilityBehavior : AbilityBehavior
 {
+    private enum BombSpawnResult
+    {
+        Failed = 0,
+        Spawned = 1,
+        ExplodedImmediately = 2
+    }
+
     private sealed class ActiveBombState
     {
         public NetworkObject BombNetworkObject;
@@ -77,30 +84,47 @@ public class BombAbilityBehavior : AbilityBehavior
             return AbilityActivationResult.ActivatedKeep;
         }
 
-        if (!TrySpawnBomb(owner, ownerClientId, shotSequence))
+        BombSpawnResult spawnResult = TrySpawnBomb(owner, ownerClientId, shotSequence);
+        if (spawnResult == BombSpawnResult.Failed)
         {
             return AbilityActivationResult.NotActivated;
+        }
+
+        if (spawnResult == BombSpawnResult.ExplodedImmediately)
+        {
+            return AbilityActivationResult.ActivatedConsume;
         }
 
         // Keep equipped until a successful detonation.
         return AbilityActivationResult.ActivatedKeep;
     }
 
-    private bool TrySpawnBomb(TankController owner, ulong ownerClientId, int shotSequence)
+    private BombSpawnResult TrySpawnBomb(TankController owner, ulong ownerClientId, int shotSequence)
     {
         if (bombProjectilePrefab == null)
         {
-            return false;
+            return BombSpawnResult.Failed;
         }
 
         if (!owner.TryComputeAbilityProjectileSpawn(
+                bombProjectilePrefab,
                 extraSpawnDistance,
                 out Vector2 spawnPosition2D,
                 out Quaternion spawnRotation,
                 out Vector2 fireDirection,
-                out _))
+                out _,
+                out bool blockedByImmediateWallShot,
+                false))
         {
-            return false;
+            return BombSpawnResult.Failed;
+        }
+
+        if (blockedByImmediateWallShot)
+        {
+            TrySpawnShards(ownerClientId, owner.tankColor.Value, spawnPosition2D, shotSequence);
+            PlayExplosionEffects(owner, spawnPosition2D);
+            owner.TriggerBlockedShotBackfireServer();
+            return BombSpawnResult.ExplodedImmediately;
         }
 
         if (!owner.TrySpawnAbilityProjectile(
@@ -113,7 +137,7 @@ public class BombAbilityBehavior : AbilityBehavior
                 Projectile.AudioProfile.Bomb,
                 out NetworkObject spawnedBomb))
         {
-            return false;
+            return BombSpawnResult.Failed;
         }
 
         Projectile projectile = spawnedBomb.gameObject.GetComponent<Projectile>();
@@ -143,7 +167,7 @@ public class BombAbilityBehavior : AbilityBehavior
             BombNetworkObject = spawnedBomb,
             ShooterColor = owner.tankColor.Value
         };
-        return true;
+        return BombSpawnResult.Spawned;
     }
 
     private bool TryDetonateBomb(TankController owner, ulong ownerClientId, ActiveBombState activeBombState, int shotSequence)

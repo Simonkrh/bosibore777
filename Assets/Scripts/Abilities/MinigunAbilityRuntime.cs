@@ -213,6 +213,7 @@ public class MinigunAbilityRuntime : MonoBehaviour
         }
 
         if (!owner.TryComputeAbilityProjectileSpawn(
+                projectilePrefab,
                 extraSpawnDistance,
                 out Vector2 spawnPosition2D,
                 out _,

@@ -84,6 +84,7 @@ public class TankController : NetworkBehaviour
     private const float ActiveControlPositionTolerance = 0.03f;
     private const float ActiveControlRotationTolerance = 1.5f;
     private const float RemoteInputStaleTimeoutSeconds = 0.2f;
+    private const float ProjectileSpawnSkin = 0.01f;
 
     // Server-authoritative state replicated for non-owner interpolation
     private readonly NetworkVariable<Vector2> networkPosition = new NetworkVariable<Vector2>(
@@ -638,7 +639,14 @@ public class TankController : NetworkBehaviour
             out Vector2 spawnPosition2D,
             out Quaternion spawnRotation,
             out Vector2 shootDirection,
-            out float projectileRadius);
+            out float projectileRadius,
+            out bool blockedByImmediateWallShot);
+
+        if (blockedByImmediateWallShot)
+        {
+            TriggerBlockedShotBackfireServer();
+            return;
+        }
 
         Vector3 spawnPosition = new Vector3(spawnPosition2D.x, spawnPosition2D.y, 0f);
         NetworkObject projectileNetObj = NetworkObject.InstantiateAndSpawn(
@@ -721,7 +729,8 @@ public class TankController : NetworkBehaviour
         out Vector2 spawnPosition2D,
         out Quaternion spawnRotation,
         out Vector2 fireDirection,
-        out float projectileRadius)
+        out float projectileRadius,
+        out bool blockedByImmediateWallShot)
     {
         float resolvedProjectileRadius = GetProjectileRadius();
         ComputeProjectileSpawnWithRadius(
@@ -729,7 +738,8 @@ public class TankController : NetworkBehaviour
             resolvedProjectileRadius,
             out spawnPosition2D,
             out spawnRotation,
-            out fireDirection);
+            out fireDirection,
+            out blockedByImmediateWallShot);
         projectileRadius = resolvedProjectileRadius;
     }
 
@@ -738,14 +748,16 @@ public class TankController : NetworkBehaviour
         float projectileRadius,
         out Vector2 spawnPosition2D,
         out Quaternion spawnRotation,
-        out Vector2 fireDirection)
+        out Vector2 fireDirection,
+        out bool blockedByImmediateWallShot)
     {
         Transform firingTransform = rotationChild != null ? rotationChild : transform;
         fireDirection = firingTransform.up.normalized;
         spawnRotation = firingTransform.rotation;
+        blockedByImmediateWallShot = false;
 
         float shooterForwardExtent = GetShooterForwardExtent(fireDirection);
-        float minimumDistanceFromShooter = shooterForwardExtent + projectileRadius + 0.01f;
+        float minimumDistanceFromShooter = shooterForwardExtent + projectileRadius + ProjectileSpawnSkin;
         float requestedDistance = Mathf.Max(shootingOffsetDistance, minimumDistanceFromShooter) + Mathf.Max(0f, additionalSpawnDistance);
 
         Vector2 firingOrigin = firingTransform.position;
@@ -755,7 +767,7 @@ public class TankController : NetworkBehaviour
             return;
         }
 
-        float castDistance = requestedDistance + projectileRadius + 0.01f;
+        float castDistance = requestedDistance + projectileRadius + ProjectileSpawnSkin;
         RaycastHit2D wallHit = Physics2D.Raycast(firingOrigin, fireDirection, castDistance, wallMask);
         if (wallHit.collider == null)
         {
@@ -763,7 +775,8 @@ public class TankController : NetworkBehaviour
         }
 
         // Clamp spawn on the shooter's side of the wall so bullets never tunnel through it.
-        float clampedDistance = Mathf.Max(0f, wallHit.distance - projectileRadius - 0.01f);
+        float clampedDistance = Mathf.Max(0f, wallHit.distance - projectileRadius - ProjectileSpawnSkin);
+        blockedByImmediateWallShot = clampedDistance < minimumDistanceFromShooter;
         spawnPosition2D = firingOrigin + fireDirection * clampedDistance;
     }
 
@@ -805,7 +818,14 @@ public class TankController : NetworkBehaviour
             out spawnPosition2D,
             out spawnRotation,
             out fireDirection,
-            out projectileRadius);
+            out projectileRadius,
+            out bool blockedByImmediateWallShot);
+
+        if (blockedByImmediateWallShot)
+        {
+            TriggerBlockedShotBackfireServer();
+            return false;
+        }
 
         return true;
     }
@@ -818,12 +838,34 @@ public class TankController : NetworkBehaviour
         out Vector2 fireDirection,
         out float projectileRadius)
     {
+        return TryComputeAbilityProjectileSpawn(
+            projectileToSpawn,
+            additionalSpawnDistance,
+            out spawnPosition2D,
+            out spawnRotation,
+            out fireDirection,
+            out projectileRadius,
+            out _,
+            true);
+    }
+
+    public bool TryComputeAbilityProjectileSpawn(
+        GameObject projectileToSpawn,
+        float additionalSpawnDistance,
+        out Vector2 spawnPosition2D,
+        out Quaternion spawnRotation,
+        out Vector2 fireDirection,
+        out float projectileRadius,
+        out bool blockedByImmediateWallShot,
+        bool applyBlockedShotBackfire)
+    {
         if (!IsServer || !IsSpawned || projectileToSpawn == null)
         {
             spawnPosition2D = default;
             spawnRotation = Quaternion.identity;
             fireDirection = Vector2.zero;
             projectileRadius = 0f;
+            blockedByImmediateWallShot = false;
             return false;
         }
 
@@ -833,7 +875,15 @@ public class TankController : NetworkBehaviour
             projectileRadius,
             out spawnPosition2D,
             out spawnRotation,
-            out fireDirection);
+            out fireDirection,
+            out blockedByImmediateWallShot);
+
+        if (blockedByImmediateWallShot && applyBlockedShotBackfire)
+        {
+            TriggerBlockedShotBackfireServer();
+            return false;
+        }
+
         return true;
     }
 
@@ -860,7 +910,8 @@ public class TankController : NetworkBehaviour
             projectileRadius,
             out spawnPosition2D,
             out spawnRotation,
-            out fireDirection);
+            out fireDirection,
+            out _);
         return true;
     }
 
@@ -923,7 +974,7 @@ public class TankController : NetworkBehaviour
         var projectileComponent = projectile.GetComponent<Projectile>();
         if (projectileComponent != null)
         {
-            float shooterUnlockRadius = GetShooterSelfHitUnlockRadius(GetProjectileRadius());
+            float shooterUnlockRadius = GetShooterSelfHitUnlockRadius(GetProjectileRadiusForPrefab(projectileToSpawn));
             Vector2 shooterPosition = rb != null ? rb.position : (Vector2)transform.position;
             projectileComponent.ConfigureServerProjectile(
                 OwnerClientId,
@@ -1040,6 +1091,7 @@ public class TankController : NetworkBehaviour
             out Vector2 spawnPosition2D,
             out _,
             out Vector2 fireDirection,
+            out _,
             out _);
 
         float oneWaySeconds = GetOneWayLatencySecondsFromRttMs(
@@ -1232,6 +1284,28 @@ public class TankController : NetworkBehaviour
     private float GetProjectileRadius()
     {
         return GetProjectileRadiusForPrefab(projectilePrefab);
+    }
+
+    public bool TriggerBlockedShotBackfireServer()
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return false;
+        }
+
+        PlayerController playerController = GetComponent<PlayerController>();
+        if (playerController == null)
+        {
+            playerController = GetComponentInParent<PlayerController>();
+        }
+
+        if (playerController != null)
+        {
+            playerController.Die(OwnerClientId);
+            return true;
+        }
+
+        return false;
     }
 
     private static float GetProjectileRadiusForPrefab(GameObject sourceProjectilePrefab)
