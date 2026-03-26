@@ -6,6 +6,8 @@ public class MainMenuMusicPlayer : MonoBehaviour
     [SerializeField] private AudioClip themeSong;
     [SerializeField] private bool loop = true;
     [SerializeField] private bool playOnStart = true;
+    [Tooltip("Extra global reduction applied to music before the settings slider is applied.")]
+    [SerializeField, Range(0f, 1f)] private float baseMusicVolume = 0.35f;
 
     private AudioSource audioSource;
     private Coroutine playRoutine;
@@ -23,7 +25,7 @@ public class MainMenuMusicPlayer : MonoBehaviour
         audioSource.spatialBlend = 0f;
         audioSource.loop = loop;
         audioSource.clip = themeSong;
-        audioSource.volume = AudioSettingsStore.MusicVolume;
+        ApplyVolume(AudioSettingsStore.MusicVolume);
     }
 
     private void OnEnable()
@@ -79,14 +81,14 @@ public class MainMenuMusicPlayer : MonoBehaviour
             return;
         }
 
-        audioSource.volume = Mathf.Clamp01(volume);
+        ApplyVolume(volume);
     }
 
     private System.Collections.IEnumerator PlayThemeSongRoutine()
     {
         audioSource.loop = loop;
         audioSource.clip = themeSong;
-        audioSource.volume = AudioSettingsStore.MusicVolume;
+        ApplyVolume(AudioSettingsStore.MusicVolume);
 
         if (Mathf.Approximately(audioSource.volume, 0f))
         {
@@ -117,5 +119,25 @@ public class MainMenuMusicPlayer : MonoBehaviour
         }
 
         playRoutine = null;
+    }
+
+    private void ApplyVolume(float settingsVolume)
+    {
+        if (audioSource == null)
+        {
+            return;
+        }
+
+        audioSource.volume = Mathf.Clamp01(settingsVolume) * Mathf.Clamp01(baseMusicVolume);
+    }
+
+    private void OnValidate()
+    {
+        baseMusicVolume = Mathf.Clamp01(baseMusicVolume);
+
+        if (audioSource != null)
+        {
+            ApplyVolume(AudioSettingsStore.MusicVolume);
+        }
     }
 }
