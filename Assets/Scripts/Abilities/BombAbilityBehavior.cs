@@ -5,6 +5,12 @@ using UnityEngine;
 [CreateAssetMenu(menuName = "Abilities/Behaviors/Bomb", fileName = "BombAbilityBehavior")]
 public class BombAbilityBehavior : AbilityBehavior
 {
+    private sealed class ActiveBombState
+    {
+        public NetworkObject BombNetworkObject;
+        public Color ShooterColor;
+    }
+
     [Header("Bomb Spawn")]
     [Tooltip("Projectile prefab spawned on first press. Should include NetworkObject + Projectile.")]
     [SerializeField] private GameObject bombProjectilePrefab;
@@ -31,7 +37,8 @@ public class BombAbilityBehavior : AbilityBehavior
 
     [Header("Explosion Smoke")]
     [Tooltip("Smoke burst played when the bomb explodes.")]
-    [SerializeField] private DirectionalSmokeBurst.Config explosionSmoke = new DirectionalSmokeBurst.Config
+    [SerializeField]
+    private DirectionalSmokeBurst.Config explosionSmoke = new DirectionalSmokeBurst.Config
     {
         directionVariationDegrees = 180f
     };
@@ -48,7 +55,7 @@ public class BombAbilityBehavior : AbilityBehavior
     [Tooltip("How quickly shard speed blends between normal and over-wall slowed speed.")]
     [SerializeField] private float overWallSpeedTransitionPerSecond = 15f;
 
-    private readonly Dictionary<ulong, NetworkObject> activeBombsByOwner = new Dictionary<ulong, NetworkObject>();
+    private readonly Dictionary<ulong, ActiveBombState> activeBombsByOwner = new Dictionary<ulong, ActiveBombState>();
     private int nextAutoDetonationSequence = -1000000000;
 
     public override AbilityActivationResult TryActivateServer(TankController owner, int shotSequence)
@@ -59,7 +66,7 @@ public class BombAbilityBehavior : AbilityBehavior
         }
 
         ulong ownerClientId = owner.OwnerClientId;
-        if (TryGetActiveBomb(ownerClientId, out NetworkObject activeBomb))
+        if (TryGetActiveBomb(ownerClientId, out ActiveBombState activeBomb))
         {
             if (TryDetonateBomb(owner, ownerClientId, activeBomb, shotSequence))
             {
@@ -131,19 +138,24 @@ public class BombAbilityBehavior : AbilityBehavior
         }
 
         owner.ResolveGameManager()?.PlayBulletShootSoundServer(spawnedBomb.transform.position);
-        activeBombsByOwner[ownerClientId] = spawnedBomb;
+        activeBombsByOwner[ownerClientId] = new ActiveBombState
+        {
+            BombNetworkObject = spawnedBomb,
+            ShooterColor = owner.tankColor.Value
+        };
         return true;
     }
 
-    private bool TryDetonateBomb(TankController owner, ulong ownerClientId, NetworkObject bombNetworkObject, int shotSequence)
+    private bool TryDetonateBomb(TankController owner, ulong ownerClientId, ActiveBombState activeBombState, int shotSequence)
     {
+        NetworkObject bombNetworkObject = activeBombState != null ? activeBombState.BombNetworkObject : null;
         if (shardProjectilePrefab == null || bombNetworkObject == null || !bombNetworkObject.IsSpawned)
         {
             return false;
         }
 
         Vector2 detonationPosition = bombNetworkObject.transform.position;
-        bool spawnedAnyShard = TrySpawnShards(owner, detonationPosition, shotSequence);
+        bool spawnedAnyShard = TrySpawnShards(ownerClientId, activeBombState.ShooterColor, detonationPosition, shotSequence);
         if (spawnedAnyShard)
         {
             PlayExplosionEffects(owner, detonationPosition);
@@ -154,14 +166,13 @@ public class BombAbilityBehavior : AbilityBehavior
         return spawnedAnyShard;
     }
 
-    private bool TrySpawnShards(TankController owner, Vector2 detonationPosition, int sequenceBase)
+    private bool TrySpawnShards(ulong shooterClientId, Color projectileColor, Vector2 detonationPosition, int sequenceBase)
     {
-        if (owner == null || !owner.IsServer || shardProjectilePrefab == null)
+        if (shardProjectilePrefab == null)
         {
             return false;
         }
 
-        Color projectileColor = owner.tankColor.Value;
         bool spawnedAnyShard = false;
         int count = Mathf.Max(1, shardCount);
         for (int i = 0; i < count; i++)
@@ -174,14 +185,12 @@ public class BombAbilityBehavior : AbilityBehavior
             Quaternion spawnRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f);
             int shardShotSequence = unchecked(sequenceBase * Mathf.Max(1, shardSequenceStride) + i);
 
-            if (!owner.TrySpawnAbilityProjectile(
-                    shardProjectilePrefab,
+            if (!TrySpawnShardProjectile(
+                    shooterClientId,
                     shardShotSequence,
                     spawnPosition,
                     spawnRotation,
                     direction,
-                    shardSpeed,
-                    Projectile.AudioProfile.Bomb,
                     out NetworkObject shardNetworkObject))
             {
                 continue;
@@ -221,12 +230,12 @@ public class BombAbilityBehavior : AbilityBehavior
         Projectile bombProjectile,
         Projectile.DestroyCause destroyCause)
     {
-        if (bombProjectile == null || !TryGetActiveBomb(ownerClientId, out NetworkObject activeBomb))
+        if (bombProjectile == null || !TryGetActiveBomb(ownerClientId, out ActiveBombState activeBomb))
         {
             return;
         }
 
-        if (activeBomb.gameObject != bombProjectile.gameObject)
+        if (activeBomb.BombNetworkObject == null || activeBomb.BombNetworkObject.gameObject != bombProjectile.gameObject)
         {
             return;
         }
@@ -239,7 +248,7 @@ public class BombAbilityBehavior : AbilityBehavior
 
         int autoSequenceBase = nextAutoDetonationSequence++;
         Vector2 detonationPosition = bombProjectile.transform.position;
-        bool spawnedAnyShard = TrySpawnShards(owner, detonationPosition, autoSequenceBase);
+        bool spawnedAnyShard = TrySpawnShards(ownerClientId, activeBomb.ShooterColor, detonationPosition, autoSequenceBase);
         if (spawnedAnyShard)
         {
             PlayExplosionEffects(owner, detonationPosition);
@@ -283,9 +292,73 @@ public class BombAbilityBehavior : AbilityBehavior
             Mathf.Max(0f, overWallSpeedTransitionPerSecond));
     }
 
+    private bool TrySpawnShardProjectile(
+        ulong shooterClientId,
+        int shotSequence,
+        Vector2 spawnPosition,
+        Quaternion spawnRotation,
+        Vector2 direction,
+        out NetworkObject spawnedProjectile)
+    {
+        spawnedProjectile = null;
+        NetworkManager manager = NetworkManager.Singleton;
+        if (shardProjectilePrefab == null || manager == null || !manager.IsServer || !manager.IsListening)
+        {
+            return false;
+        }
+
+        Vector3 spawnPosition3D = new Vector3(spawnPosition.x, spawnPosition.y, 0f);
+        NetworkObject projectileNetObj = NetworkObject.InstantiateAndSpawn(
+            shardProjectilePrefab,
+            manager,
+            ownerClientId: Unity.Netcode.NetworkManager.ServerClientId,
+            destroyWithScene: false,
+            isPlayerObject: false,
+            forceOverride: false,
+            position: spawnPosition3D,
+            rotation: spawnRotation);
+
+        if (projectileNetObj == null)
+        {
+            return false;
+        }
+
+        GameObject projectileObject = projectileNetObj.gameObject;
+        EnableProjectileTransformSyncComponents(projectileObject);
+        projectileObject.layer = LayerMask.NameToLayer("Bullet");
+
+        Rigidbody2D projectileRb = projectileObject.GetComponent<Rigidbody2D>();
+        if (projectileRb != null)
+        {
+            projectileRb.interpolation = RigidbodyInterpolation2D.None;
+            projectileRb.linearVelocity = direction * shardSpeed;
+        }
+
+        GameManager resolvedGameManager = ResolveGameManager(null);
+        if (resolvedGameManager != null && resolvedGameManager.projectilesContainer != null)
+        {
+            projectileObject.transform.SetParent(resolvedGameManager.projectilesContainer.transform, true);
+        }
+
+        Projectile projectileComponent = projectileObject.GetComponent<Projectile>();
+        if (projectileComponent != null)
+        {
+            projectileComponent.ConfigureServerProjectile(
+                shooterClientId,
+                shotSequence,
+                spawnPosition,
+                0f,
+                null);
+            projectileComponent.ConfigureAudioProfileServer(Projectile.AudioProfile.Bomb);
+        }
+
+        spawnedProjectile = projectileNetObj;
+        return true;
+    }
+
     private void PlayExplosionEffects(TankController owner, Vector2 detonationPosition)
     {
-        owner?.ResolveGameManager()?.PlayBombExplodeSoundServer(detonationPosition);
+        ResolveGameManager(owner)?.PlayBombExplodeSoundServer(detonationPosition);
 
         if (explosionSmoke != null &&
             explosionSmoke.TryCreateSettings(detonationPosition, Vector2.up, out DirectionalSmokeBurst.Settings settings))
@@ -294,15 +367,60 @@ public class BombAbilityBehavior : AbilityBehavior
         }
     }
 
-    private bool TryGetActiveBomb(ulong ownerClientId, out NetworkObject activeBomb)
+    private static void EnableProjectileTransformSyncComponents(GameObject projectile)
+    {
+        if (projectile == null)
+        {
+            return;
+        }
+
+        Unity.Netcode.Components.NetworkRigidbody2D netRigidbody = projectile.GetComponent<Unity.Netcode.Components.NetworkRigidbody2D>();
+        if (netRigidbody != null)
+        {
+            netRigidbody.enabled = false;
+        }
+
+        Unity.Netcode.Components.NetworkTransform[] transforms =
+            projectile.GetComponentsInChildren<Unity.Netcode.Components.NetworkTransform>(true);
+        for (int i = 0; i < transforms.Length; i++)
+        {
+            Unity.Netcode.Components.NetworkTransform transformComponent = transforms[i];
+            if (transformComponent == null)
+            {
+                continue;
+            }
+
+            transformComponent.enabled = true;
+            transformComponent.Interpolate = false;
+            transformComponent.PositionThreshold = 0.0001f;
+        }
+    }
+
+    private static GameManager ResolveGameManager(TankController owner)
+    {
+        if (owner != null)
+        {
+            GameManager ownerGameManager = owner.ResolveGameManager();
+            if (ownerGameManager != null)
+            {
+                return ownerGameManager;
+            }
+        }
+
+        return Object.FindFirstObjectByType<GameManager>();
+    }
+
+    private bool TryGetActiveBomb(ulong ownerClientId, out ActiveBombState activeBomb)
     {
         activeBomb = null;
-        if (!activeBombsByOwner.TryGetValue(ownerClientId, out NetworkObject trackedBomb))
+        if (!activeBombsByOwner.TryGetValue(ownerClientId, out ActiveBombState trackedBomb))
         {
             return false;
         }
 
-        if (trackedBomb == null || !trackedBomb.IsSpawned)
+        if (trackedBomb == null ||
+            trackedBomb.BombNetworkObject == null ||
+            !trackedBomb.BombNetworkObject.IsSpawned)
         {
             activeBombsByOwner.Remove(ownerClientId);
             return false;
