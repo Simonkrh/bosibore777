@@ -62,32 +62,23 @@ public class MenuDisplaySettings : MonoBehaviour
 
     public void OpenSettings()
     {
-        if (panelToHideWhenOpen != null)
+        GameObject targetPanel = settingsPanelRoot != null ? settingsPanelRoot : gameObject;
+        if (panelToHideWhenOpen != null && !ContainsTargetPanel(panelToHideWhenOpen, targetPanel))
         {
             panelToHideWhenOpen.SetActive(false);
         }
 
-        if (settingsPanelRoot != null)
-        {
-            settingsPanelRoot.SetActive(true);
-            return;
-        }
-
-        gameObject.SetActive(true);
+        SetActiveWithParents(targetPanel, true);
+        NormalizePanelRectTransform(targetPanel);
+        PromotePanelVisibility(targetPanel);
     }
 
     public void CloseSettings()
     {
-        if (settingsPanelRoot != null)
-        {
-            settingsPanelRoot.SetActive(false);
-        }
-        else
-        {
-            gameObject.SetActive(false);
-        }
+        GameObject targetPanel = settingsPanelRoot != null ? settingsPanelRoot : gameObject;
+        targetPanel.SetActive(false);
 
-        if (panelToHideWhenOpen != null)
+        if (panelToHideWhenOpen != null && !ContainsTargetPanel(panelToHideWhenOpen, targetPanel))
         {
             panelToHideWhenOpen.SetActive(true);
         }
@@ -400,5 +391,99 @@ public class MenuDisplaySettings : MonoBehaviour
     {
         float aspect = width / (float)height;
         return Mathf.Abs(aspect - targetAspect) <= AspectTolerance;
+    }
+
+    private static bool ContainsTargetPanel(GameObject candidateParent, GameObject targetPanel)
+    {
+        if (candidateParent == null || targetPanel == null)
+        {
+            return false;
+        }
+
+        Transform candidateTransform = candidateParent.transform;
+        Transform targetTransform = targetPanel.transform;
+        return targetTransform == candidateTransform || targetTransform.IsChildOf(candidateTransform);
+    }
+
+    private static void SetActiveWithParents(GameObject target, bool isActive)
+    {
+        if (target == null)
+        {
+            return;
+        }
+
+        if (!isActive)
+        {
+            target.SetActive(false);
+            return;
+        }
+
+        Transform current = target.transform;
+        while (current != null)
+        {
+            if (!current.gameObject.activeSelf)
+            {
+                current.gameObject.SetActive(true);
+            }
+
+            current = current.parent;
+        }
+    }
+
+    private static void PromotePanelVisibility(GameObject targetPanel)
+    {
+        if (targetPanel == null)
+        {
+            return;
+        }
+
+        Transform targetTransform = targetPanel.transform;
+        if (targetTransform.parent != null)
+        {
+            targetTransform.SetAsLastSibling();
+        }
+
+        Canvas targetCanvas = targetPanel.GetComponent<Canvas>();
+        if (targetCanvas != null)
+        {
+            targetCanvas.overrideSorting = true;
+            targetCanvas.sortingOrder = 1000;
+        }
+
+        Canvas.ForceUpdateCanvases();
+    }
+
+    private static void NormalizePanelRectTransform(GameObject targetPanel)
+    {
+        if (targetPanel == null)
+        {
+            return;
+        }
+
+        RectTransform rectTransform = targetPanel.transform as RectTransform;
+        if (rectTransform == null)
+        {
+            return;
+        }
+
+        bool hasCollapsedScale =
+            Mathf.Abs(rectTransform.localScale.x) < 0.01f ||
+            Mathf.Abs(rectTransform.localScale.y) < 0.01f ||
+            Mathf.Abs(rectTransform.localScale.z) < 0.01f;
+
+        if (rectTransform.parent == null && !hasCollapsedScale)
+        {
+            return;
+        }
+
+        rectTransform.localScale = Vector3.one;
+        rectTransform.localRotation = Quaternion.identity;
+        rectTransform.anchorMin = Vector2.zero;
+        rectTransform.anchorMax = Vector2.one;
+        rectTransform.pivot = new Vector2(0.5f, 0.5f);
+        rectTransform.anchoredPosition = Vector2.zero;
+        rectTransform.sizeDelta = Vector2.zero;
+        rectTransform.offsetMin = Vector2.zero;
+        rectTransform.offsetMax = Vector2.zero;
     }
 }

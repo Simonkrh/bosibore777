@@ -1,16 +1,10 @@
 fileFormatVersion: 2
-guid: aa29bc794b299e24699ac0d2db675ef0
+guid: 1c668485603ef53499875426e9900669
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 7353301095220898682
-    second: BOSIBORE777 1_0
-  - first:
-      213: -7841273390002097527
-    second: BOSIBORE777 1_1
-  - first:
-      213: -8669251784945055500
-    second: BOSIBORE777 1_2
+      213: 477591820901164136
+    second: Background (2)_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -52,7 +46,7 @@ TextureImporter:
   nPOTScale: 0
   lightmap: 0
   compressionQuality: 50
-  spriteMode: 1
+  spriteMode: 2
   spriteExtrude: 1
   spriteMeshType: 1
   alignment: 0
@@ -106,12 +100,12 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: BOSIBORE777 1_0
+      name: Background (2)_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 1524
+        width: 1536
         height: 1024
       alignment: 0
       pivot: {x: 0, y: 0}
@@ -121,52 +115,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: a7be12bf26c2c0660800000000000000
-      internalID: 7353301095220898682
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: BOSIBORE777 1_1
-      rect:
-        serializedVersion: 2
-        x: 995
-        y: 283
-        width: 6
-        height: 6
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 982b33a85633e2390800000000000000
-      internalID: -7841273390002097527
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: BOSIBORE777 1_2
-      rect:
-        serializedVersion: 2
-        x: 995
-        y: 154
-        width: 6
-        height: 7
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 4f8cde9ee61a0b780800000000000000
-      internalID: -8669251784945055500
+      spriteID: 86422701b3fb0a600800000000000000
+      internalID: 477591820901164136
       vertices: []
       indices: 
       edges: []
@@ -175,7 +125,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 5e97eb03825dee720800000000000000
+    spriteID: 
     internalID: 0
     vertices: []
     indices: 
@@ -185,9 +135,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      BOSIBORE777 1_0: 7353301095220898682
-      BOSIBORE777 1_1: -7841273390002097527
-      BOSIBORE777 1_2: -8669251784945055500
+      Background (2)_0: 477591820901164136
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

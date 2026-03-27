@@ -78,19 +78,23 @@ public class JoinServerPage : MonoBehaviour
 
     public void OpenJoinPage()
     {
-        if (panelToHideWhenOpen != null)
+        GameObject targetPageRoot = ResolvePageRoot();
+        if (panelToHideWhenOpen != null && !ContainsTargetPage(panelToHideWhenOpen, targetPageRoot))
         {
             panelToHideWhenOpen.SetActive(false);
         }
 
-        ResolvePageRoot().SetActive(true);
+        SetActiveWithParents(targetPageRoot, true);
+        NormalizePageRootRectTransform(targetPageRoot);
+        PromotePageVisibility(targetPageRoot);
     }
 
     public void CloseJoinPage()
     {
-        ResolvePageRoot().SetActive(false);
+        GameObject targetPageRoot = ResolvePageRoot();
+        targetPageRoot.SetActive(false);
 
-        if (panelToHideWhenOpen != null)
+        if (panelToHideWhenOpen != null && !ContainsTargetPage(panelToHideWhenOpen, targetPageRoot))
         {
             panelToHideWhenOpen.SetActive(true);
         }
@@ -355,6 +359,100 @@ public class JoinServerPage : MonoBehaviour
     private GameObject ResolvePageRoot()
     {
         return pageRoot != null ? pageRoot : gameObject;
+    }
+
+    private static bool ContainsTargetPage(GameObject candidateParent, GameObject targetPageRoot)
+    {
+        if (candidateParent == null || targetPageRoot == null)
+        {
+            return false;
+        }
+
+        Transform candidateTransform = candidateParent.transform;
+        Transform targetTransform = targetPageRoot.transform;
+        return targetTransform == candidateTransform || targetTransform.IsChildOf(candidateTransform);
+    }
+
+    private static void SetActiveWithParents(GameObject target, bool isActive)
+    {
+        if (target == null)
+        {
+            return;
+        }
+
+        if (!isActive)
+        {
+            target.SetActive(false);
+            return;
+        }
+
+        Transform current = target.transform;
+        while (current != null)
+        {
+            if (!current.gameObject.activeSelf)
+            {
+                current.gameObject.SetActive(true);
+            }
+
+            current = current.parent;
+        }
+    }
+
+    private static void PromotePageVisibility(GameObject targetPageRoot)
+    {
+        if (targetPageRoot == null)
+        {
+            return;
+        }
+
+        Transform targetTransform = targetPageRoot.transform;
+        if (targetTransform.parent != null)
+        {
+            targetTransform.SetAsLastSibling();
+        }
+
+        Canvas targetCanvas = targetPageRoot.GetComponent<Canvas>();
+        if (targetCanvas != null)
+        {
+            targetCanvas.overrideSorting = true;
+            targetCanvas.sortingOrder = 1000;
+        }
+
+        Canvas.ForceUpdateCanvases();
+    }
+
+    private static void NormalizePageRootRectTransform(GameObject targetPageRoot)
+    {
+        if (targetPageRoot == null)
+        {
+            return;
+        }
+
+        RectTransform rectTransform = targetPageRoot.transform as RectTransform;
+        if (rectTransform == null)
+        {
+            return;
+        }
+
+        bool hasCollapsedScale =
+            Mathf.Abs(rectTransform.localScale.x) < 0.01f ||
+            Mathf.Abs(rectTransform.localScale.y) < 0.01f ||
+            Mathf.Abs(rectTransform.localScale.z) < 0.01f;
+
+        if (rectTransform.parent == null && !hasCollapsedScale)
+        {
+            return;
+        }
+
+        rectTransform.localScale = Vector3.one;
+        rectTransform.localRotation = Quaternion.identity;
+        rectTransform.anchorMin = Vector2.zero;
+        rectTransform.anchorMax = Vector2.one;
+        rectTransform.pivot = new Vector2(0.5f, 0.5f);
+        rectTransform.anchoredPosition = Vector2.zero;
+        rectTransform.sizeDelta = Vector2.zero;
+        rectTransform.offsetMin = Vector2.zero;
+        rectTransform.offsetMax = Vector2.zero;
     }
 
     private void AttachNetworkUiStatusListener()
