@@ -162,6 +162,7 @@ public class BombAbilityBehavior : AbilityBehavior
         }
 
         owner.ResolveGameManager()?.PlayBulletShootSoundServer(spawnedBomb.transform.position);
+        owner.PlayShotAnimationServer(TankController.ShotAnimationType.Bomb);
         activeBombsByOwner[ownerClientId] = new ActiveBombState
         {
             BombNetworkObject = spawnedBomb,

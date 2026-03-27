@@ -245,6 +245,7 @@ public class MinigunAbilityRuntime : MonoBehaviour
         }
 
         ResolveGameManager()?.PlayMinigunShotSoundServer(ownerClientId, spawnedProjectile.transform.position);
+        owner.PlayShotAnimationServer(TankController.ShotAnimationType.Minigun);
 
         Projectile projectile = spawnedProjectile.GetComponent<Projectile>();
         if (projectile != null)

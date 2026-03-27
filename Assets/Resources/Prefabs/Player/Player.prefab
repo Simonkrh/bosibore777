@@ -383,6 +383,20 @@ MonoBehaviour:
   showPredictedShotVisual: 1
   predictedShotVisualLifetime: 0.12
   predictedShotVisualAlpha: 1
+  standardShotAnimation:
+    frames:
+    - {fileID: 7797694640958297024, guid: d4859939c7861dd448442856fe52942f, type: 3}
+    - {fileID: 5231838925064867474, guid: d4859939c7861dd448442856fe52942f, type: 3}
+    framesPerSecond: 18
+  bombShotAnimation:
+    frames:
+    - {fileID: 2332074607256113119, guid: 91737577783c7ea448f9938ccea19e95, type: 3}
+    - {fileID: 2236550156229448696, guid: 91737577783c7ea448f9938ccea19e95, type: 3}
+    - {fileID: -5264930006565914750, guid: 91737577783c7ea448f9938ccea19e95, type: 3}
+    framesPerSecond: 14
+  minigunShotAnimation:
+    frames: []
+    framesPerSecond: 18
   enableShotLatencyCompensation: 1
   shotLatencyCompensationFactor: 1
   maxShotLatencyCompensationSeconds: 0.12

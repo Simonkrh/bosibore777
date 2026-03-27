@@ -327,6 +327,34 @@ public class TankAbilityController : NetworkBehaviour
         }
     }
 
+    public SpriteRenderer GetActiveBodyRenderer()
+    {
+        if (runtimeModelOverrideRenderers != null && runtimeModelOverrideRenderers.Length > 0)
+        {
+            for (int i = 0; i < runtimeModelOverrideRenderers.Length; i++)
+            {
+                if (runtimeModelOverrideRenderers[i] != null)
+                {
+                    return runtimeModelOverrideRenderers[i];
+                }
+            }
+        }
+
+        CacheDefaultBodyReferencesIfNeeded();
+        if (defaultBodyRenderers != null && defaultBodyRenderers.Length > 0)
+        {
+            for (int i = 0; i < defaultBodyRenderers.Length; i++)
+            {
+                if (defaultBodyRenderers[i] != null)
+                {
+                    return defaultBodyRenderers[i];
+                }
+            }
+        }
+
+        return null;
+    }
+
     private void SetDefaultBodyOverrideActive(bool overrideActive)
     {
         bool shouldHideDefaultBody = overrideActive && hideDefaultTankWhenAbilityActive;

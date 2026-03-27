@@ -2,9 +2,27 @@ using Unity.Netcode;
 using Unity.Netcode.Components;
 using UnityEngine;
 using System.Collections.Generic;
+using System.Collections;
 
 public class TankController : NetworkBehaviour
 {
+    public enum ShotAnimationType
+    {
+        Standard = 0,
+        Bomb = 1,
+        Minigun = 2
+    }
+
+    [System.Serializable]
+    private sealed class ShotAnimationSequence
+    {
+        [Tooltip("Sprites played in order. Leave empty to disable this animation.")]
+        public Sprite[] frames;
+
+        [Min(1f)]
+        public float framesPerSecond = 18f;
+    }
+
     public SpriteRenderer tankRenderer;
 
     [Tooltip("Assign the child Transform that handles rotation.")]
@@ -29,6 +47,14 @@ public class TankController : NetworkBehaviour
     [SerializeField] private float predictedShotVisualLifetime = 0.12f;
     [Range(0f, 1f)]
     [SerializeField] private float predictedShotVisualAlpha = 1f;
+
+    [Header("Shot Animation")]
+    [Tooltip("Frames played on the default tank body when firing a normal shot.")]
+    [SerializeField] private ShotAnimationSequence standardShotAnimation = new ShotAnimationSequence();
+    [Tooltip("Frames played when launching the bomb ability projectile.")]
+    [SerializeField] private ShotAnimationSequence bombShotAnimation = new ShotAnimationSequence();
+    [Tooltip("Frames played for each minigun bullet fired.")]
+    [SerializeField] private ShotAnimationSequence minigunShotAnimation = new ShotAnimationSequence();
 
     [Header("Shot Fairness")]
     [Tooltip("Compensate remote shooter latency by advancing projectile spawn using measured RTT.")]
@@ -59,6 +85,9 @@ public class TankController : NetworkBehaviour
     private float serverLastShotTime = float.NegativeInfinity;
     private bool hasActiveStandardProjectileServer;
     private int activeStandardProjectileShotSequence = -1;
+    private Coroutine shotAnimationCoroutine;
+    private SpriteRenderer shotAnimationRenderer;
+    private Sprite shotAnimationOriginalSprite;
     private int wallMask;
     private float nextShotVisualPruneTime;
     private const float ShotVisualPruneInterval = 2f;
@@ -177,6 +206,7 @@ public class TankController : NetworkBehaviour
     private void OnDestroy()
     {
         tankColor.OnValueChanged -= OnTankColorChanged;
+        StopActiveShotAnimation();
         ClearAllShotVisuals();
     }
 
@@ -709,6 +739,7 @@ public class TankController : NetworkBehaviour
         activeStandardProjectileShotSequence = shotSequence;
         networkHasActiveStandardProjectile.Value = true;
         resolvedGameManager?.PlayBulletShootSoundServer(projectile.transform.position);
+        PlayShotAnimationServer(ShotAnimationType.Standard);
 
         if (showPredictedShotVisual)
         {
@@ -989,6 +1020,16 @@ public class TankController : NetworkBehaviour
         return true;
     }
 
+    public void PlayShotAnimationServer(ShotAnimationType animationType)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        PlayShotAnimationClientRpc((int)animationType);
+    }
+
     private void HandleAuthoritativeProjectileDestroyed(ulong shooterClientId, int shotSequence)
     {
         if (!IsServer || !IsSpawned)
@@ -1006,6 +1047,111 @@ public class TankController : NetworkBehaviour
         }
 
         DespawnShotVisualClientRpc(shooterClientId, shotSequence);
+    }
+
+    [ClientRpc]
+    private void PlayShotAnimationClientRpc(int animationTypeRaw)
+    {
+        PlayShotAnimationLocal((ShotAnimationType)animationTypeRaw);
+    }
+
+    private void PlayShotAnimationLocal(ShotAnimationType animationType)
+    {
+        ShotAnimationSequence animationSequence = ResolveShotAnimationSequence(animationType);
+        if (animationSequence == null || animationSequence.frames == null || animationSequence.frames.Length == 0)
+        {
+            return;
+        }
+
+        SpriteRenderer targetRenderer = ResolveShotAnimationRenderer();
+        if (targetRenderer == null)
+        {
+            return;
+        }
+
+        StopActiveShotAnimation();
+        shotAnimationRenderer = targetRenderer;
+        shotAnimationOriginalSprite = targetRenderer.sprite;
+        shotAnimationCoroutine = StartCoroutine(
+            PlayShotAnimationSequence(targetRenderer, shotAnimationOriginalSprite, animationSequence));
+    }
+
+    private IEnumerator PlayShotAnimationSequence(
+        SpriteRenderer targetRenderer,
+        Sprite originalSprite,
+        ShotAnimationSequence animationSequence)
+    {
+        float secondsPerFrame = 1f / Mathf.Max(1f, animationSequence.framesPerSecond);
+
+        for (int i = 0; i < animationSequence.frames.Length; i++)
+        {
+            if (targetRenderer == null)
+            {
+                ClearShotAnimationState();
+                yield break;
+            }
+
+            Sprite frameSprite = animationSequence.frames[i] != null
+                ? animationSequence.frames[i]
+                : originalSprite;
+            targetRenderer.sprite = frameSprite;
+            yield return new WaitForSeconds(secondsPerFrame);
+        }
+
+        if (targetRenderer != null)
+        {
+            targetRenderer.sprite = originalSprite;
+        }
+
+        ClearShotAnimationState();
+    }
+
+    private SpriteRenderer ResolveShotAnimationRenderer()
+    {
+        if (abilityController == null)
+        {
+            abilityController = GetComponent<TankAbilityController>();
+        }
+
+        SpriteRenderer activeBodyRenderer = abilityController != null
+            ? abilityController.GetActiveBodyRenderer()
+            : null;
+        return activeBodyRenderer != null ? activeBodyRenderer : tankRenderer;
+    }
+
+    private ShotAnimationSequence ResolveShotAnimationSequence(ShotAnimationType animationType)
+    {
+        switch (animationType)
+        {
+            case ShotAnimationType.Bomb:
+                return bombShotAnimation;
+            case ShotAnimationType.Minigun:
+                return minigunShotAnimation;
+            default:
+                return standardShotAnimation;
+        }
+    }
+
+    private void StopActiveShotAnimation()
+    {
+        if (shotAnimationCoroutine != null)
+        {
+            StopCoroutine(shotAnimationCoroutine);
+        }
+
+        if (shotAnimationRenderer != null)
+        {
+            shotAnimationRenderer.sprite = shotAnimationOriginalSprite;
+        }
+
+        ClearShotAnimationState();
+    }
+
+    private void ClearShotAnimationState()
+    {
+        shotAnimationCoroutine = null;
+        shotAnimationRenderer = null;
+        shotAnimationOriginalSprite = null;
     }
 
     [ClientRpc]
@@ -1522,6 +1668,19 @@ public class TankController : NetworkBehaviour
         predictedShotVisualAlpha = Mathf.Clamp01(predictedShotVisualAlpha);
         shotLatencyCompensationFactor = Mathf.Clamp01(shotLatencyCompensationFactor);
         maxShotLatencyCompensationSeconds = Mathf.Max(0f, maxShotLatencyCompensationSeconds);
+        ClampShotAnimationSequence(standardShotAnimation);
+        ClampShotAnimationSequence(bombShotAnimation);
+        ClampShotAnimationSequence(minigunShotAnimation);
         standardBulletDespawnSmoke?.ClampInEditor();
+    }
+
+    private static void ClampShotAnimationSequence(ShotAnimationSequence animationSequence)
+    {
+        if (animationSequence == null)
+        {
+            return;
+        }
+
+        animationSequence.framesPerSecond = Mathf.Max(1f, animationSequence.framesPerSecond);
     }
 }
