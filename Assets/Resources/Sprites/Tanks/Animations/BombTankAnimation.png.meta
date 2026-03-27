@@ -111,7 +111,7 @@ TextureImporter:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 58
+        width: 57
         height: 100
       alignment: 9
       pivot: {x: 0.5, y: 0.43}
@@ -131,9 +131,9 @@ TextureImporter:
       name: BombTankAnimation_1
       rect:
         serializedVersion: 2
-        x: 57
+        x: 58
         y: 0
-        width: 59
+        width: 57
         height: 100
       alignment: 9
       pivot: {x: 0.5, y: 0.43}
@@ -153,9 +153,9 @@ TextureImporter:
       name: BombTankAnimation_2
       rect:
         serializedVersion: 2
-        x: 115
+        x: 116
         y: 0
-        width: 58
+        width: 57
         height: 100
       alignment: 9
       pivot: {x: 0.5, y: 0.43}

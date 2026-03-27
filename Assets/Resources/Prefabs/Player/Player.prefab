@@ -394,9 +394,24 @@ MonoBehaviour:
     - {fileID: 2236550156229448696, guid: 91737577783c7ea448f9938ccea19e95, type: 3}
     - {fileID: -5264930006565914750, guid: 91737577783c7ea448f9938ccea19e95, type: 3}
     framesPerSecond: 14
+  minigunChargeAnimation:
+    frames:
+    - {fileID: -7761428948748691296, guid: d8b3febaff20bdb419e43d1a069ee088, type: 3}
+    - {fileID: 5767669480166293771, guid: d8b3febaff20bdb419e43d1a069ee088, type: 3}
+    - {fileID: -3560753786265662297, guid: d8b3febaff20bdb419e43d1a069ee088, type: 3}
+    framesPerSecond: 10
   minigunShotAnimation:
-    frames: []
+    frames:
+    - {fileID: -7761428948748691296, guid: d8b3febaff20bdb419e43d1a069ee088, type: 3}
+    - {fileID: 5767669480166293771, guid: d8b3febaff20bdb419e43d1a069ee088, type: 3}
+    - {fileID: -3560753786265662297, guid: d8b3febaff20bdb419e43d1a069ee088, type: 3}
     framesPerSecond: 18
+  minigunCooldownAnimation:
+    frames:
+    - {fileID: -7761428948748691296, guid: d8b3febaff20bdb419e43d1a069ee088, type: 3}
+    - {fileID: 5767669480166293771, guid: d8b3febaff20bdb419e43d1a069ee088, type: 3}
+    - {fileID: -3560753786265662297, guid: d8b3febaff20bdb419e43d1a069ee088, type: 3}
+    framesPerSecond: 10
   enableShotLatencyCompensation: 1
   shotLatencyCompensationFactor: 1
   maxShotLatencyCompensationSeconds: 0.12

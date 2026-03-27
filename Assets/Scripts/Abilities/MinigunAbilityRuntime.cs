@@ -91,6 +91,7 @@ public class MinigunAbilityRuntime : MonoBehaviour
         ResolveGameManager()?.PlayMinigunStartSoundServer(
             ownerClientId,
             owner != null ? owner.transform.position : transform.position);
+        owner.SetMinigunAnimationPhaseServer(TankController.MinigunAnimationPhase.Charge, chargeUpSeconds);
         return true;
     }
 
@@ -181,6 +182,7 @@ public class MinigunAbilityRuntime : MonoBehaviour
             ? firingDurationSeconds / (bulletCount - 1)
             : 0f;
         state = RuntimeState.Firing;
+        owner.SetMinigunAnimationPhaseServer(TankController.MinigunAnimationPhase.Firing);
         FireDueBullets(now);
     }
 
@@ -245,7 +247,6 @@ public class MinigunAbilityRuntime : MonoBehaviour
         }
 
         ResolveGameManager()?.PlayMinigunShotSoundServer(ownerClientId, spawnedProjectile.transform.position);
-        owner.PlayShotAnimationServer(TankController.ShotAnimationType.Minigun);
 
         Projectile projectile = spawnedProjectile.GetComponent<Projectile>();
         if (projectile != null)
@@ -269,6 +270,7 @@ public class MinigunAbilityRuntime : MonoBehaviour
         ResolveGameManager()?.PlayMinigunCooldownSoundServer(
             ownerClientId,
             owner != null ? owner.transform.position : transform.position);
+        owner.SetMinigunAnimationPhaseServer(TankController.MinigunAnimationPhase.Cooldown, clearDelaySeconds);
         state = RuntimeState.WaitingToClear;
         clearAtTime = now + clearDelaySeconds;
     }
@@ -283,6 +285,11 @@ public class MinigunAbilityRuntime : MonoBehaviour
 
     private void ResetRuntime()
     {
+        if (owner != null && owner.IsServer && owner.IsSpawned)
+        {
+            owner.SetMinigunAnimationPhaseServer(TankController.MinigunAnimationPhase.Stop);
+        }
+
         state = RuntimeState.Idle;
         releasedDuringCharge = false;
         shotSequenceBase = 0;

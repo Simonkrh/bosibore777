@@ -1,13 +1,16 @@
 fileFormatVersion: 2
-guid: d4859939c7861dd448442856fe52942f
+guid: d8b3febaff20bdb419e43d1a069ee088
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 7797694640958297024
-    second: TankAnimation_0
+      213: -7761428948748691296
+    second: MinigunTankAnimation_0
   - first:
-      213: 5231838925064867474
-    second: TankAnimation_1
+      213: 5767669480166293771
+    second: MinigunTankAnimation_1
+  - first:
+      213: -3560753786265662297
+    second: MinigunTankAnimation_2
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -103,7 +106,7 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: TankAnimation_0
+      name: MinigunTankAnimation_0
       rect:
         serializedVersion: 2
         x: 0
@@ -118,14 +121,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 0c3594546f9f63c60800000000000000
-      internalID: 7797694640958297024
+      spriteID: 0a896603e7dd94490800000000000000
+      internalID: -7761428948748691296
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: TankAnimation_1
+      name: MinigunTankAnimation_1
       rect:
         serializedVersion: 2
         x: 58
@@ -140,8 +143,30 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 29e8d8a68c93b9840800000000000000
-      internalID: 5231838925064867474
+      spriteID: b018c2375d0ea0050800000000000000
+      internalID: 5767669480166293771
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: MinigunTankAnimation_2
+      rect:
+        serializedVersion: 2
+        x: 116
+        y: 0
+        width: 57
+        height: 100
+      alignment: 9
+      pivot: {x: 0.5, y: 0.43}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 7ac020d0c49a59ec0800000000000000
+      internalID: -3560753786265662297
       vertices: []
       indices: 
       edges: []
@@ -150,7 +175,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: c07372714e1bae64685563bc48c3045a
+    spriteID: 1d8d6d561c44bf9408e1ab77481147b9
     internalID: 0
     vertices: []
     indices: 
@@ -160,8 +185,9 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      TankAnimation_0: 7797694640958297024
-      TankAnimation_1: 5231838925064867474
+      MinigunTankAnimation_0: -7761428948748691296
+      MinigunTankAnimation_1: 5767669480166293771
+      MinigunTankAnimation_2: -3560753786265662297
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

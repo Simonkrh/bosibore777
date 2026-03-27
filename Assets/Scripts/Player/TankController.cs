@@ -13,6 +13,14 @@ public class TankController : NetworkBehaviour
         Minigun = 2
     }
 
+    public enum MinigunAnimationPhase
+    {
+        Charge = 0,
+        Firing = 1,
+        Cooldown = 2,
+        Stop = 3
+    }
+
     [System.Serializable]
     private sealed class ShotAnimationSequence
     {
@@ -53,8 +61,14 @@ public class TankController : NetworkBehaviour
     [SerializeField] private ShotAnimationSequence standardShotAnimation = new ShotAnimationSequence();
     [Tooltip("Frames played when launching the bomb ability projectile.")]
     [SerializeField] private ShotAnimationSequence bombShotAnimation = new ShotAnimationSequence();
-    [Tooltip("Frames played for each minigun bullet fired.")]
-    [SerializeField] private ShotAnimationSequence minigunShotAnimation = new ShotAnimationSequence();
+
+    [Header("Minigun Animation")]
+    [Tooltip("Frames looped during minigun charge-up. If empty, firing frames are used.")]
+    [SerializeField] private ShotAnimationSequence minigunChargeAnimation = new ShotAnimationSequence { framesPerSecond = 4f };
+    [Tooltip("Frames looped continuously while the minigun is firing.")]
+    [SerializeField] private ShotAnimationSequence minigunShotAnimation = new ShotAnimationSequence { framesPerSecond = 18f };
+    [Tooltip("Frames looped during minigun cooldown. If empty, firing frames are used.")]
+    [SerializeField] private ShotAnimationSequence minigunCooldownAnimation = new ShotAnimationSequence { framesPerSecond = 4f };
 
     [Header("Shot Fairness")]
     [Tooltip("Compensate remote shooter latency by advancing projectile spawn using measured RTT.")]
@@ -85,6 +99,7 @@ public class TankController : NetworkBehaviour
     private float serverLastShotTime = float.NegativeInfinity;
     private bool hasActiveStandardProjectileServer;
     private int activeStandardProjectileShotSequence = -1;
+    private MinigunAnimationPhase activeMinigunAnimationPhase = MinigunAnimationPhase.Stop;
     private Coroutine shotAnimationCoroutine;
     private SpriteRenderer shotAnimationRenderer;
     private Sprite shotAnimationOriginalSprite;
@@ -1030,6 +1045,16 @@ public class TankController : NetworkBehaviour
         PlayShotAnimationClientRpc((int)animationType);
     }
 
+    public void SetMinigunAnimationPhaseServer(MinigunAnimationPhase animationPhase, float phaseDurationSeconds = 0f)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        SetMinigunAnimationPhaseClientRpc((int)animationPhase, Mathf.Max(0f, phaseDurationSeconds));
+    }
+
     private void HandleAuthoritativeProjectileDestroyed(ulong shooterClientId, int shotSequence)
     {
         if (!IsServer || !IsSpawned)
@@ -1055,6 +1080,12 @@ public class TankController : NetworkBehaviour
         PlayShotAnimationLocal((ShotAnimationType)animationTypeRaw);
     }
 
+    [ClientRpc]
+    private void SetMinigunAnimationPhaseClientRpc(int animationPhaseRaw, float phaseDurationSeconds)
+    {
+        PlayMinigunAnimationPhaseLocal((MinigunAnimationPhase)animationPhaseRaw, Mathf.Max(0f, phaseDurationSeconds));
+    }
+
     private void PlayShotAnimationLocal(ShotAnimationType animationType)
     {
         ShotAnimationSequence animationSequence = ResolveShotAnimationSequence(animationType);
@@ -1074,6 +1105,76 @@ public class TankController : NetworkBehaviour
         shotAnimationOriginalSprite = targetRenderer.sprite;
         shotAnimationCoroutine = StartCoroutine(
             PlayShotAnimationSequence(targetRenderer, shotAnimationOriginalSprite, animationSequence));
+    }
+
+    private void PlayMinigunAnimationPhaseLocal(MinigunAnimationPhase animationPhase, float phaseDurationSeconds)
+    {
+        if (animationPhase == MinigunAnimationPhase.Stop)
+        {
+            StopActiveShotAnimation();
+            return;
+        }
+
+        SpriteRenderer targetRenderer = ResolveShotAnimationRenderer();
+        if (targetRenderer == null)
+        {
+            return;
+        }
+
+        Sprite[] minigunFrames = ResolveMinigunAnimationFrames(animationPhase);
+        if (minigunFrames == null || minigunFrames.Length == 0)
+        {
+            if (animationPhase == MinigunAnimationPhase.Cooldown)
+            {
+                StopActiveShotAnimation();
+            }
+
+            return;
+        }
+
+        MinigunAnimationPhase previousMinigunPhase = activeMinigunAnimationPhase;
+        Sprite originalSprite = shotAnimationRenderer == targetRenderer && shotAnimationOriginalSprite != null
+            ? shotAnimationOriginalSprite
+            : targetRenderer.sprite;
+
+        StopActiveShotAnimation(false);
+        shotAnimationRenderer = targetRenderer;
+        shotAnimationOriginalSprite = originalSprite;
+        activeMinigunAnimationPhase = animationPhase;
+
+        switch (animationPhase)
+        {
+            case MinigunAnimationPhase.Charge:
+                shotAnimationCoroutine = StartCoroutine(
+                    PlayRampThenLoopAnimationSequence(
+                        targetRenderer,
+                        shotAnimationOriginalSprite,
+                        minigunFrames,
+                        minigunChargeAnimation.framesPerSecond,
+                        minigunShotAnimation.framesPerSecond,
+                        phaseDurationSeconds));
+                return;
+            case MinigunAnimationPhase.Cooldown:
+                shotAnimationCoroutine = StartCoroutine(
+                    PlayRampThenStopAnimationSequence(
+                        targetRenderer,
+                        shotAnimationOriginalSprite,
+                        minigunFrames,
+                        previousMinigunPhase == MinigunAnimationPhase.Charge
+                            ? minigunChargeAnimation.framesPerSecond
+                            : minigunShotAnimation.framesPerSecond,
+                        minigunCooldownAnimation.framesPerSecond,
+                        phaseDurationSeconds));
+                return;
+            default:
+                shotAnimationCoroutine = StartCoroutine(
+                    PlayLoopingAnimationSequence(
+                        targetRenderer,
+                        shotAnimationOriginalSprite,
+                        minigunFrames,
+                        minigunShotAnimation.framesPerSecond));
+                return;
+        }
     }
 
     private IEnumerator PlayShotAnimationSequence(
@@ -1096,6 +1197,137 @@ public class TankController : NetworkBehaviour
                 : originalSprite;
             targetRenderer.sprite = frameSprite;
             yield return new WaitForSeconds(secondsPerFrame);
+        }
+
+        if (targetRenderer != null)
+        {
+            targetRenderer.sprite = originalSprite;
+        }
+
+        ClearShotAnimationState();
+    }
+
+    private IEnumerator PlayLoopingAnimationSequence(
+        SpriteRenderer targetRenderer,
+        Sprite originalSprite,
+        Sprite[] frames,
+        float framesPerSecond)
+    {
+        int frameIndex = 0;
+        float secondsPerFrame = 1f / Mathf.Max(1f, framesPerSecond);
+
+        while (true)
+        {
+            if (targetRenderer == null)
+            {
+                ClearShotAnimationState();
+                yield break;
+            }
+
+            Sprite frameSprite = frames[frameIndex] != null
+                ? frames[frameIndex]
+                : originalSprite;
+            targetRenderer.sprite = frameSprite;
+            frameIndex = (frameIndex + 1) % frames.Length;
+            yield return new WaitForSeconds(secondsPerFrame);
+        }
+    }
+
+    private IEnumerator PlayRampThenLoopAnimationSequence(
+        SpriteRenderer targetRenderer,
+        Sprite originalSprite,
+        Sprite[] frames,
+        float startFramesPerSecond,
+        float endFramesPerSecond,
+        float durationSeconds)
+    {
+        int frameIndex = 0;
+        float elapsedSeconds = 0f;
+        float clampedStartFps = Mathf.Max(1f, startFramesPerSecond);
+        float clampedEndFps = Mathf.Max(1f, endFramesPerSecond);
+
+        while (durationSeconds > 0f && elapsedSeconds < durationSeconds)
+        {
+            if (targetRenderer == null)
+            {
+                ClearShotAnimationState();
+                yield break;
+            }
+
+            Sprite frameSprite = frames[frameIndex] != null
+                ? frames[frameIndex]
+                : originalSprite;
+            targetRenderer.sprite = frameSprite;
+            frameIndex = (frameIndex + 1) % frames.Length;
+
+            float normalizedTime = Mathf.Clamp01(elapsedSeconds / durationSeconds);
+            float currentFps = Mathf.Lerp(clampedStartFps, clampedEndFps, normalizedTime);
+            float secondsPerFrame = 1f / Mathf.Max(1f, currentFps);
+            yield return new WaitForSeconds(secondsPerFrame);
+            elapsedSeconds += secondsPerFrame;
+        }
+
+        float loopSecondsPerFrame = 1f / clampedEndFps;
+        while (true)
+        {
+            if (targetRenderer == null)
+            {
+                ClearShotAnimationState();
+                yield break;
+            }
+
+            Sprite frameSprite = frames[frameIndex] != null
+                ? frames[frameIndex]
+                : originalSprite;
+            targetRenderer.sprite = frameSprite;
+            frameIndex = (frameIndex + 1) % frames.Length;
+            yield return new WaitForSeconds(loopSecondsPerFrame);
+        }
+    }
+
+    private IEnumerator PlayRampThenStopAnimationSequence(
+        SpriteRenderer targetRenderer,
+        Sprite originalSprite,
+        Sprite[] frames,
+        float startFramesPerSecond,
+        float endFramesPerSecond,
+        float durationSeconds)
+    {
+        if (durationSeconds <= 0f)
+        {
+            if (targetRenderer != null)
+            {
+                targetRenderer.sprite = originalSprite;
+            }
+
+            ClearShotAnimationState();
+            yield break;
+        }
+
+        int frameIndex = 0;
+        float elapsedSeconds = 0f;
+        float clampedStartFps = Mathf.Max(1f, startFramesPerSecond);
+        float clampedEndFps = Mathf.Max(1f, endFramesPerSecond);
+
+        while (elapsedSeconds < durationSeconds)
+        {
+            if (targetRenderer == null)
+            {
+                ClearShotAnimationState();
+                yield break;
+            }
+
+            Sprite frameSprite = frames[frameIndex] != null
+                ? frames[frameIndex]
+                : originalSprite;
+            targetRenderer.sprite = frameSprite;
+            frameIndex = (frameIndex + 1) % frames.Length;
+
+            float normalizedTime = Mathf.Clamp01(elapsedSeconds / durationSeconds);
+            float currentFps = Mathf.Lerp(clampedStartFps, clampedEndFps, normalizedTime);
+            float secondsPerFrame = 1f / Mathf.Max(1f, currentFps);
+            yield return new WaitForSeconds(secondsPerFrame);
+            elapsedSeconds += secondsPerFrame;
         }
 
         if (targetRenderer != null)
@@ -1132,14 +1364,47 @@ public class TankController : NetworkBehaviour
         }
     }
 
-    private void StopActiveShotAnimation()
+    private Sprite[] ResolveMinigunAnimationFrames(MinigunAnimationPhase animationPhase)
+    {
+        switch (animationPhase)
+        {
+            case MinigunAnimationPhase.Charge:
+                if (minigunChargeAnimation != null && minigunChargeAnimation.frames != null && minigunChargeAnimation.frames.Length > 0)
+                {
+                    return minigunChargeAnimation.frames;
+                }
+
+                return minigunShotAnimation != null ? minigunShotAnimation.frames : null;
+            case MinigunAnimationPhase.Cooldown:
+                if (minigunCooldownAnimation != null && minigunCooldownAnimation.frames != null && minigunCooldownAnimation.frames.Length > 0)
+                {
+                    return minigunCooldownAnimation.frames;
+                }
+
+                return minigunShotAnimation != null ? minigunShotAnimation.frames : null;
+            default:
+                if (minigunShotAnimation != null && minigunShotAnimation.frames != null && minigunShotAnimation.frames.Length > 0)
+                {
+                    return minigunShotAnimation.frames;
+                }
+
+                if (minigunChargeAnimation != null && minigunChargeAnimation.frames != null && minigunChargeAnimation.frames.Length > 0)
+                {
+                    return minigunChargeAnimation.frames;
+                }
+
+                return minigunCooldownAnimation != null ? minigunCooldownAnimation.frames : null;
+        }
+    }
+
+    private void StopActiveShotAnimation(bool restoreOriginalSprite = true)
     {
         if (shotAnimationCoroutine != null)
         {
             StopCoroutine(shotAnimationCoroutine);
         }
 
-        if (shotAnimationRenderer != null)
+        if (restoreOriginalSprite && shotAnimationRenderer != null)
         {
             shotAnimationRenderer.sprite = shotAnimationOriginalSprite;
         }
@@ -1149,6 +1414,7 @@ public class TankController : NetworkBehaviour
 
     private void ClearShotAnimationState()
     {
+        activeMinigunAnimationPhase = MinigunAnimationPhase.Stop;
         shotAnimationCoroutine = null;
         shotAnimationRenderer = null;
         shotAnimationOriginalSprite = null;
@@ -1670,7 +1936,9 @@ public class TankController : NetworkBehaviour
         maxShotLatencyCompensationSeconds = Mathf.Max(0f, maxShotLatencyCompensationSeconds);
         ClampShotAnimationSequence(standardShotAnimation);
         ClampShotAnimationSequence(bombShotAnimation);
+        ClampShotAnimationSequence(minigunChargeAnimation);
         ClampShotAnimationSequence(minigunShotAnimation);
+        ClampShotAnimationSequence(minigunCooldownAnimation);
         standardBulletDespawnSmoke?.ClampInEditor();
     }
 
