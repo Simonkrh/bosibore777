@@ -354,6 +354,63 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
+  deathSmoke:
+    smokeSprite: {fileID: -9087577266532155448, guid: f3d04deda499e8146b7a8d54e940b07d, type: 3}
+    smokeColor: {r: 0.1, g: 0.1, b: 0.1, a: 0.8}
+    sortingLayerName: Default
+    sortingOrder: 120
+    circleCount: 10
+    lifetimeRange: {x: 1.5, y: 2}
+    startScaleRange: {x: 0.08, y: 0.08}
+    endScaleMultiplierRange: {x: 2.5, y: 2.8}
+    startOpacityMultiplierRange: {x: 0.65, y: 0.9}
+    directionVariationDegrees: 180
+    speedRange: {x: 0.05, y: 0.05}
+    spawnRadiusRange: {x: 0.08, y: 0.08}
+    angularVelocityRange: {x: -45, y: 45}
+  deathDebris:
+    partSprites:
+    - {fileID: -855298285791758126, guid: a393285c0693207408335fd64ac3658e, type: 3}
+    - {fileID: 6937817954938267909, guid: cb8880d7db3601a47b5b8c7b9ccde97c, type: 3}
+    - {fileID: -6470460504253458178, guid: b09926f856133a0488676f665a12e4b7, type: 3}
+    - {fileID: -4178046375966092550, guid: 41840c9313e001648844c125ad6c1c17, type: 3}
+    - {fileID: 4130640169021434097, guid: 9b524fd5bb8d26044a3277d8b758bd42, type: 3}
+    - {fileID: 3465286685962602723, guid: ea183162d07de2141aaa0fcf8233ed63, type: 3}
+    sortingLayerName: Default
+    sortingOrder: 122
+    minPartCount: 4
+    maxPartCount: 6
+    spawnRadiusRange: {x: 0.01, y: 0.07}
+    launchSpeedRange: {x: 0.6, y: 1.5}
+    scaleRange: {x: 0.9, y: 1.1}
+    angularVelocityRange: {x: -540, y: 540}
+    minimumAbsoluteAngularVelocity: 120
+    linearDragPerSecond: 1
+    angularDragPerSecond: 720
+    wallContactRadius: 0.025
+    stopSpeedThreshold: 0.08
+    stopAngularSpeedThreshold: 12
+    fadeDelayAfterStop: 1
+    fadeDuration: 0.35
+    maxLifetimeSeconds: 5
+    trailSmoke:
+      smokeSprite: {fileID: -9087577266532155448, guid: f3d04deda499e8146b7a8d54e940b07d, type: 3}
+      sortingLayerName: Default
+      sortingOrder: 110
+      spawnIntervalSeconds: 0.05
+      backwardOffset: 0.04
+      minSpeedForTrail: 0.16
+      smokeColor: {r: 0.12, g: 0.12, b: 0.12, a: 0.42}
+      circleCount: 1
+      lifetimeRange: {x: 2, y: 3}
+      startScaleRange: {x: 0.018, y: 0.03}
+      endScaleMultiplierRange: {x: 1.7, y: 2.4}
+      startOpacityMultiplierRange: {x: 0.45, y: 0.8}
+      spreadInAllDirections: 1
+      directionVariationDegrees: 45
+      speedRange: {x: 0.04, y: 0.1}
+      spawnRadiusRange: {x: 0, y: 0.02}
+      angularVelocityRange: {x: -18, y: 18}
   godMode: 0
 --- !u!114 &9188130456158490771
 MonoBehaviour:

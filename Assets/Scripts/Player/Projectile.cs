@@ -357,9 +357,16 @@ public class Projectile : NetworkBehaviour
         ResolveGameManager()?.PlayBulletDespawnSoundServer(transform.position);
     }
 
-    private void TryPlayDirectionalDespawnSmokeServer()
+    private void TryPlayDirectionalDespawnSmokeServer(DestroyCause destroyCause)
     {
         if (!IsServer)
+        {
+            return;
+        }
+
+        if (destroyCause == DestroyCause.Unknown ||
+            destroyCause == DestroyCause.PlayerHit ||
+            destroyCause == DestroyCause.Forced)
         {
             return;
         }
@@ -390,7 +397,7 @@ public class Projectile : NetworkBehaviour
 
         destroyInvoked = true;
         TryPlayDespawnSoundServer(pendingDestroyCause);
-        TryPlayDirectionalDespawnSmokeServer();
+        TryPlayDirectionalDespawnSmokeServer(pendingDestroyCause);
         try
         {
             preDestroyServerCallback?.Invoke(this, pendingDestroyCause);
