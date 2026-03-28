@@ -273,6 +273,7 @@ GameObject:
   - component: {fileID: 6857686240995132399}
   - component: {fileID: 449163475493566120}
   - component: {fileID: 2223293547260479420}
+  - component: {fileID: 8214052350416954961}
   m_Layer: 5
   m_Name: Home
   m_TagString: Untagged
@@ -394,6 +395,24 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
+--- !u!114 &8214052350416954961
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3885679298079963120}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 30c7e6cfe8b94bdfbdb27200f042b811, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  scaleTarget: {fileID: 0}
+  hoverScaleMultiplier: 1.04
+  pressedScaleMultiplier: 1.02
+  animationSpeed: 14
+  useUnscaledTime: 1
+  reactToSelection: 1
 --- !u!1 &4483271890448836832
 GameObject:
   m_ObjectHideFlags: 0
@@ -617,6 +636,7 @@ GameObject:
   - component: {fileID: 268784249521123375}
   - component: {fileID: 8848770916942044958}
   - component: {fileID: 7653651645873467617}
+  - component: {fileID: 2677532612526277698}
   m_Layer: 5
   m_Name: Close
   m_TagString: Untagged
@@ -738,6 +758,24 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
+--- !u!114 &2677532612526277698
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6847881034239570508}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 30c7e6cfe8b94bdfbdb27200f042b811, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  scaleTarget: {fileID: 0}
+  hoverScaleMultiplier: 1.04
+  pressedScaleMultiplier: 1.02
+  animationSpeed: 14
+  useUnscaledTime: 1
+  reactToSelection: 1
 --- !u!1 &7395430550891766402
 GameObject:
   m_ObjectHideFlags: 0
@@ -750,6 +788,7 @@ GameObject:
   - component: {fileID: 1248521678916546240}
   - component: {fileID: 2325675126749421888}
   - component: {fileID: 4367728518110115663}
+  - component: {fileID: 7854607230899922929}
   m_Layer: 5
   m_Name: Settings
   m_TagString: Untagged
@@ -871,6 +910,24 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
+--- !u!114 &7854607230899922929
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7395430550891766402}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 30c7e6cfe8b94bdfbdb27200f042b811, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  scaleTarget: {fileID: 0}
+  hoverScaleMultiplier: 1.04
+  pressedScaleMultiplier: 1.02
+  animationSpeed: 14
+  useUnscaledTime: 1
+  reactToSelection: 1
 --- !u!1 &8718689442102153883
 GameObject:
   m_ObjectHideFlags: 0
