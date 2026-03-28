@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 9ceb7e91c5ce4524dbd4f0df3ed45ae7
+guid: 8d1c6e3393755fc49adc9bf6b0e16657
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 477591820901164136
-    second: Background (2)_0
+      213: 6134751039864755284
+    second: RedButton_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -100,23 +100,23 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Background (2)_0
+      name: RedButton_0
       rect:
         serializedVersion: 2
-        x: 157
-        y: 243
-        width: 1258
-        height: 600
+        x: 0
+        y: 0
+        width: 896
+        height: 223
       alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 86422701b3fb0a600800000000000000
-      internalID: 477591820901164136
+      spriteID: 454d8944193032550800000000000000
+      internalID: 6134751039864755284
       vertices: []
       indices: 
       edges: []
@@ -125,7 +125,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 4e34b48f83496194984dcab3e3e95f7d
+    spriteID: 
     internalID: 0
     vertices: []
     indices: 
@@ -135,7 +135,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Background (2)_0: 477591820901164136
+      RedButton_0: 6134751039864755284
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

@@ -32,6 +32,27 @@ public class NetworkUI : MonoBehaviour
         StartClientTo(serverAddress, port);
     }
 
+    public void QuitGame()
+    {
+        CustomNetworkManager manager = CustomNetworkManager.Singleton as CustomNetworkManager;
+        if (manager != null && (manager.IsServer || manager.IsClient || manager.IsListening))
+        {
+            manager.Shutdown(discardMessageQueue: true);
+        }
+
+        if (Application.isBatchMode)
+        {
+            Debug.LogWarning("[NetworkUI] QuitGame is not valid in batch mode.");
+            return;
+        }
+
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
+    }
+
     public bool StartClientTo(string serverAddress, int port)
     {
         if (port < 1 || port > 65535)
