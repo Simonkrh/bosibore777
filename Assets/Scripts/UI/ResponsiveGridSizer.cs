@@ -18,9 +18,27 @@ public class ResponsiveGridSizer : MonoBehaviour
     [SerializeField] private bool includeInactiveChildren = false;
     [SerializeField] private bool scaleChildrenToCell = true;
 
+    [Header("Responsive Spacing")]
+    [SerializeField] private bool useResponsiveSpacing = true;
+    [Tooltip("Spacing used when the grid has only a few items.")]
+    [SerializeField] private Vector2 expandedSpacing = new Vector2(150f, 0f);
+    [Tooltip("Spacing used when the grid is densely populated.")]
+    [SerializeField] private Vector2 compactSpacing = new Vector2(18f, 0f);
+    [Min(1)]
+    [SerializeField] private int expandedSpacingItemCount = 2;
+    [Min(1)]
+    [SerializeField] private int compactSpacingItemCount = 20;
+
     [Header("Flexible Constraint")]
     [Min(1)]
     [SerializeField] private int fallbackRowCount = 1;
+
+    [Header("Responsive Rows")]
+    [SerializeField] private bool useResponsiveRowCount = true;
+    [Min(1)]
+    [SerializeField] private int itemsPerRowBeforeWrapping = 8;
+    [Min(1)]
+    [SerializeField] private int maxResponsiveRowCount = 2;
 
     private void Awake()
     {
@@ -36,6 +54,20 @@ public class ResponsiveGridSizer : MonoBehaviour
 
     private void OnValidate()
     {
+        cellAspectRatio = Mathf.Max(0.01f, cellAspectRatio);
+        minCellSize.x = Mathf.Max(0f, minCellSize.x);
+        minCellSize.y = Mathf.Max(0f, minCellSize.y);
+        maxCellSize.x = Mathf.Max(minCellSize.x, maxCellSize.x);
+        maxCellSize.y = Mathf.Max(minCellSize.y, maxCellSize.y);
+        expandedSpacing.x = Mathf.Max(0f, expandedSpacing.x);
+        expandedSpacing.y = Mathf.Max(0f, expandedSpacing.y);
+        compactSpacing.x = Mathf.Max(0f, compactSpacing.x);
+        compactSpacing.y = Mathf.Max(0f, compactSpacing.y);
+        expandedSpacingItemCount = Mathf.Max(1, expandedSpacingItemCount);
+        compactSpacingItemCount = Mathf.Max(expandedSpacingItemCount, compactSpacingItemCount);
+        fallbackRowCount = Mathf.Max(1, fallbackRowCount);
+        itemsPerRowBeforeWrapping = Mathf.Max(1, itemsPerRowBeforeWrapping);
+        maxResponsiveRowCount = Mathf.Max(1, maxResponsiveRowCount);
         CacheReferences();
         Recalculate();
     }
@@ -65,9 +97,20 @@ public class ResponsiveGridSizer : MonoBehaviour
 
         int rows = ResolveRowCount(childCount);
         int cols = ResolveColumnCount(childCount, rows);
+        Vector2 resolvedSpacing = ResolveSpacing(childCount);
 
-        float availableWidth = targetRect.rect.width - targetGrid.padding.horizontal - targetGrid.spacing.x * Mathf.Max(0, cols - 1);
-        float availableHeight = targetRect.rect.height - targetGrid.padding.vertical - targetGrid.spacing.y * Mathf.Max(0, rows - 1);
+        if (targetGrid.constraint == GridLayoutGroup.Constraint.FixedRowCount && targetGrid.constraintCount != rows)
+        {
+            targetGrid.constraintCount = rows;
+        }
+
+        if ((targetGrid.spacing - resolvedSpacing).sqrMagnitude > 0.0001f)
+        {
+            targetGrid.spacing = resolvedSpacing;
+        }
+
+        float availableWidth = targetRect.rect.width - targetGrid.padding.horizontal - resolvedSpacing.x * Mathf.Max(0, cols - 1);
+        float availableHeight = targetRect.rect.height - targetGrid.padding.vertical - resolvedSpacing.y * Mathf.Max(0, rows - 1);
 
         if (availableWidth <= 0f || availableHeight <= 0f)
         {
@@ -139,6 +182,12 @@ public class ResponsiveGridSizer : MonoBehaviour
 
     private int ResolveRowCount(int childCount)
     {
+        if (useResponsiveRowCount && targetGrid.constraint != GridLayoutGroup.Constraint.FixedColumnCount)
+        {
+            int wrappedRows = Mathf.CeilToInt(childCount / (float)Mathf.Max(1, itemsPerRowBeforeWrapping));
+            return Mathf.Clamp(wrappedRows, 1, Mathf.Max(1, maxResponsiveRowCount));
+        }
+
         switch (targetGrid.constraint)
         {
             case GridLayoutGroup.Constraint.FixedRowCount:
@@ -161,6 +210,28 @@ public class ResponsiveGridSizer : MonoBehaviour
         }
 
         return Mathf.Max(1, Mathf.CeilToInt(childCount / (float)Mathf.Max(1, rows)));
+    }
+
+    private Vector2 ResolveSpacing(int childCount)
+    {
+        if (!useResponsiveSpacing)
+        {
+            return targetGrid != null ? targetGrid.spacing : Vector2.zero;
+        }
+
+        int expandedCount = Mathf.Max(1, expandedSpacingItemCount);
+        int compactCount = Mathf.Max(expandedCount, compactSpacingItemCount);
+        if (compactCount == expandedCount)
+        {
+            return compactSpacing;
+        }
+
+        float t = Mathf.InverseLerp(expandedCount, compactCount, Mathf.Max(1, childCount));
+        t = Mathf.SmoothStep(0f, 1f, t);
+
+        return new Vector2(
+            Mathf.Lerp(expandedSpacing.x, compactSpacing.x, t),
+            Mathf.Lerp(expandedSpacing.y, compactSpacing.y, t));
     }
 
     private void ApplyChildScale(Vector2 cellSize)
