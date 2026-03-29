@@ -4,7 +4,9 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public class MissileTrailSmoke : NetworkBehaviour
 {
+    private const string DefaultSmokeSpriteResourcePath = "Sprites/smoke";
     private static readonly Color DefaultUntargetedSmokeColor = new Color(0.12f, 0.12f, 0.12f, 1f);
+    private static Sprite cachedDefaultSmokeSprite;
 
     [Header("Smoke Sprite")]
     [Tooltip("Sprite used for each smoke puff burst.")]
@@ -139,7 +141,8 @@ public class MissileTrailSmoke : NetworkBehaviour
 
     private void SpawnTrailBurst()
     {
-        if (smokeSprite == null)
+        Sprite resolvedSmokeSprite = ResolveSmokeSprite();
+        if (resolvedSmokeSprite == null)
         {
             return;
         }
@@ -159,7 +162,7 @@ public class MissileTrailSmoke : NetworkBehaviour
             ? Mathf.Clamp01(targetColorWeight)
             : 0f;
         smokeEffect.ConfigureBurst(
-            smokeSprite,
+            resolvedSmokeSprite,
             targetColor,
             untargetedColor,
             targetCircleWeight,
@@ -225,7 +228,8 @@ public class MissileTrailSmoke : NetworkBehaviour
         Color burstColor,
         out DirectionalSmokeBurst.Settings settings)
     {
-        if (smokeSprite == null)
+        Sprite resolvedSmokeSprite = ResolveSmokeSprite();
+        if (resolvedSmokeSprite == null)
         {
             settings = default;
             return false;
@@ -238,7 +242,7 @@ public class MissileTrailSmoke : NetworkBehaviour
         settings = new DirectionalSmokeBurst.Settings(
             position,
             resolvedDirection,
-            smokeSprite,
+            resolvedSmokeSprite,
             burstColor,
             sortingLayerName,
             sortingOrder,
@@ -252,6 +256,29 @@ public class MissileTrailSmoke : NetworkBehaviour
             despawnSpawnRadiusRange,
             despawnAngularVelocityRange);
         return true;
+    }
+
+    private static Sprite ResolveDefaultSmokeSprite()
+    {
+        if (cachedDefaultSmokeSprite == null)
+        {
+            cachedDefaultSmokeSprite = Resources.Load<Sprite>(DefaultSmokeSpriteResourcePath);
+            if (cachedDefaultSmokeSprite == null)
+            {
+                Sprite[] sprites = Resources.LoadAll<Sprite>(DefaultSmokeSpriteResourcePath);
+                if (sprites != null && sprites.Length > 0)
+                {
+                    cachedDefaultSmokeSprite = sprites[0];
+                }
+            }
+        }
+
+        return cachedDefaultSmokeSprite;
+    }
+
+    private Sprite ResolveSmokeSprite()
+    {
+        return smokeSprite != null ? smokeSprite : ResolveDefaultSmokeSprite();
     }
 
     private void OnValidate()

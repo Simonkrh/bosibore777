@@ -257,7 +257,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
-  smokeSprite: {fileID: -9087577266532155448, guid: f3d04deda499e8146b7a8d54e940b07d, type: 3}
+  smokeSprite: {fileID: 21300000, guid: f3d04deda499e8146b7a8d54e940b07d, type: 3}
   sortingLayerName: Default
   sortingOrder: 58
   spawnIntervalSeconds: 0.03
@@ -269,7 +269,7 @@ MonoBehaviour:
   lifetimeRange: {x: 3.5, y: 4}
   startScaleRange: {x: 0.025, y: 0.055}
   endScaleMultiplierRange: {x: 1.8, y: 2.8}
-  startOpacityMultiplierRange: {x: 0, y: 0.7}
+  startOpacityMultiplierRange: {x: 0.5, y: 0.8}
   spreadInAllDirections: 1
   baseDirection: {x: 0, y: 0}
   directionVariationDegrees: 30
@@ -279,7 +279,7 @@ MonoBehaviour:
   despawnCircleCount: 15
   despawnLifetimeRange: {x: 0.3, y: 0.55}
   despawnStartScaleRange: {x: 0.017, y: 0.02}
-  despawnEndScaleMultiplierRange: {x: 2.2, y: 3.3}
+  despawnEndScaleMultiplierRange: {x: 1.8, y: 2.2}
   despawnStartOpacityMultiplierRange: {x: 0.4, y: 0.7}
   despawnDirectionVariationDegrees: 55
   despawnSpeedRange: {x: 0.5, y: 0.5}
