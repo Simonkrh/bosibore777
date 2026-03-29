@@ -24,7 +24,8 @@ public class GameManager : NetworkBehaviour
         MissileTarget = 11,
         MinigunStart = 12,
         MinigunFirstBullet = 13,
-        MinigunCooldown = 14
+        MinigunCooldown = 14,
+        MegaBombActivate = 15
     }
 
     private struct ClientDisplayState
@@ -44,6 +45,12 @@ public class GameManager : NetworkBehaviour
         public Coroutine ShotCrossfadeCoroutine;
         public double FirstShotAllowedDspTime;
         public double NextOneShotEndDspTime;
+    }
+
+    private sealed class MegaBombMusicState
+    {
+        public GameObject RootObject;
+        public AudioSource LoopSource;
     }
 
     public GameObject playerPrefab;
@@ -79,6 +86,10 @@ public class GameManager : NetworkBehaviour
     [SerializeField] private AudioClip missileLockClip;
     [SerializeField] private AudioClip missileTargetClip;
 
+    [Header("Mega Bomb Audio")]
+    [SerializeField] private AudioClip megaBombMusicClip;
+    [SerializeField] private AudioClip megaBombActivateClip;
+
     [Header("Audio Settings")]
     [SerializeField, Range(0f, 1f)] private float sfxVolume = 1f;
     private PlayerDisplayManager displayManager;
@@ -101,8 +112,10 @@ public class GameManager : NetworkBehaviour
     private readonly Dictionary<ulong, ClientDisplayState> clientDisplayStates = new Dictionary<ulong, ClientDisplayState>();
     private readonly System.Random soundRandom = new System.Random();
     private readonly Dictionary<ulong, MinigunAudioSequenceState> activeMinigunAudioStates = new Dictionary<ulong, MinigunAudioSequenceState>();
+    private readonly Dictionary<ulong, MegaBombMusicState> activeMegaBombMusicStates = new Dictionary<ulong, MegaBombMusicState>();
     private bool clientDisplayStateDirty;
     private const float MinigunShotCrossfadeSeconds = 0.035f;
+    private const float MegaBombMusicVolumeMultiplier = 0.7f;
 
     private void Awake()
     {
@@ -135,6 +148,7 @@ public class GameManager : NetworkBehaviour
     {
         AudioSettingsStore.SfxVolumeChanged -= HandleSfxVolumeChanged;
         ResetAllMinigunAudioStatesLocal();
+        ResetAllMegaBombMusicStatesLocal();
     }
 
     private void HandleSfxVolumeChanged(float volume)
@@ -157,6 +171,17 @@ public class GameManager : NetworkBehaviour
             if (state.ShotSourceB != null)
             {
                 state.ShotSourceB.volume = state.ShotSourceB.isPlaying ? sfxVolume : 0f;
+            }
+        }
+
+        foreach (KeyValuePair<ulong, MegaBombMusicState> entry in activeMegaBombMusicStates)
+        {
+            MegaBombMusicState state = entry.Value;
+            if (state?.LoopSource != null)
+            {
+                state.LoopSource.volume = state.LoopSource.isPlaying
+                    ? ResolveMegaBombMusicVolume()
+                    : 0f;
             }
         }
     }
@@ -266,6 +291,31 @@ public class GameManager : NetworkBehaviour
     public void PlayMissileTargetSoundForClientServer(ulong _, Vector3 worldPosition)
     {
         PlaySoundEffectServer(SoundEffectId.MissileTarget, worldPosition);
+    }
+
+    public void PlayMegaBombMusicServer(ulong ownerClientId, Vector3 worldPosition)
+    {
+        if (!IsServer || !IsSpawned || megaBombMusicClip == null)
+        {
+            return;
+        }
+
+        PlayMegaBombMusicClientRpc(ownerClientId, worldPosition);
+    }
+
+    public void StopMegaBombMusicServer(ulong ownerClientId)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        StopMegaBombMusicClientRpc(ownerClientId);
+    }
+
+    public void PlayMegaBombActivateSoundServer(Vector3 worldPosition)
+    {
+        PlaySoundEffectServer(SoundEffectId.MegaBombActivate, worldPosition);
     }
 
     public void PlayDirectionalSmokeBurstServer(DirectionalSmokeBurst.Settings settings, string objectName)
@@ -409,6 +459,33 @@ public class GameManager : NetworkBehaviour
     }
 
     [ClientRpc]
+    private void PlayMegaBombMusicClientRpc(
+        ulong ownerClientId,
+        Vector3 worldPosition,
+        ClientRpcParams clientRpcParams = default)
+    {
+        if (!IsClient)
+        {
+            return;
+        }
+
+        PlayMegaBombMusicLocal(ownerClientId, worldPosition);
+    }
+
+    [ClientRpc]
+    private void StopMegaBombMusicClientRpc(
+        ulong ownerClientId,
+        ClientRpcParams clientRpcParams = default)
+    {
+        if (!IsClient)
+        {
+            return;
+        }
+
+        ResetMegaBombMusicStateLocal(ownerClientId);
+    }
+
+    [ClientRpc]
     private void PlayDirectionalSmokeBurstClientRpc(
         DirectionalSmokeBurst.NetworkPayload payload,
         FixedString64Bytes objectName,
@@ -503,6 +580,32 @@ public class GameManager : NetworkBehaviour
         }
 
         StartCoroutine(CleanupMinigunAudioStateAfterDelay(ownerClientId, state, state.NextOneShotEndDspTime));
+    }
+
+    private void PlayMegaBombMusicLocal(ulong ownerClientId, Vector3 worldPosition)
+    {
+        ResetMegaBombMusicStateLocal(ownerClientId);
+        if (megaBombMusicClip == null)
+        {
+            return;
+        }
+
+        GameObject rootObject = new GameObject($"MegaBombMusic_{ownerClientId}");
+        rootObject.transform.position = worldPosition;
+
+        AudioSource audioSource = rootObject.AddComponent<AudioSource>();
+        audioSource.playOnAwake = false;
+        audioSource.spatialBlend = 0f;
+        audioSource.loop = true;
+        audioSource.volume = ResolveMegaBombMusicVolume();
+        audioSource.clip = megaBombMusicClip;
+        audioSource.Play();
+
+        activeMegaBombMusicStates[ownerClientId] = new MegaBombMusicState
+        {
+            RootObject = rootObject,
+            LoopSource = audioSource
+        };
     }
 
     private MinigunAudioSequenceState GetOrCreateMinigunAudioStateLocal(ulong ownerClientId, Vector3 worldPosition)
@@ -765,6 +868,47 @@ public class GameManager : NetworkBehaviour
         activeMinigunAudioStates.Clear();
     }
 
+    private float ResolveMegaBombMusicVolume()
+    {
+        return Mathf.Clamp01(sfxVolume * MegaBombMusicVolumeMultiplier);
+    }
+
+    private void ResetMegaBombMusicStateLocal(ulong ownerClientId)
+    {
+        if (!activeMegaBombMusicStates.TryGetValue(ownerClientId, out MegaBombMusicState state))
+        {
+            return;
+        }
+
+        if (state?.LoopSource != null)
+        {
+            state.LoopSource.Stop();
+            state.LoopSource.clip = null;
+            state.LoopSource.volume = 0f;
+        }
+
+        if (state?.RootObject != null)
+        {
+            Destroy(state.RootObject);
+        }
+
+        activeMegaBombMusicStates.Remove(ownerClientId);
+    }
+
+    private void ResetAllMegaBombMusicStatesLocal()
+    {
+        foreach (KeyValuePair<ulong, MegaBombMusicState> entry in activeMegaBombMusicStates)
+        {
+            MegaBombMusicState state = entry.Value;
+            if (state?.RootObject != null)
+            {
+                Destroy(state.RootObject);
+            }
+        }
+
+        activeMegaBombMusicStates.Clear();
+    }
+
     private bool TrySelectBounceSoundEffect(out SoundEffectId effectId)
     {
         bool hasFirstClip = bulletBounce1Clip != null;
@@ -876,6 +1020,8 @@ public class GameManager : NetworkBehaviour
                 return null;
             case SoundEffectId.MinigunCooldown:
                 return minigunCooldownClip;
+            case SoundEffectId.MegaBombActivate:
+                return megaBombActivateClip;
             default:
                 return null;
         }

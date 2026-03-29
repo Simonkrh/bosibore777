@@ -50,6 +50,7 @@ public class Projectile : NetworkBehaviour
     private AudioProfile audioProfile = AudioProfile.Standard;
     private GameManager gameManager;
     private DirectionalSmokeBurst.Config directionalDespawnSmokeConfig;
+    private Coroutine destroyAfterLifetimeCoroutine;
 
     public ulong ShooterClientId => shooterId;
 
@@ -66,7 +67,7 @@ public class Projectile : NetworkBehaviour
     {
         if (IsServer)
         {
-            DestroyProjectileAfterLifetime();
+            RestartLifetimeCountdown();
         }
     }
 
@@ -181,14 +182,39 @@ public class Projectile : NetworkBehaviour
         }
     }
 
-    private void DestroyProjectileAfterLifetime()
+    public void SetLifetimeServer(float lifetimeSeconds)
     {
-        StartCoroutine(DestroyAfterLifetime());
+        if (!IsServer)
+        {
+            return;
+        }
+
+        lifetime = Mathf.Max(0f, lifetimeSeconds);
+        if (isActiveAndEnabled)
+        {
+            RestartLifetimeCountdown();
+        }
+    }
+
+    private void RestartLifetimeCountdown()
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        if (destroyAfterLifetimeCoroutine != null)
+        {
+            StopCoroutine(destroyAfterLifetimeCoroutine);
+        }
+
+        destroyAfterLifetimeCoroutine = StartCoroutine(DestroyAfterLifetime());
     }
 
     private System.Collections.IEnumerator DestroyAfterLifetime()
     {
         yield return new WaitForSeconds(lifetime);
+        destroyAfterLifetimeCoroutine = null;
         if (!IsServer)
         {
             yield break;
@@ -404,6 +430,12 @@ public class Projectile : NetworkBehaviour
         }
 
         destroyInvoked = true;
+        if (destroyAfterLifetimeCoroutine != null)
+        {
+            StopCoroutine(destroyAfterLifetimeCoroutine);
+            destroyAfterLifetimeCoroutine = null;
+        }
+
         TryPlayDespawnSoundServer(pendingDestroyCause);
         TryPlayDirectionalDespawnSmokeServer(pendingDestroyCause);
         try

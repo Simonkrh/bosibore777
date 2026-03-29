@@ -9,15 +9,23 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6e40d7b6ab4f425c8dca8f23ce56d9a1, type: 3}
-  m_Name: BombAbilityBehavior
+  m_Script: {fileID: 11500000, guid: 3a2c9ff77d804c97ab09a1c54d749f3e, type: 3}
+  m_Name: MegaBombAbilityBehavior
   m_EditorClassIdentifier: 
-  bombProjectilePrefab: {fileID: 6673431591696494813, guid: 2b0f4b03f0fd4e81b5ff8f868ed95f44, type: 3}
-  bombSpeed: 2
+  megaBombProjectilePrefab: {fileID: 6673431591696494813, guid: 4c4f0fbc621b4e669ed7feae1c1e64cf, type: 3}
+  megaBombSpeed: 1.5
   extraSpawnDistance: 0.06
+  miniBombProjectilePrefab: {fileID: 6673431591696494813, guid: 2b0f4b03f0fd4e81b5ff8f868ed95f44, type: 3}
+  miniBombCount: 6
+  miniBombSpeed: 1
+  miniBombLifetime: 3
+  releaseDelaySeconds: 6
+  miniBombSpawnRadius: 0.05
+  miniBombSequenceStride: 1000
+  miniBombsPassThroughWalls: 1
   shardProjectilePrefab: {fileID: 6673431591696494813, guid: 0bfd0b0b5d6c44ff97f76fb624f3f8d1, type: 3}
   shardCount: 40
-  shardSpeed: 2
+  shardSpeed: 2.5
   shardSpawnRadius: 0.04
   shardSequenceStride: 1000
   shardsPassThroughWalls: 1

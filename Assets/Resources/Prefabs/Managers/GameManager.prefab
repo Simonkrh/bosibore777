@@ -96,4 +96,6 @@ MonoBehaviour:
   missileShootClip: {fileID: 8300000, guid: 13f933227e195f44b98e7b7969fbb93d, type: 3}
   missileLockClip: {fileID: 8300000, guid: 68966930f0d9b7c47b47287dc9ccb6f7, type: 3}
   missileTargetClip: {fileID: 8300000, guid: c7495a191df972c4ba8b69ac499c715b, type: 3}
+  megaBombMusicClip: {fileID: 8300000, guid: 4bb6ea953fd6d9146951573f78c69e43, type: 3}
+  megaBombActivateClip: {fileID: 8300000, guid: eb377a8a90abdd04cbc6499a4eec0526, type: 3}
   sfxVolume: 1
