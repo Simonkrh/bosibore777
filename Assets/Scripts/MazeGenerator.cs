@@ -940,17 +940,7 @@ public class MazeGenerator : NetworkBehaviour
         float offsetX = -mazeWidth / 2 + cellSize / 2;
         float offsetY = -mazeHeight / 2 + cellSize / 2;
 
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                // Adjust cell position to center the maze
-                Vector3 cellPosition = new Vector3(x * cellSize + offsetX, y * cellSize + offsetY, 0);
-
-                // Instantiate floor
-                Instantiate(floorPrefab, cellPosition, Quaternion.identity, mazeParent);
-            }
-        }
+        InstantiateCombinedFloor(mazeWidth, mazeHeight);
 
         DrawMergedHorizontalWalls(offsetX, offsetY);
         DrawMergedVerticalWalls(offsetX, offsetY);
@@ -964,6 +954,22 @@ public class MazeGenerator : NetworkBehaviour
         }
 
         AdjustCamera();
+    }
+
+    private void InstantiateCombinedFloor(float mazeWidth, float mazeHeight)
+    {
+        if (floorPrefab == null)
+        {
+            return;
+        }
+
+        GameObject floor = Instantiate(floorPrefab, Vector3.zero, Quaternion.identity, mazeParent);
+        floor.transform.localPosition = Vector3.zero;
+        floor.transform.localRotation = Quaternion.identity;
+        floor.transform.localScale = new Vector3(
+            Mathf.Max(cellSize, mazeWidth),
+            Mathf.Max(cellSize, mazeHeight),
+            1f);
     }
 
     private void DrawMergedHorizontalWalls(float offsetX, float offsetY)

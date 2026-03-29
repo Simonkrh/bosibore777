@@ -21,6 +21,7 @@ public class AbilityPickupSpawner : NetworkBehaviour
     private MazeGenerator mazeGenerator;
     private GameManager gameManager;
     private Coroutine spawnRoutine;
+    private float roundReadyAtTime = -1f;
 
     public override void OnNetworkSpawn()
     {
@@ -75,16 +76,30 @@ public class AbilityPickupSpawner : NetworkBehaviour
 
     private IEnumerator SpawnLoop()
     {
-        float initialDelay = Mathf.Max(0f, initialSpawnDelaySeconds);
-        if (initialDelay > 0f)
-        {
-            yield return new WaitForSeconds(initialDelay);
-        }
-
         while (IsServer && IsSpawned)
         {
             CleanupInactivePickups();
             GameManager resolvedGameManager = ResolveGameManager();
+            bool roundReadyForAbilitySpawns = resolvedGameManager != null && resolvedGameManager.IsReadyForAbilitySpawns();
+            if (!roundReadyForAbilitySpawns)
+            {
+                roundReadyAtTime = -1f;
+                yield return new WaitForSeconds(0.1f);
+                continue;
+            }
+
+            if (roundReadyAtTime < 0f)
+            {
+                roundReadyAtTime = Time.time;
+            }
+
+            float initialDelay = Mathf.Max(0f, initialSpawnDelaySeconds);
+            if (Time.time < roundReadyAtTime + initialDelay)
+            {
+                yield return new WaitForSeconds(0.1f);
+                continue;
+            }
+
             bool megaBombLockdownActive = resolvedGameManager != null && resolvedGameManager.IsMegaBombLockdownActive;
             bool canSpawnMore = noLimitSpawning || activePickups.Count < Mathf.Max(0, maxActivePickups);
             if (!megaBombLockdownActive && canSpawnMore)

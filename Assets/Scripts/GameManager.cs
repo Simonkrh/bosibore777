@@ -1090,6 +1090,32 @@ public class GameManager : NetworkBehaviour
         }
     }
 
+    public bool AreAllConnectedClientsSpawned()
+    {
+        if (NetworkManager == null)
+        {
+            return false;
+        }
+
+        foreach (var client in NetworkManager.ConnectedClientsList)
+        {
+            if (!HasSpawnForClient(client.ClientId))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public bool IsReadyForAbilitySpawns()
+    {
+        return IsServer &&
+               IsSpawned &&
+               !startingNewRound &&
+               AreAllConnectedClientsSpawned();
+    }
+
     private void Update()
     {
         if (IsClient)
