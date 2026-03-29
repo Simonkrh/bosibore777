@@ -388,7 +388,15 @@ public class BombAbilityBehavior : AbilityBehavior
         if (explosionSmoke != null &&
             explosionSmoke.TryCreateSettings(detonationPosition, Vector2.up, out DirectionalSmokeBurst.Settings settings))
         {
-            DirectionalSmokeBurst.Spawn(settings, "BombExplosionSmokeBurst");
+            GameManager resolvedGameManager = ResolveGameManager(owner);
+            if (resolvedGameManager != null)
+            {
+                resolvedGameManager.PlayDirectionalSmokeBurstServer(settings, "BombExplosionSmokeBurst");
+            }
+            else
+            {
+                DirectionalSmokeBurst.Spawn(settings, "BombExplosionSmokeBurst");
+            }
         }
     }
 

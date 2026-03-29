@@ -1,3 +1,4 @@
+using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 using System.Collections;
@@ -257,14 +258,31 @@ public class GameManager : NetworkBehaviour
         PlaySoundEffectServer(SoundEffectId.MissileShoot, worldPosition);
     }
 
-    public void PlayMissileLockSoundForClientServer(ulong clientId, Vector3 worldPosition)
+    public void PlayMissileLockSoundForClientServer(ulong _, Vector3 worldPosition)
     {
-        PlaySoundEffectForClientsServer(SoundEffectId.MissileLock, worldPosition, clientId);
+        PlaySoundEffectServer(SoundEffectId.MissileLock, worldPosition);
     }
 
-    public void PlayMissileTargetSoundForClientServer(ulong clientId, Vector3 worldPosition)
+    public void PlayMissileTargetSoundForClientServer(ulong _, Vector3 worldPosition)
     {
-        PlaySoundEffectForClientsServer(SoundEffectId.MissileTarget, worldPosition, clientId);
+        PlaySoundEffectServer(SoundEffectId.MissileTarget, worldPosition);
+    }
+
+    public void PlayDirectionalSmokeBurstServer(DirectionalSmokeBurst.Settings settings, string objectName)
+    {
+        PlayDirectionalSmokeBurstServer(new DirectionalSmokeBurst.NetworkPayload(settings), objectName);
+    }
+
+    public void PlayDirectionalSmokeBurstServer(DirectionalSmokeBurst.NetworkPayload payload, string objectName)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        FixedString64Bytes effectObjectName = new FixedString64Bytes(
+            string.IsNullOrWhiteSpace(objectName) ? "DirectionalSmokeBurst" : objectName);
+        PlayDirectionalSmokeBurstClientRpc(payload, effectObjectName);
     }
 
     public void PlayMinigunStartSoundServer(ulong ownerClientId, Vector3 worldPosition)
@@ -318,24 +336,6 @@ public class GameManager : NetworkBehaviour
         }
 
         PlaySoundEffectClientRpc((int)effectId, worldPosition, clientRpcParams);
-    }
-
-    private void PlaySoundEffectForClientsServer(SoundEffectId effectId, Vector3 worldPosition, params ulong[] targetClientIds)
-    {
-        if (targetClientIds == null || targetClientIds.Length == 0)
-        {
-            return;
-        }
-
-        ClientRpcParams clientRpcParams = new ClientRpcParams
-        {
-            Send = new ClientRpcSendParams
-            {
-                TargetClientIds = targetClientIds
-            }
-        };
-
-        PlaySoundEffectServer(effectId, worldPosition, clientRpcParams);
     }
 
     [ClientRpc]
@@ -406,6 +406,20 @@ public class GameManager : NetworkBehaviour
         }
 
         ResetMinigunAudioStateLocal(ownerClientId);
+    }
+
+    [ClientRpc]
+    private void PlayDirectionalSmokeBurstClientRpc(
+        DirectionalSmokeBurst.NetworkPayload payload,
+        FixedString64Bytes objectName,
+        ClientRpcParams clientRpcParams = default)
+    {
+        if (!IsClient)
+        {
+            return;
+        }
+
+        DirectionalSmokeBurst.TrySpawn(payload, objectName.ToString());
     }
 
     private void PlaySoundEffectLocal(SoundEffectId effectId, Vector3 worldPosition)

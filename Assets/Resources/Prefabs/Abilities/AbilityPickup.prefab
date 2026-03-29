@@ -77,9 +77,9 @@ MonoBehaviour:
   destroyWhenFinished: 0
   useUnscaledTime: 0
   circleCount: 10
-  smokeSprite: {fileID: -9087577266532155448, guid: f3d04deda499e8146b7a8d54e940b07d, type: 3}
+  smokeSprite: {fileID: 21300000, guid: f3d04deda499e8146b7a8d54e940b07d, type: 3}
   sortingLayerName: Default
-  sortingOrder: 0
+  sortingOrder: 1
   smokeColor: {r: 0.4331962, g: 0.21440013, b: 0.6226415, a: 0.78}
   secondarySmokeColor: {r: 1, g: 1, b: 1, a: 0.7}
   primaryColorWeight: 1

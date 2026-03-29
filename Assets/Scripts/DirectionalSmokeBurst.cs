@@ -1,12 +1,69 @@
+using Unity.Collections;
+using Unity.Netcode;
 using UnityEngine;
 
 public static class DirectionalSmokeBurst
 {
+    public const string DefaultSmokeSpriteResourcePath = "Sprites/smoke";
+    private static Sprite cachedDefaultSmokeSprite;
+
+    public struct NetworkPayload : INetworkSerializable
+    {
+        public Vector3 Position;
+        public Vector2 Direction;
+        public Color Color;
+        public FixedString64Bytes SortingLayerName;
+        public int SortingOrder;
+        public int CircleCount;
+        public Vector2 LifetimeRange;
+        public Vector2 StartScaleRange;
+        public Vector2 EndScaleMultiplierRange;
+        public Vector2 StartOpacityMultiplierRange;
+        public float DirectionVariationDegrees;
+        public Vector2 SpeedRange;
+        public Vector2 SpawnRadiusRange;
+        public Vector2 AngularVelocityRange;
+
+        public NetworkPayload(Settings settings)
+        {
+            Position = settings.Position;
+            Direction = settings.Direction;
+            Color = settings.Color;
+            SortingLayerName = new FixedString64Bytes(settings.SortingLayerName ?? "Default");
+            SortingOrder = settings.SortingOrder;
+            CircleCount = settings.CircleCount;
+            LifetimeRange = settings.LifetimeRange;
+            StartScaleRange = settings.StartScaleRange;
+            EndScaleMultiplierRange = settings.EndScaleMultiplierRange;
+            StartOpacityMultiplierRange = settings.StartOpacityMultiplierRange;
+            DirectionVariationDegrees = settings.DirectionVariationDegrees;
+            SpeedRange = settings.SpeedRange;
+            SpawnRadiusRange = settings.SpawnRadiusRange;
+            AngularVelocityRange = settings.AngularVelocityRange;
+        }
+
+        public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+        {
+            serializer.SerializeValue(ref Position);
+            serializer.SerializeValue(ref Direction);
+            serializer.SerializeValue(ref Color);
+            serializer.SerializeValue(ref SortingLayerName);
+            serializer.SerializeValue(ref SortingOrder);
+            serializer.SerializeValue(ref CircleCount);
+            serializer.SerializeValue(ref LifetimeRange);
+            serializer.SerializeValue(ref StartScaleRange);
+            serializer.SerializeValue(ref EndScaleMultiplierRange);
+            serializer.SerializeValue(ref StartOpacityMultiplierRange);
+            serializer.SerializeValue(ref DirectionVariationDegrees);
+            serializer.SerializeValue(ref SpeedRange);
+            serializer.SerializeValue(ref SpawnRadiusRange);
+            serializer.SerializeValue(ref AngularVelocityRange);
+        }
+    }
+
     [System.Serializable]
     public sealed class Config
     {
-        private const string DefaultSmokeSpriteResourcePath = "Sprites/smoke";
-
         [Tooltip("Sprite used for each smoke circle in the directional burst.")]
         public Sprite smokeSprite;
         [Tooltip("Tint color used for all circles in this directional smoke burst.")]
@@ -36,7 +93,7 @@ public static class DirectionalSmokeBurst
 
         public bool TryCreateSettings(Vector3 position, Vector2 facingDirection, out Settings settings)
         {
-            Sprite resolvedSprite = smokeSprite != null ? smokeSprite : Resources.Load<Sprite>(DefaultSmokeSpriteResourcePath);
+            Sprite resolvedSprite = smokeSprite != null ? smokeSprite : ResolveDefaultSmokeSprite();
             if (resolvedSprite == null)
             {
                 settings = default;
@@ -136,6 +193,14 @@ public static class DirectionalSmokeBurst
 
     public static void Spawn(Settings settings, string objectName)
     {
+        Sprite sprite = settings.Sprite != null
+            ? settings.Sprite
+            : ResolveDefaultSmokeSprite();
+        if (sprite == null)
+        {
+            return;
+        }
+
         GameObject burstObject = new GameObject(objectName);
         burstObject.SetActive(false);
         burstObject.transform.position = settings.Position;
@@ -143,7 +208,7 @@ public static class DirectionalSmokeBurst
 
         SmokeEffect smokeEffect = burstObject.AddComponent<SmokeEffect>();
         smokeEffect.ConfigureBurst(
-            settings.Sprite,
+            sprite,
             settings.Color,
             settings.Color,
             1f,
@@ -165,6 +230,70 @@ public static class DirectionalSmokeBurst
 
         burstObject.SetActive(true);
         smokeEffect.Play();
+    }
+
+    public static bool TrySpawn(NetworkPayload payload, string objectName)
+    {
+        Sprite sprite = ResolveDefaultSmokeSprite();
+        if (sprite == null)
+        {
+            return false;
+        }
+
+        GameObject burstObject = new GameObject(objectName);
+        burstObject.SetActive(false);
+        burstObject.transform.position = payload.Position;
+        burstObject.transform.rotation = Quaternion.identity;
+
+        SmokeEffect smokeEffect = burstObject.AddComponent<SmokeEffect>();
+        smokeEffect.ConfigureBurst(
+            sprite,
+            payload.Color,
+            payload.Color,
+            1f,
+            ResolveSortingLayerName(payload.SortingLayerName),
+            payload.SortingOrder,
+            payload.CircleCount,
+            payload.LifetimeRange,
+            payload.StartScaleRange,
+            payload.EndScaleMultiplierRange,
+            payload.StartOpacityMultiplierRange,
+            false,
+            payload.Direction,
+            payload.DirectionVariationDegrees,
+            payload.SpeedRange,
+            payload.SpawnRadiusRange,
+            payload.AngularVelocityRange,
+            true,
+            false);
+
+        burstObject.SetActive(true);
+        smokeEffect.Play();
+        return true;
+    }
+
+    private static string ResolveSortingLayerName(FixedString64Bytes sortingLayerName)
+    {
+        string layerName = sortingLayerName.ToString();
+        return string.IsNullOrWhiteSpace(layerName) ? "Default" : layerName;
+    }
+
+    private static Sprite ResolveDefaultSmokeSprite()
+    {
+        if (cachedDefaultSmokeSprite == null)
+        {
+            cachedDefaultSmokeSprite = Resources.Load<Sprite>(DefaultSmokeSpriteResourcePath);
+            if (cachedDefaultSmokeSprite == null)
+            {
+                Sprite[] sprites = Resources.LoadAll<Sprite>(DefaultSmokeSpriteResourcePath);
+                if (sprites != null && sprites.Length > 0)
+                {
+                    cachedDefaultSmokeSprite = sprites[0];
+                }
+            }
+        }
+
+        return cachedDefaultSmokeSprite;
     }
 
     private static Vector2 ClampRange(Vector2 range, float minimumValue)

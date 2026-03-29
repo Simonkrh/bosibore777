@@ -1,3 +1,4 @@
+using System.Collections;
 using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
@@ -30,11 +31,14 @@ public class AbilityPickup : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         abilityId.OnValueChanged += HandleAbilityIdChanged;
-        hasPlayedSpawnSmokeEffect = false;
 
         string id = abilityId.Value.ToString();
         ApplyVisual(id);
-        TryPlaySpawnSmokeEffect(id);
+
+        if (IsServer)
+        {
+            StartCoroutine(BroadcastSpawnSmokeNextFrame());
+        }
     }
 
     public override void OnNetworkDespawn()
@@ -120,7 +124,29 @@ public class AbilityPickup : NetworkBehaviour
     {
         string id = newValue.ToString();
         ApplyVisual(id);
-        TryPlaySpawnSmokeEffect(id);
+    }
+
+    private IEnumerator BroadcastSpawnSmokeNextFrame()
+    {
+        yield return null;
+
+        if (!IsServer || !IsSpawned)
+        {
+            yield break;
+        }
+
+        PlaySpawnSmokeClientRpc();
+    }
+
+    [ClientRpc]
+    private void PlaySpawnSmokeClientRpc(ClientRpcParams clientRpcParams = default)
+    {
+        if (!IsClient)
+        {
+            return;
+        }
+
+        TryPlaySpawnSmokeEffect();
     }
 
     private void ApplyVisual(string id)
@@ -169,14 +195,9 @@ public class AbilityPickup : NetworkBehaviour
         return gameManager;
     }
 
-    private void TryPlaySpawnSmokeEffect(string id)
+    private void TryPlaySpawnSmokeEffect()
     {
-        if (hasPlayedSpawnSmokeEffect || string.IsNullOrWhiteSpace(id))
-        {
-            return;
-        }
-
-        if (!AbilityRuntimeDatabase.TryGetById(id, out AbilityDefinition definition) || definition == null)
+        if (hasPlayedSpawnSmokeEffect)
         {
             return;
         }

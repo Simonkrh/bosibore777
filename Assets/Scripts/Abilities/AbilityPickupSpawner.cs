@@ -136,7 +136,12 @@ public class AbilityPickupSpawner : NetworkBehaviour
         pickupNetworkObject.Spawn(true);
         pickupInstance.InitializeServer(definition);
         activePickups.Add(pickupInstance);
-        ResolveGameManager()?.PlayAbilitySpawnSoundServer(pickupInstance.transform.position);
+
+        GameManager resolvedGameManager = ResolveGameManager();
+        if (resolvedGameManager != null)
+        {
+            resolvedGameManager.PlayAbilitySpawnSoundServer(pickupInstance.transform.position);
+        }
     }
 
     private GameManager ResolveGameManager()
@@ -266,6 +271,16 @@ public class AbilityPickupSpawner : NetworkBehaviour
         }
 
         return false;
+    }
+
+    private void OnValidate()
+    {
+        initialSpawnDelaySeconds = Mathf.Max(0f, initialSpawnDelaySeconds);
+        minSpawnIntervalSeconds = Mathf.Max(0.1f, minSpawnIntervalSeconds);
+        maxSpawnIntervalSeconds = Mathf.Max(minSpawnIntervalSeconds, maxSpawnIntervalSeconds);
+        maxActivePickups = Mathf.Max(0, maxActivePickups);
+        blockedTileRadiusAroundPlayers = Mathf.Max(0, blockedTileRadiusAroundPlayers);
+        maxSpawnPositionAttempts = Mathf.Max(1, maxSpawnPositionAttempts);
     }
 
     private bool IsBlockedByExistingPickup(Vector2Int candidateCell)

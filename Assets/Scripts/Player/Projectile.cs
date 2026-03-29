@@ -384,7 +384,15 @@ public class Projectile : NetworkBehaviour
 
         if (directionalDespawnSmokeConfig.TryCreateSettings(transform.position, facingDirection, out DirectionalSmokeBurst.Settings settings))
         {
-            DirectionalSmokeBurst.Spawn(settings, "ProjectileDespawnSmokeBurst");
+            GameManager resolvedGameManager = ResolveGameManager();
+            if (resolvedGameManager != null)
+            {
+                resolvedGameManager.PlayDirectionalSmokeBurstServer(settings, "ProjectileDespawnSmokeBurst");
+            }
+            else
+            {
+                DirectionalSmokeBurst.Spawn(settings, "ProjectileDespawnSmokeBurst");
+            }
         }
     }
 

@@ -219,9 +219,21 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
         }
 
         MissileTrailSmoke trailSmoke = projectile.GetComponent<MissileTrailSmoke>();
-        if (trailSmoke != null)
+        if (trailSmoke != null &&
+            trailSmoke.TryCreateCurrentDespawnBurstSettings(
+                projectile.transform.position,
+                projectile.transform.up,
+                out DirectionalSmokeBurst.Settings despawnSmokeSettings))
         {
-            trailSmoke.PlayDespawnBurst(projectile.transform.up);
+            GameManager resolvedGameManager = owner != null ? owner.ResolveGameManager() : Object.FindFirstObjectByType<GameManager>();
+            if (resolvedGameManager != null)
+            {
+                resolvedGameManager.PlayDirectionalSmokeBurstServer(despawnSmokeSettings, "MissileDespawnSmokeBurst");
+            }
+            else
+            {
+                DirectionalSmokeBurst.Spawn(despawnSmokeSettings, "MissileDespawnSmokeBurst");
+            }
         }
 
         activeMissilesByOwner.Remove(ownerClientId);
