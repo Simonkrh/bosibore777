@@ -20,6 +20,7 @@ public class AbilityPickup : NetworkBehaviour
     private GameObject runtimeVisual;
     private bool warnedDefaultVisualIsRoot;
     private bool hasPlayedSpawnSmokeEffect;
+    private bool registeredMegaBombLockdownServer;
     private GameManager gameManager;
 
     private void Awake()
@@ -46,6 +47,12 @@ public class AbilityPickup : NetworkBehaviour
         abilityId.OnValueChanged -= HandleAbilityIdChanged;
         hasPlayedSpawnSmokeEffect = false;
         ClearRuntimeVisual();
+
+        if (IsServer && registeredMegaBombLockdownServer)
+        {
+            registeredMegaBombLockdownServer = false;
+            ResolveGameManager()?.EndMegaBombLockdownServer();
+        }
     }
 
     public void InitializeServer(AbilityDefinition definition)
@@ -55,7 +62,17 @@ public class AbilityPickup : NetworkBehaviour
             return;
         }
 
-        abilityId.Value = definition.Id.Trim();
+        string normalizedAbilityId = definition.Id.Trim();
+        abilityId.Value = normalizedAbilityId;
+
+        if (string.Equals(normalizedAbilityId, MegaBombAbilityBehavior.MegaBombAbilityId, System.StringComparison.Ordinal))
+        {
+            registeredMegaBombLockdownServer = true;
+            GameManager resolvedGameManager = ResolveGameManager();
+            resolvedGameManager?.BeginMegaBombLockdownServer(this);
+            resolvedGameManager?.DespawnAllProjectiles();
+            resolvedGameManager?.ForceClearAllTankAbilitiesServer();
+        }
     }
 
     private void OnTriggerEnter2D(Collider2D other)
@@ -98,6 +115,14 @@ public class AbilityPickup : NetworkBehaviour
         }
 
         string id = abilityId.Value.ToString();
+        GameManager resolvedGameManager = ResolveGameManager();
+        if (resolvedGameManager != null &&
+            resolvedGameManager.IsMegaBombLockdownActive &&
+            !string.Equals(id, MegaBombAbilityBehavior.MegaBombAbilityId, System.StringComparison.Ordinal))
+        {
+            return;
+        }
+
         if (!AbilityRuntimeDatabase.TryGetById(id, out AbilityDefinition definition) || definition == null)
         {
             return;
@@ -108,7 +133,7 @@ public class AbilityPickup : NetworkBehaviour
             return;
         }
 
-        ResolveGameManager()?.PlayAbilityPickupSoundServer(transform.position);
+        resolvedGameManager?.PlayAbilityPickupSoundServer(transform.position);
 
         if (NetworkObject != null && NetworkObject.IsSpawned)
         {

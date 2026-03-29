@@ -115,6 +115,17 @@ public class MinigunAbilityRuntime : MonoBehaviour
         BeginClearCountdown(Time.time);
     }
 
+    public void ForceCancelServer()
+    {
+        if (state == RuntimeState.Idle)
+        {
+            return;
+        }
+
+        ResolveGameManager()?.StopMinigunAudioSequenceServer(ownerClientId);
+        ResetRuntime();
+    }
+
     private void Update()
     {
         if (owner == null || !owner.IsServer || !owner.IsSpawned)
@@ -129,6 +140,16 @@ public class MinigunAbilityRuntime : MonoBehaviour
         }
 
         float now = Time.time;
+        GameManager resolvedGameManager = ResolveGameManager();
+        if (state != RuntimeState.Idle &&
+            state != RuntimeState.WaitingToClear &&
+            resolvedGameManager != null &&
+            resolvedGameManager.IsMegaBombLockdownActive)
+        {
+            BeginClearCountdown(now);
+            return;
+        }
+
         switch (state)
         {
             case RuntimeState.Charging:

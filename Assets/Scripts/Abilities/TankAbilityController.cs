@@ -2,6 +2,7 @@ using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.Serialization;
+using System.Collections.Generic;
 
 public class TankAbilityController : NetworkBehaviour
 {
@@ -40,9 +41,19 @@ public class TankAbilityController : NetworkBehaviour
     private GameObject runtimeModelOverride;
     private SpriteRenderer[] runtimeModelOverrideRenderers;
     private bool initializedCachedDefaults;
+    private readonly List<NetworkObject> activeAbilityProjectiles = new List<NetworkObject>();
+    private bool ownsMegaBombLockdownServer;
+    private Coroutine delayedMegaBombLockdownReleaseCoroutine;
 
     public bool HasAbility => !string.IsNullOrWhiteSpace(equippedAbilityId.Value.ToString());
     public bool IsAbilityUsageActive => activeAbilityUsageCount.Value > 0;
+    public string EquippedAbilityId => equippedAbilityId.Value.ToString();
+
+    public bool HasEquippedAbilityId(string abilityId)
+    {
+        return !string.IsNullOrWhiteSpace(abilityId) &&
+               string.Equals(equippedAbilityId.Value.ToString(), abilityId, System.StringComparison.Ordinal);
+    }
 
     public override void OnNetworkSpawn()
     {
@@ -58,6 +69,18 @@ public class TankAbilityController : NetworkBehaviour
         overrideSpriteResourcePath.OnValueChanged -= HandleOverrideSpritePathChanged;
         overrideModelPrefabResourcePath.OnValueChanged -= HandleOverrideModelPrefabPathChanged;
         ClearRuntimeModelOverride();
+
+        if (delayedMegaBombLockdownReleaseCoroutine != null)
+        {
+            StopCoroutine(delayedMegaBombLockdownReleaseCoroutine);
+            delayedMegaBombLockdownReleaseCoroutine = null;
+        }
+
+        if (ownsMegaBombLockdownServer)
+        {
+            ownsMegaBombLockdownServer = false;
+            ResolveGameManager()?.EndMegaBombLockdownServer();
+        }
     }
 
     public bool TryAssignAbilityServer(AbilityDefinition definition)
@@ -67,9 +90,12 @@ public class TankAbilityController : NetworkBehaviour
             return false;
         }
 
+        CancelDelayedMegaBombLockdownReleaseServer();
+        string normalizedAbilityId = definition.Id.Trim();
+        UpdateMegaBombOwnershipLockServer(normalizedAbilityId);
         overrideSpriteResourcePath.Value = default;
         overrideModelPrefabResourcePath.Value = default;
-        equippedAbilityId.Value = definition.Id.Trim();
+        equippedAbilityId.Value = normalizedAbilityId;
         return true;
     }
 
@@ -91,7 +117,7 @@ public class TankAbilityController : NetworkBehaviour
             definition.Behavior == null)
         {
             Debug.LogWarning($"[TankAbilityController] Unknown or invalid ability id '{currentAbilityId}'.");
-            equippedAbilityId.Value = default;
+            ClearEquippedAbilityServer();
             return false;
         }
 
@@ -103,7 +129,7 @@ public class TankAbilityController : NetworkBehaviour
 
         if (activationResult == AbilityActivationResult.ActivatedConsume)
         {
-            equippedAbilityId.Value = default;
+            ClearEquippedAbilityServer();
         }
 
         return true;
@@ -145,7 +171,13 @@ public class TankAbilityController : NetworkBehaviour
             return false;
         }
 
+        if (!activeAbilityProjectiles.Contains(projectileNetworkObject))
+        {
+            activeAbilityProjectiles.Add(projectileNetworkObject);
+        }
+
         TankAbilityController controller = this;
+        NetworkObject trackedProjectile = projectileNetworkObject;
         activeAbilityUsageCount.Value = Mathf.Max(0, activeAbilityUsageCount.Value) + 1;
         projectile.SetPreDestroyServerCallback((_, __) =>
         {
@@ -154,17 +186,73 @@ public class TankAbilityController : NetworkBehaviour
                 return;
             }
 
+            controller.activeAbilityProjectiles.Remove(trackedProjectile);
             controller.activeAbilityUsageCount.Value = Mathf.Max(0, controller.activeAbilityUsageCount.Value - 1);
         });
 
         return true;
     }
 
-    public void ClearEquippedAbilityServer()
+    public void ForceClearAbilityServer()
     {
         if (!IsServer)
         {
             return;
+        }
+
+        MinigunAbilityRuntime minigunRuntime = GetComponent<MinigunAbilityRuntime>();
+        if (minigunRuntime != null)
+        {
+            minigunRuntime.ForceCancelServer();
+        }
+
+        NetworkObject[] trackedProjectiles = activeAbilityProjectiles.ToArray();
+        activeAbilityProjectiles.Clear();
+        for (int i = 0; i < trackedProjectiles.Length; i++)
+        {
+            NetworkObject trackedProjectile = trackedProjectiles[i];
+            if (trackedProjectile == null)
+            {
+                continue;
+            }
+
+            Projectile projectile = trackedProjectile.GetComponent<Projectile>();
+            if (projectile != null)
+            {
+                projectile.ForceDestroy();
+                continue;
+            }
+
+            if (trackedProjectile.IsSpawned)
+            {
+                trackedProjectile.Despawn(true);
+            }
+        }
+
+        activeAbilityUsageCount.Value = 0;
+        ClearEquippedAbilityServer();
+    }
+
+    public void ClearEquippedAbilityServer(float megaBombLockdownReleaseDelaySeconds = 0f)
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        bool delayMegaBombLockdownRelease =
+            ownsMegaBombLockdownServer &&
+            megaBombLockdownReleaseDelaySeconds > 0f;
+
+        CancelDelayedMegaBombLockdownReleaseServer();
+        if (delayMegaBombLockdownRelease)
+        {
+            delayedMegaBombLockdownReleaseCoroutine = StartCoroutine(
+                ReleaseMegaBombLockdownAfterDelayServer(megaBombLockdownReleaseDelaySeconds));
+        }
+        else
+        {
+            UpdateMegaBombOwnershipLockServer(string.Empty);
         }
 
         overrideSpriteResourcePath.Value = default;
@@ -255,6 +343,60 @@ public class TankAbilityController : NetworkBehaviour
         }
 
         return transform;
+    }
+
+    private GameManager ResolveGameManager()
+    {
+        TankController ownerTank = GetComponent<TankController>();
+        if (ownerTank != null)
+        {
+            GameManager ownerGameManager = ownerTank.ResolveGameManager();
+            if (ownerGameManager != null)
+            {
+                return ownerGameManager;
+            }
+        }
+
+        return FindFirstObjectByType<GameManager>();
+    }
+
+    private void CancelDelayedMegaBombLockdownReleaseServer()
+    {
+        if (delayedMegaBombLockdownReleaseCoroutine == null)
+        {
+            return;
+        }
+
+        StopCoroutine(delayedMegaBombLockdownReleaseCoroutine);
+        delayedMegaBombLockdownReleaseCoroutine = null;
+    }
+
+    private System.Collections.IEnumerator ReleaseMegaBombLockdownAfterDelayServer(float delaySeconds)
+    {
+        yield return new WaitForSeconds(Mathf.Max(0f, delaySeconds));
+        delayedMegaBombLockdownReleaseCoroutine = null;
+        UpdateMegaBombOwnershipLockServer(string.Empty);
+    }
+
+    private void UpdateMegaBombOwnershipLockServer(string nextAbilityId)
+    {
+        bool shouldOwnMegaBombLockdown =
+            string.Equals(nextAbilityId, MegaBombAbilityBehavior.MegaBombAbilityId, System.StringComparison.Ordinal);
+
+        if (shouldOwnMegaBombLockdown == ownsMegaBombLockdownServer)
+        {
+            return;
+        }
+
+        if (shouldOwnMegaBombLockdown)
+        {
+            ownsMegaBombLockdownServer = true;
+            ResolveGameManager()?.BeginMegaBombLockdownServer();
+            return;
+        }
+
+        ownsMegaBombLockdownServer = false;
+        ResolveGameManager()?.EndMegaBombLockdownServer();
     }
 
     private GameObject ResolveModelOverridePrefab(AbilityDefinition definition)

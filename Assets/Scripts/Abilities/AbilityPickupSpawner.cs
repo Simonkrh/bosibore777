@@ -84,8 +84,10 @@ public class AbilityPickupSpawner : NetworkBehaviour
         while (IsServer && IsSpawned)
         {
             CleanupInactivePickups();
+            GameManager resolvedGameManager = ResolveGameManager();
+            bool megaBombLockdownActive = resolvedGameManager != null && resolvedGameManager.IsMegaBombLockdownActive;
             bool canSpawnMore = noLimitSpawning || activePickups.Count < Mathf.Max(0, maxActivePickups);
-            if (canSpawnMore)
+            if (!megaBombLockdownActive && canSpawnMore)
             {
                 TrySpawnPickup();
             }
@@ -100,6 +102,12 @@ public class AbilityPickupSpawner : NetworkBehaviour
     private void TrySpawnPickup()
     {
         if (pickupPrefab == null)
+        {
+            return;
+        }
+
+        GameManager resolvedGameManager = ResolveGameManager();
+        if (resolvedGameManager != null && resolvedGameManager.IsMegaBombLockdownActive)
         {
             return;
         }
@@ -137,7 +145,6 @@ public class AbilityPickupSpawner : NetworkBehaviour
         pickupInstance.InitializeServer(definition);
         activePickups.Add(pickupInstance);
 
-        GameManager resolvedGameManager = ResolveGameManager();
         if (resolvedGameManager != null)
         {
             resolvedGameManager.PlayAbilitySpawnSoundServer(pickupInstance.transform.position);

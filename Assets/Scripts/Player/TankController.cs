@@ -525,12 +525,21 @@ public class TankController : NetworkBehaviour
 
         bool hasUsableAbility = abilityController != null && abilityController.HasAbility;
         bool abilityUsageInProgress = abilityController != null && abilityController.IsAbilityUsageActive;
+        bool megaBombLockdownActive = IsMegaBombLockdownActive();
+        bool canAttemptMegaBombDuringLockdown =
+            abilityController != null &&
+            abilityController.HasEquippedAbilityId(MegaBombAbilityBehavior.MegaBombAbilityId);
         if (releasedSpace && (hasUsableAbility || abilityUsageInProgress))
         {
             NotifyAbilityInputReleasedServerRpc();
         }
 
         if (!pressedSpace)
+        {
+            return;
+        }
+
+        if (megaBombLockdownActive && !canAttemptMegaBombDuringLockdown)
         {
             return;
         }
@@ -605,6 +614,12 @@ public class TankController : NetworkBehaviour
             }
         }
 
+        if (IsMegaBombLockdownActive() &&
+            !abilityController.HasEquippedAbilityId(MegaBombAbilityBehavior.MegaBombAbilityId))
+        {
+            return;
+        }
+
         if (!abilityController.TryUseEquippedAbility(this, shotSequence))
         {
             if (abilityController.IsAbilityUsageActive)
@@ -625,12 +640,22 @@ public class TankController : NetworkBehaviour
             return;
         }
 
+        if (IsMegaBombLockdownActive())
+        {
+            return;
+        }
+
         ServerFireStandardShot(shotSequence, shooterClientId);
     }
 
     private void ServerFireStandardShot(int shotSequence, ulong shooterClientId)
     {
         if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        if (IsMegaBombLockdownActive())
         {
             return;
         }
@@ -1795,6 +1820,12 @@ public class TankController : NetworkBehaviour
     }
 
     #endregion
+
+    private bool IsMegaBombLockdownActive()
+    {
+        GameManager resolvedGameManager = ResolveGameManager();
+        return resolvedGameManager != null && resolvedGameManager.IsMegaBombLockdownActive;
+    }
 
     #region Server RPCs & Reconciliation
 

@@ -46,6 +46,9 @@ public class Projectile : NetworkBehaviour
     private Action<Projectile, DestroyCause> preDestroyServerCallback;
     private SpriteRenderer[] visualRenderers;
     private bool allowImmediateSelfHit;
+    private bool damagesPlayersOnContact = true;
+    private bool destroyOnPlayerContact = true;
+    private bool ignorePlayerCollisions;
     private DestroyCause pendingDestroyCause = DestroyCause.Unknown;
     private AudioProfile audioProfile = AudioProfile.Standard;
     private GameManager gameManager;
@@ -74,6 +77,9 @@ public class Projectile : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         shooterCanBeHit = false;
+        damagesPlayersOnContact = true;
+        destroyOnPlayerContact = true;
+        ignorePlayerCollisions = false;
         IgnoreCollisionWithOtherProjectiles();
         EnsureNetworkSyncComponentsEnabled();
 
@@ -253,6 +259,23 @@ public class Projectile : NetworkBehaviour
         }
 
         allowImmediateSelfHit = allowImmediateSelfHitValue;
+    }
+
+    public void ConfigurePlayerHitBehaviorServer(bool damagesPlayers, bool destroyOnContact, bool ignoreCollisionsWithPlayers = false)
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        damagesPlayersOnContact = damagesPlayers;
+        destroyOnPlayerContact = destroyOnContact;
+        ignorePlayerCollisions = ignoreCollisionsWithPlayers;
+
+        if (ignorePlayerCollisions)
+        {
+            IgnoreCollisionWithPlayers();
+        }
     }
 
     public void SetPreDestroyServerCallback(Action<Projectile, DestroyCause> callback)
@@ -465,9 +488,54 @@ public class Projectile : NetworkBehaviour
         Destroy(gameObject);
     }
 
+    private bool TryGetPlayerController(Collider2D collisionCollider, out PlayerController playerController)
+    {
+        playerController = collisionCollider != null ? collisionCollider.GetComponentInParent<PlayerController>() : null;
+        return playerController != null;
+    }
+
+    private void IgnoreCollisionWithPlayers()
+    {
+        Collider2D[] myColliders = GetComponentsInChildren<Collider2D>(true);
+        PlayerController[] players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+        for (int i = 0; i < players.Length; i++)
+        {
+            PlayerController player = players[i];
+            if (player == null)
+            {
+                continue;
+            }
+
+            Collider2D[] playerColliders = player.GetComponentsInChildren<Collider2D>(true);
+            for (int myIndex = 0; myIndex < myColliders.Length; myIndex++)
+            {
+                Collider2D myCollider = myColliders[myIndex];
+                if (myCollider == null)
+                {
+                    continue;
+                }
+
+                for (int playerIndex = 0; playerIndex < playerColliders.Length; playerIndex++)
+                {
+                    Collider2D playerCollider = playerColliders[playerIndex];
+                    if (playerCollider == null)
+                    {
+                        continue;
+                    }
+
+                    Physics2D.IgnoreCollision(myCollider, playerCollider, true);
+                }
+            }
+        }
+    }
+
     private bool TryHitPlayer(Collider2D collisionCollider)
     {
-        var playerController = collisionCollider.GetComponentInParent<PlayerController>();
+        if (!TryGetPlayerController(collisionCollider, out PlayerController playerController))
+        {
+            return false;
+        }
+
         if (playerController == null || hasCollided)
         {
             return false;
@@ -477,6 +545,19 @@ public class Projectile : NetworkBehaviour
         if (!allowImmediateSelfHit && playerController.OwnerClientId == shooterId && (!hasBouncedOffWall || !shooterCanBeHit))
         {
             return false;
+        }
+
+        if (!damagesPlayersOnContact)
+        {
+            if (!destroyOnPlayerContact)
+            {
+                return false;
+            }
+
+            hasCollided = true;
+            pendingDestroyCause = DestroyCause.PlayerHit;
+            DespawnOrDestroyProjectile();
+            return true;
         }
 
         Debug.Log("killed");
@@ -500,6 +581,11 @@ public class Projectile : NetworkBehaviour
     private void OnCollisionEnter2D(Collision2D collision)
     {
         if (!IsServer || hasCollided) return;
+
+        if (ignorePlayerCollisions && TryGetPlayerController(collision.collider, out _))
+        {
+            return;
+        }
 
         if (TryHitPlayer(collision.collider))
         {

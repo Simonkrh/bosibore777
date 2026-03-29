@@ -5,6 +5,8 @@ using UnityEngine;
 [CreateAssetMenu(menuName = "Abilities/Behaviors/Mega Bomb", fileName = "MegaBombAbilityBehavior")]
 public class MegaBombAbilityBehavior : AbilityBehavior
 {
+    public const string MegaBombAbilityId = "ability.megabomb";
+
     private enum MegaBombSpawnResult
     {
         Failed = 0,
@@ -30,6 +32,7 @@ public class MegaBombAbilityBehavior : AbilityBehavior
     [SerializeField] private float miniBombSpeed = 2.25f;
     [SerializeField] private float miniBombLifetime = 1.75f;
     [SerializeField] private float releaseDelaySeconds = 0.35f;
+    [SerializeField] private float lockdownReleaseDelaySeconds = 1f;
     [SerializeField] private float miniBombSpawnRadius = 0.05f;
     [SerializeField] private int miniBombSequenceStride = 1000;
     [SerializeField] private bool miniBombsPassThroughWalls = true;
@@ -71,7 +74,7 @@ public class MegaBombAbilityBehavior : AbilityBehavior
         {
             if (TryReleaseMegaBomb(owner, ownerClientId, activeMegaBomb, shotSequence))
             {
-                return AbilityActivationResult.ActivatedConsume;
+                return AbilityActivationResult.ActivatedKeep;
             }
 
             return AbilityActivationResult.ActivatedKeep;
@@ -85,7 +88,7 @@ public class MegaBombAbilityBehavior : AbilityBehavior
 
         if (spawnResult == MegaBombSpawnResult.ReleasedImmediately)
         {
-            return AbilityActivationResult.ActivatedConsume;
+            return AbilityActivationResult.ActivatedKeep;
         }
 
         return AbilityActivationResult.ActivatedKeep;
@@ -115,6 +118,11 @@ public class MegaBombAbilityBehavior : AbilityBehavior
         {
             TrySpawnMiniBombs(ownerClientId, owner.tankColor.Value, spawnPosition2D, shotSequence);
             ResolveGameManager(owner)?.PlayMegaBombActivateSoundServer(spawnPosition2D);
+            TankAbilityController blockedShotAbilityController = owner.GetComponent<TankAbilityController>();
+            if (blockedShotAbilityController != null)
+            {
+                blockedShotAbilityController.ClearEquippedAbilityServer(lockdownReleaseDelaySeconds);
+            }
             owner.TriggerBlockedShotBackfireServer();
             return MegaBombSpawnResult.ReleasedImmediately;
         }
@@ -135,6 +143,7 @@ public class MegaBombAbilityBehavior : AbilityBehavior
         Projectile projectile = spawnedMegaBomb.GetComponent<Projectile>();
         if (projectile != null)
         {
+            projectile.ConfigurePlayerHitBehaviorServer(false, false, true);
             projectile.SetPreDestroyServerCallback((projectileInstance, destroyCause) =>
                 HandleMegaBombPreDestroyServer(owner, ownerClientId, shotSequence, projectileInstance, destroyCause));
 
@@ -149,7 +158,6 @@ public class MegaBombAbilityBehavior : AbilityBehavior
         {
             abilityController.RegisterAbilityProjectileServer(spawnedMegaBomb);
         }
-
         GameManager resolvedGameManager = owner.ResolveGameManager();
         resolvedGameManager?.PlayBulletShootSoundServer(spawnedMegaBomb.transform.position);
         resolvedGameManager?.PlayMegaBombMusicServer(ownerClientId, spawnedMegaBomb.transform.position);
@@ -221,7 +229,6 @@ public class MegaBombAbilityBehavior : AbilityBehavior
             yield break;
         }
 
-        activeMegaBombsByOwner.Remove(ownerClientId);
         ForceDespawnProjectile(activeMegaBombState.BombNetworkObject.gameObject);
     }
 
@@ -308,7 +315,8 @@ public class MegaBombAbilityBehavior : AbilityBehavior
             return;
         }
 
-        ResolveGameManager(owner)?.StopMegaBombMusicServer(ownerClientId);
+        GameManager resolvedGameManager = ResolveGameManager(owner);
+        resolvedGameManager?.StopMegaBombMusicServer(ownerClientId);
         activeMegaBombsByOwner.Remove(ownerClientId);
 
         if (destroyCause == Projectile.DestroyCause.PlayerHit ||
@@ -322,7 +330,7 @@ public class MegaBombAbilityBehavior : AbilityBehavior
             TankAbilityController abilityController = owner.GetComponent<TankAbilityController>();
             if (abilityController != null)
             {
-                abilityController.ClearEquippedAbilityServer();
+                abilityController.ClearEquippedAbilityServer(lockdownReleaseDelaySeconds);
             }
         }
     }
@@ -665,6 +673,7 @@ public class MegaBombAbilityBehavior : AbilityBehavior
         miniBombSpeed = Mathf.Max(0f, miniBombSpeed);
         miniBombLifetime = Mathf.Max(0.05f, miniBombLifetime);
         releaseDelaySeconds = Mathf.Max(0f, releaseDelaySeconds);
+        lockdownReleaseDelaySeconds = Mathf.Max(0f, lockdownReleaseDelaySeconds);
         miniBombSpawnRadius = Mathf.Max(0f, miniBombSpawnRadius);
         miniBombSequenceStride = Mathf.Max(1, miniBombSequenceStride);
         shardCount = Mathf.Clamp(shardCount, 1, 128);

@@ -113,9 +113,15 @@ public class GameManager : NetworkBehaviour
     private readonly System.Random soundRandom = new System.Random();
     private readonly Dictionary<ulong, MinigunAudioSequenceState> activeMinigunAudioStates = new Dictionary<ulong, MinigunAudioSequenceState>();
     private readonly Dictionary<ulong, MegaBombMusicState> activeMegaBombMusicStates = new Dictionary<ulong, MegaBombMusicState>();
+    private readonly NetworkVariable<int> activeMegaBombLockdownCount = new NetworkVariable<int>(
+        0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
     private bool clientDisplayStateDirty;
     private const float MinigunShotCrossfadeSeconds = 0.035f;
     private const float MegaBombMusicVolumeMultiplier = 0.7f;
+
+    public bool IsMegaBombLockdownActive => activeMegaBombLockdownCount.Value > 0;
 
     private void Awake()
     {
@@ -1034,8 +1040,54 @@ public class GameManager : NetworkBehaviour
             return;
         }
 
+        activeMegaBombLockdownCount.Value = 0;
         nextAutoSpawnCheckTime = 0f;
         TrySpawnMissingPlayers();
+    }
+
+    public void BeginMegaBombLockdownServer(AbilityPickup pickupToKeep = null)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        int nextCount = Mathf.Max(0, activeMegaBombLockdownCount.Value) + 1;
+        activeMegaBombLockdownCount.Value = nextCount;
+        if (pickupToKeep != null || nextCount == 1)
+        {
+            DespawnAllAbilityPickups(pickupToKeep);
+        }
+    }
+
+    public void EndMegaBombLockdownServer()
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        activeMegaBombLockdownCount.Value = Mathf.Max(0, activeMegaBombLockdownCount.Value - 1);
+    }
+
+    public void ForceClearAllTankAbilitiesServer()
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        TankAbilityController[] controllers = FindObjectsByType<TankAbilityController>(FindObjectsSortMode.None);
+        for (int i = 0; i < controllers.Length; i++)
+        {
+            TankAbilityController controller = controllers[i];
+            if (controller == null || !controller.IsServer || !controller.IsSpawned)
+            {
+                continue;
+            }
+
+            controller.ForceClearAbilityServer();
+        }
     }
 
     private void Update()
@@ -1824,6 +1876,7 @@ public class GameManager : NetworkBehaviour
 
         // Safety pass: remove any late or inactive runtime objects before the next round spawns.
         DespawnAllRoundRuntimeObjects();
+        activeMegaBombLockdownCount.Value = 0;
 
         // Spawn players after the maze has been regenerated and synced
         if (NetworkManager == null)
@@ -1845,19 +1898,30 @@ public class GameManager : NetworkBehaviour
         Debug.Log("[Server] Round started. Players are now alive.");
     }
 
-    private void DespawnAllAbilityPickups()
+    private void DespawnAllAbilityPickups(AbilityPickup pickupToKeep = null)
     {
         if (!IsServer)
         {
             return;
         }
 
-        AbilityPickupSpawner[] spawners = FindObjectsByType<AbilityPickupSpawner>(FindObjectsSortMode.None);
-        for (int i = 0; i < spawners.Length; i++)
+        AbilityPickup[] pickups = FindObjectsByType<AbilityPickup>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < pickups.Length; i++)
         {
-            if (spawners[i] != null)
+            AbilityPickup pickup = pickups[i];
+            if (pickup == null || pickup == pickupToKeep)
             {
-                spawners[i].DespawnAllPickupsServer();
+                continue;
+            }
+
+            NetworkObject pickupNetworkObject = pickup.GetComponent<NetworkObject>();
+            if (pickupNetworkObject != null && pickupNetworkObject.IsSpawned)
+            {
+                pickupNetworkObject.Despawn(true);
+            }
+            else
+            {
+                Destroy(pickup.gameObject);
             }
         }
     }
