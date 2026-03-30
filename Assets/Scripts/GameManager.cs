@@ -1108,12 +1108,36 @@ public class GameManager : NetworkBehaviour
         return true;
     }
 
+    private bool AreAllActiveRoundClientsSpawned()
+    {
+        if (NetworkManager == null)
+        {
+            return false;
+        }
+
+        foreach (var client in NetworkManager.ConnectedClientsList)
+        {
+            ulong clientId = client.ClientId;
+            if (eliminatedPlayersThisRound.Contains(clientId))
+            {
+                continue;
+            }
+
+            if (!HasSpawnForClient(clientId))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public bool IsReadyForAbilitySpawns()
     {
         return IsServer &&
                IsSpawned &&
                !startingNewRound &&
-               AreAllConnectedClientsSpawned();
+               AreAllActiveRoundClientsSpawned();
     }
 
     private void Update()
