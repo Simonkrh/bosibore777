@@ -98,4 +98,13 @@ MonoBehaviour:
   missileTargetClip: {fileID: 8300000, guid: c7495a191df972c4ba8b69ac499c715b, type: 3}
   megaBombMusicClip: {fileID: 8300000, guid: 4bb6ea953fd6d9146951573f78c69e43, type: 3}
   megaBombActivateClip: {fileID: 8300000, guid: eb377a8a90abdd04cbc6499a4eec0526, type: 3}
+  playerDeathShakeAmplitude: 0.15
+  playerDeathShakeDuration: 0.5
+  playerDeathShakeFrequency: 30
+  bombExplosionShakeAmplitude: 0.3
+  bombExplosionShakeDuration: 2
+  bombExplosionShakeFrequency: 28
+  megaBombShakeAmplitude: 1
+  megaBombShakeDuration: 2
+  megaBombShakeFrequency: 30
   sfxVolume: 1

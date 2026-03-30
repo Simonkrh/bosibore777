@@ -90,9 +90,21 @@ public class GameManager : NetworkBehaviour
     [SerializeField] private AudioClip megaBombMusicClip;
     [SerializeField] private AudioClip megaBombActivateClip;
 
+    [Header("Camera Shake")]
+    [SerializeField] private float playerDeathShakeAmplitude = 0.06f;
+    [SerializeField] private float playerDeathShakeDuration = 0.16f;
+    [SerializeField] private float playerDeathShakeFrequency = 22f;
+    [SerializeField] private float bombExplosionShakeAmplitude = 0.14f;
+    [SerializeField] private float bombExplosionShakeDuration = 0.28f;
+    [SerializeField] private float bombExplosionShakeFrequency = 28f;
+    [SerializeField] private float megaBombShakeAmplitude = 0.22f;
+    [SerializeField] private float megaBombShakeDuration = 0.34f;
+    [SerializeField] private float megaBombShakeFrequency = 30f;
+
     [Header("Audio Settings")]
     [SerializeField, Range(0f, 1f)] private float sfxVolume = 1f;
     private PlayerDisplayManager displayManager;
+    private CameraShakeController localCameraShakeController;
 
     private HashSet<ulong> alivePlayers = new HashSet<ulong>();
     private readonly HashSet<ulong> eliminatedPlayersThisRound = new HashSet<ulong>();
@@ -262,6 +274,7 @@ public class GameManager : NetworkBehaviour
     public void PlayPlayerDieSoundServer(Vector3 worldPosition)
     {
         PlaySoundEffectServer(SoundEffectId.PlayerDie, worldPosition);
+        PlayPlayerDeathCameraShakeServer();
     }
 
     public void PlayAbilitySpawnSoundServer(Vector3 worldPosition)
@@ -277,6 +290,7 @@ public class GameManager : NetworkBehaviour
     public void PlayBombExplodeSoundServer(Vector3 worldPosition)
     {
         PlaySoundEffectServer(SoundEffectId.BombExplode, worldPosition);
+        PlayBombExplosionCameraShakeServer();
     }
 
     public void PlayLazerShootSoundServer(Vector3 worldPosition)
@@ -322,6 +336,19 @@ public class GameManager : NetworkBehaviour
     public void PlayMegaBombActivateSoundServer(Vector3 worldPosition)
     {
         PlaySoundEffectServer(SoundEffectId.MegaBombActivate, worldPosition);
+    }
+
+    public void PlayMegaBombCameraShakeServer()
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        PlayCameraShakeServer(
+            megaBombShakeAmplitude,
+            megaBombShakeDuration,
+            megaBombShakeFrequency);
     }
 
     public void PlayDirectionalSmokeBurstServer(DirectionalSmokeBurst.Settings settings, string objectName)
@@ -505,6 +532,21 @@ public class GameManager : NetworkBehaviour
         DirectionalSmokeBurst.TrySpawn(payload, objectName.ToString());
     }
 
+    [ClientRpc]
+    private void PlayCameraShakeClientRpc(
+        float amplitude,
+        float duration,
+        float frequency,
+        ClientRpcParams clientRpcParams = default)
+    {
+        if (!IsClient)
+        {
+            return;
+        }
+
+        PlayCameraShakeLocal(amplitude, duration, frequency);
+    }
+
     private void PlaySoundEffectLocal(SoundEffectId effectId, Vector3 worldPosition)
     {
         AudioClip clip = ResolveSoundClip(effectId);
@@ -524,6 +566,97 @@ public class GameManager : NetworkBehaviour
         audioSource.Play();
 
         Destroy(audioObject, Mathf.Max(clip.length, 0.01f) + 0.1f);
+    }
+
+    private void PlayPlayerDeathCameraShakeServer()
+    {
+        PlayCameraShakeServer(
+            playerDeathShakeAmplitude,
+            playerDeathShakeDuration,
+            playerDeathShakeFrequency);
+    }
+
+    private void PlayBombExplosionCameraShakeServer()
+    {
+        PlayCameraShakeServer(
+            bombExplosionShakeAmplitude,
+            bombExplosionShakeDuration,
+            bombExplosionShakeFrequency);
+    }
+
+    private void PlayCameraShakeServer(
+        float amplitude,
+        float duration,
+        float frequency,
+        ClientRpcParams clientRpcParams = default)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        if (amplitude <= 0f || duration <= 0f)
+        {
+            return;
+        }
+
+        PlayCameraShakeClientRpc(
+            Mathf.Max(0f, amplitude),
+            Mathf.Max(0f, duration),
+            Mathf.Max(0.01f, frequency),
+            clientRpcParams);
+    }
+
+    private void PlayCameraShakeLocal(float amplitude, float duration, float frequency)
+    {
+        if (amplitude <= 0f || duration <= 0f)
+        {
+            return;
+        }
+
+        CameraShakeController shakeController = ResolveLocalCameraShakeController();
+        if (shakeController == null)
+        {
+            return;
+        }
+
+        shakeController.Shake(amplitude, duration, frequency);
+    }
+
+    private CameraShakeController ResolveLocalCameraShakeController()
+    {
+        if (localCameraShakeController != null)
+        {
+            return localCameraShakeController;
+        }
+
+        Camera targetCamera = Camera.main;
+        if (targetCamera == null)
+        {
+            Camera[] cameras = FindObjectsByType<Camera>(FindObjectsSortMode.None);
+            for (int i = 0; i < cameras.Length; i++)
+            {
+                Camera candidate = cameras[i];
+                if (candidate != null && candidate.isActiveAndEnabled)
+                {
+                    targetCamera = candidate;
+                    break;
+                }
+            }
+        }
+
+        if (targetCamera == null)
+        {
+            return null;
+        }
+
+        localCameraShakeController = targetCamera.GetComponent<CameraShakeController>();
+        if (localCameraShakeController == null)
+        {
+            localCameraShakeController = targetCamera.gameObject.AddComponent<CameraShakeController>();
+        }
+
+        return localCameraShakeController;
     }
 
     private void PlayMinigunStartLocal(ulong ownerClientId, Vector3 worldPosition)

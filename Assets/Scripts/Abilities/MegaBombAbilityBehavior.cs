@@ -116,8 +116,13 @@ public class MegaBombAbilityBehavior : AbilityBehavior
 
         if (blockedByImmediateWallShot)
         {
-            TrySpawnMiniBombs(ownerClientId, owner.tankColor.Value, spawnPosition2D, shotSequence);
-            ResolveGameManager(owner)?.PlayMegaBombActivateSoundServer(spawnPosition2D);
+            bool spawnedAnyMiniBomb = TrySpawnMiniBombs(ownerClientId, owner.tankColor.Value, spawnPosition2D, shotSequence);
+            GameManager blockedShotGameManager = ResolveGameManager(owner);
+            blockedShotGameManager?.PlayMegaBombActivateSoundServer(spawnPosition2D);
+            if (spawnedAnyMiniBomb)
+            {
+                blockedShotGameManager?.PlayMegaBombCameraShakeServer();
+            }
             TankAbilityController blockedShotAbilityController = owner.GetComponent<TankAbilityController>();
             if (blockedShotAbilityController != null)
             {
@@ -229,6 +234,7 @@ public class MegaBombAbilityBehavior : AbilityBehavior
             yield break;
         }
 
+        ResolveGameManager(null)?.PlayMegaBombCameraShakeServer();
         ForceDespawnProjectile(activeMegaBombState.BombNetworkObject.gameObject);
     }
 
@@ -322,7 +328,15 @@ public class MegaBombAbilityBehavior : AbilityBehavior
         if (destroyCause == Projectile.DestroyCause.PlayerHit ||
             destroyCause == Projectile.DestroyCause.LifetimeExpired)
         {
-            TrySpawnMiniBombs(ownerClientId, activeMegaBomb.ShooterColor, megaBombProjectile.transform.position, spawnShotSequence);
+            bool spawnedAnyMiniBomb = TrySpawnMiniBombs(
+                ownerClientId,
+                activeMegaBomb.ShooterColor,
+                megaBombProjectile.transform.position,
+                spawnShotSequence);
+            if (spawnedAnyMiniBomb)
+            {
+                resolvedGameManager?.PlayMegaBombCameraShakeServer();
+            }
         }
 
         if (owner != null)
