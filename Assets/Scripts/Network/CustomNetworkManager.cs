@@ -181,6 +181,7 @@ public class CustomNetworkManager : NetworkManager
     private void OnClientConnected(ulong clientId)
     {
         pendingPlayerSpawns.Add(clientId);
+        FindFirstObjectByType<GameManager>()?.HandleClientConnectedServer(clientId);
         TrySpawnPlayer(clientId, "OnClientConnected");
     }
 
@@ -215,6 +216,7 @@ public class CustomNetworkManager : NetworkManager
         foreach (ulong clientId in clientsCompleted)
         {
             pendingPlayerSpawns.Add(clientId);
+            FindFirstObjectByType<GameManager>()?.HandleClientConnectedServer(clientId);
             TrySpawnPlayer(clientId, "OnSceneLoadCompleted");
         }
     }
@@ -230,6 +232,7 @@ public class CustomNetworkManager : NetworkManager
             mazeGenerator.SendMazeDataToClient(clientId);
         }
 
+        FindFirstObjectByType<GameManager>()?.HandleClientConnectedServer(clientId);
         TrySpawnPlayer(clientId, "OnSceneSynchronizeComplete");
     }
 
@@ -256,6 +259,16 @@ public class CustomNetworkManager : NetworkManager
         if (gameManager.HasSpawnForClient(clientId))
         {
             pendingPlayerSpawns.Remove(clientId);
+            return;
+        }
+
+        if (!gameManager.IsGameplaySessionActive)
+        {
+            return;
+        }
+
+        if (!gameManager.IsGameplayParticipant(clientId))
+        {
             return;
         }
 

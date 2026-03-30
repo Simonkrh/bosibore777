@@ -8,6 +8,13 @@ using System;
 
 public class GameManager : NetworkBehaviour
 {
+    public enum MatchFlowState
+    {
+        Lobby = 0,
+        Countdown = 1,
+        InGame = 2
+    }
+
     private enum SoundEffectId
     {
         BulletBounce1 = 0,
@@ -101,10 +108,14 @@ public class GameManager : NetworkBehaviour
     [SerializeField] private float megaBombShakeDuration = 0.34f;
     [SerializeField] private float megaBombShakeFrequency = 30f;
 
+    [Header("Lobby")]
+    [SerializeField] private float lobbyReadyCountdownSeconds = 3f;
+
     [Header("Audio Settings")]
     [SerializeField, Range(0f, 1f)] private float sfxVolume = 1f;
     private PlayerDisplayManager displayManager;
     private CameraShakeController localCameraShakeController;
+    private LobbyPageController localLobbyPageController;
 
     private HashSet<ulong> alivePlayers = new HashSet<ulong>();
     private readonly HashSet<ulong> eliminatedPlayersThisRound = new HashSet<ulong>();
@@ -125,15 +136,57 @@ public class GameManager : NetworkBehaviour
     private readonly System.Random soundRandom = new System.Random();
     private readonly Dictionary<ulong, MinigunAudioSequenceState> activeMinigunAudioStates = new Dictionary<ulong, MinigunAudioSequenceState>();
     private readonly Dictionary<ulong, MegaBombMusicState> activeMegaBombMusicStates = new Dictionary<ulong, MegaBombMusicState>();
+    private NetworkList<ulong> lobbyParticipantClientIds;
+    private NetworkList<ulong> readyLobbyClientIds;
+    private NetworkList<ulong> activeGameplayClientIds;
+    private readonly NetworkVariable<int> matchFlowState = new NetworkVariable<int>(
+        (int)MatchFlowState.Lobby,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
+    private readonly NetworkVariable<float> lobbyCountdownEndServerTime = new NetworkVariable<float>(
+        0f,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
     private readonly NetworkVariable<int> activeMegaBombLockdownCount = new NetworkVariable<int>(
         0,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server);
     private bool clientDisplayStateDirty;
+    private Coroutine roundEndCoroutine;
+    private Coroutine startNewRoundCoroutine;
     private const float MinigunShotCrossfadeSeconds = 0.035f;
     private const float MegaBombMusicVolumeMultiplier = 0.7f;
 
     public bool IsMegaBombLockdownActive => activeMegaBombLockdownCount.Value > 0;
+    public MatchFlowState CurrentFlowState => (MatchFlowState)matchFlowState.Value;
+    public bool IsGameplaySessionActive => CurrentFlowState == MatchFlowState.InGame;
+    public bool IsLobbyCountdownActive => CurrentFlowState == MatchFlowState.Countdown;
+    public bool ShouldShowLobbyUi
+    {
+        get
+        {
+            if (!IsSpawned)
+            {
+                return false;
+            }
+
+            if (CurrentFlowState != MatchFlowState.InGame)
+            {
+                return true;
+            }
+
+            if (!IsClient || NetworkManager == null)
+            {
+                return false;
+            }
+
+            return !IsGameplayParticipant(NetworkManager.LocalClientId);
+        }
+    }
+
+    public int LobbyParticipantCount => lobbyParticipantClientIds != null ? lobbyParticipantClientIds.Count : 0;
+    public int ReadyLobbyParticipantCount => readyLobbyClientIds != null ? readyLobbyClientIds.Count : 0;
+    public int ActiveGameplayParticipantCount => activeGameplayClientIds != null ? activeGameplayClientIds.Count : 0;
 
     private void Awake()
     {
@@ -141,6 +194,9 @@ public class GameManager : NetworkBehaviour
         availablePrimaryColors.AddRange(primaryColors);
         AudioSettingsStore.EnsureInitialized();
         sfxVolume = AudioSettingsStore.SfxVolume;
+        lobbyParticipantClientIds = new NetworkList<ulong>();
+        readyLobbyClientIds = new NetworkList<ulong>();
+        activeGameplayClientIds = new NetworkList<ulong>();
     }
 
     private void OnEnable()
@@ -167,6 +223,9 @@ public class GameManager : NetworkBehaviour
         AudioSettingsStore.SfxVolumeChanged -= HandleSfxVolumeChanged;
         ResetAllMinigunAudioStatesLocal();
         ResetAllMegaBombMusicStatesLocal();
+        lobbyParticipantClientIds?.Dispose();
+        readyLobbyClientIds?.Dispose();
+        activeGameplayClientIds?.Dispose();
     }
 
     private void HandleSfxVolumeChanged(float volume)
@@ -1168,6 +1227,11 @@ public class GameManager : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        if (IsClient)
+        {
+            EnsureLocalLobbyPageController();
+        }
+
         if (!IsServer)
         {
             return;
@@ -1175,7 +1239,409 @@ public class GameManager : NetworkBehaviour
 
         activeMegaBombLockdownCount.Value = 0;
         nextAutoSpawnCheckTime = 0f;
-        TrySpawnMissingPlayers();
+        matchFlowState.Value = (int)MatchFlowState.Lobby;
+        lobbyCountdownEndServerTime.Value = 0f;
+        ClearLobbyParticipantListsServer();
+        PopulateLobbyParticipantsFromConnectedClientsServer();
+    }
+
+    public float GetLobbyCountdownSecondsRemaining()
+    {
+        if (CurrentFlowState != MatchFlowState.Countdown || NetworkManager == null)
+        {
+            return 0f;
+        }
+
+        return Mathf.Max(0f, lobbyCountdownEndServerTime.Value - (float)NetworkManager.ServerTime.Time);
+    }
+
+    public void GetLobbyParticipantIds(List<ulong> target)
+    {
+        if (target == null)
+        {
+            return;
+        }
+
+        target.Clear();
+        if (lobbyParticipantClientIds == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < lobbyParticipantClientIds.Count; i++)
+        {
+            target.Add(lobbyParticipantClientIds[i]);
+        }
+    }
+
+    public bool IsLobbyParticipantReady(ulong clientId)
+    {
+        return readyLobbyClientIds != null && readyLobbyClientIds.Contains(clientId);
+    }
+
+    public bool HasLobbyParticipant(ulong clientId)
+    {
+        return lobbyParticipantClientIds != null && lobbyParticipantClientIds.Contains(clientId);
+    }
+
+    public bool IsGameplayParticipant(ulong clientId)
+    {
+        return activeGameplayClientIds != null && activeGameplayClientIds.Contains(clientId);
+    }
+
+    public bool CanLocalClientJoinCurrentGame()
+    {
+        if (!IsClient || !IsSpawned || NetworkManager == null)
+        {
+            return false;
+        }
+
+        ulong localClientId = NetworkManager.LocalClientId;
+        return CurrentFlowState == MatchFlowState.InGame &&
+               HasLobbyParticipant(localClientId) &&
+               !IsGameplayParticipant(localClientId);
+    }
+
+    public void SetLocalClientReady(bool isReady)
+    {
+        if (!IsClient || !IsSpawned)
+        {
+            return;
+        }
+
+        SetLobbyReadyServerRpc(isReady);
+    }
+
+    public void RequestLocalClientJoinCurrentGame()
+    {
+        if (!IsClient || !IsSpawned)
+        {
+            return;
+        }
+
+        JoinCurrentGameServerRpc();
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void SetLobbyReadyServerRpc(bool isReady, ServerRpcParams serverRpcParams = default)
+    {
+        if (!IsServer || !IsSpawned || CurrentFlowState == MatchFlowState.InGame)
+        {
+            return;
+        }
+
+        ulong clientId = serverRpcParams.Receive.SenderClientId;
+        RegisterLobbyParticipantServer(clientId);
+        SetLobbyReadyStateServer(clientId, isReady);
+        EvaluateLobbyCountdownStateServer();
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void JoinCurrentGameServerRpc(ServerRpcParams serverRpcParams = default)
+    {
+        if (!IsServer || !IsSpawned || CurrentFlowState != MatchFlowState.InGame)
+        {
+            return;
+        }
+
+        ulong clientId = serverRpcParams.Receive.SenderClientId;
+        RegisterLobbyParticipantServer(clientId);
+        RegisterGameplayParticipantServer(clientId);
+        SetLobbyReadyStateServer(clientId, true);
+        EnsurePlayerInitializedForGameplayServer(clientId);
+    }
+
+    public void HandleClientConnectedServer(ulong clientId)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        RegisterLobbyParticipantServer(clientId);
+        EvaluateLobbyCountdownStateServer();
+    }
+
+    private void EnsureLocalLobbyPageController()
+    {
+        if (!IsClient)
+        {
+            return;
+        }
+
+        if (localLobbyPageController == null)
+        {
+            LobbyPageController[] controllers = Resources.FindObjectsOfTypeAll<LobbyPageController>();
+            for (int i = 0; i < controllers.Length; i++)
+            {
+                LobbyPageController controller = controllers[i];
+                if (controller == null || !controller.gameObject.scene.IsValid())
+                {
+                    continue;
+                }
+
+                localLobbyPageController = controller;
+                break;
+            }
+        }
+
+        if (localLobbyPageController != null)
+        {
+            localLobbyPageController.Initialize(this);
+        }
+    }
+
+    private void RegisterLobbyParticipantServer(ulong clientId)
+    {
+        if (lobbyParticipantClientIds == null || lobbyParticipantClientIds.Contains(clientId))
+        {
+            return;
+        }
+
+        lobbyParticipantClientIds.Add(clientId);
+    }
+
+    private void RegisterGameplayParticipantServer(ulong clientId)
+    {
+        if (activeGameplayClientIds == null || activeGameplayClientIds.Contains(clientId))
+        {
+            return;
+        }
+
+        activeGameplayClientIds.Add(clientId);
+    }
+
+    private void UnregisterLobbyParticipantServer(ulong clientId)
+    {
+        if (lobbyParticipantClientIds != null)
+        {
+            lobbyParticipantClientIds.Remove(clientId);
+        }
+
+        if (readyLobbyClientIds != null)
+        {
+            readyLobbyClientIds.Remove(clientId);
+        }
+
+        if (activeGameplayClientIds != null)
+        {
+            activeGameplayClientIds.Remove(clientId);
+        }
+    }
+
+    private void SetLobbyReadyStateServer(ulong clientId, bool isReady)
+    {
+        if (readyLobbyClientIds == null)
+        {
+            return;
+        }
+
+        bool alreadyReady = readyLobbyClientIds.Contains(clientId);
+        if (isReady && !alreadyReady)
+        {
+            readyLobbyClientIds.Add(clientId);
+        }
+        else if (!isReady && alreadyReady)
+        {
+            readyLobbyClientIds.Remove(clientId);
+        }
+    }
+
+    private void PopulateLobbyParticipantsFromConnectedClientsServer()
+    {
+        if (NetworkManager == null)
+        {
+            return;
+        }
+
+        foreach (NetworkClient client in NetworkManager.ConnectedClientsList)
+        {
+            RegisterLobbyParticipantServer(client.ClientId);
+        }
+    }
+
+    private void ClearLobbyParticipantListsServer()
+    {
+        lobbyParticipantClientIds?.Clear();
+        readyLobbyClientIds?.Clear();
+        activeGameplayClientIds?.Clear();
+    }
+
+    private void ReplaceGameplayParticipantsWithLobbyParticipantsServer()
+    {
+        activeGameplayClientIds?.Clear();
+        readyLobbyClientIds?.Clear();
+
+        if (lobbyParticipantClientIds == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < lobbyParticipantClientIds.Count; i++)
+        {
+            ulong clientId = lobbyParticipantClientIds[i];
+            activeGameplayClientIds?.Add(clientId);
+            readyLobbyClientIds?.Add(clientId);
+        }
+    }
+
+    private void EnsurePlayerInitializedForGameplayServer(ulong clientId)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        Color playerColor = AssignColor(clientId);
+        InitializePlayerDisplayAndColors(clientId);
+        AssignIconColorClientRpc(clientId, playerColor);
+    }
+
+    private void EvaluateLobbyCountdownStateServer()
+    {
+        if (!IsServer || !IsSpawned || CurrentFlowState == MatchFlowState.InGame)
+        {
+            return;
+        }
+
+        int participantCount = lobbyParticipantClientIds != null ? lobbyParticipantClientIds.Count : 0;
+        bool hasParticipants = participantCount > 0;
+        bool allParticipantsReady =
+            hasParticipants &&
+            readyLobbyClientIds != null &&
+            readyLobbyClientIds.Count == participantCount;
+
+        if (!hasParticipants)
+        {
+            CancelLobbyCountdownServer();
+            return;
+        }
+
+        if (!allParticipantsReady)
+        {
+            CancelLobbyCountdownServer();
+            return;
+        }
+
+        if (CurrentFlowState == MatchFlowState.Countdown)
+        {
+            return;
+        }
+
+        StartLobbyCountdownServer();
+    }
+
+    private void StartLobbyCountdownServer()
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        float countdownSeconds = Mathf.Max(0f, lobbyReadyCountdownSeconds);
+        if (countdownSeconds <= 0.01f)
+        {
+            BeginGameplaySessionServer();
+            return;
+        }
+
+        matchFlowState.Value = (int)MatchFlowState.Countdown;
+        lobbyCountdownEndServerTime.Value = (float)NetworkManager.ServerTime.Time + countdownSeconds;
+    }
+
+    private void CancelLobbyCountdownServer()
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        matchFlowState.Value = (int)MatchFlowState.Lobby;
+        lobbyCountdownEndServerTime.Value = 0f;
+    }
+
+    private void TickLobbyCountdownServer()
+    {
+        if (!IsServer || !IsSpawned || CurrentFlowState != MatchFlowState.Countdown)
+        {
+            return;
+        }
+
+        if ((float)NetworkManager.ServerTime.Time < lobbyCountdownEndServerTime.Value)
+        {
+            return;
+        }
+
+        BeginGameplaySessionServer();
+    }
+
+    private void BeginGameplaySessionServer()
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        if (NetworkManager == null || NetworkManager.ConnectedClientsList.Count == 0)
+        {
+            ResetToLobbyServer(true);
+            return;
+        }
+
+        ReplaceGameplayParticipantsWithLobbyParticipantsServer();
+        if (activeGameplayClientIds == null || activeGameplayClientIds.Count == 0)
+        {
+            ResetToLobbyServer(false);
+            return;
+        }
+
+        for (int i = 0; i < activeGameplayClientIds.Count; i++)
+        {
+            EnsurePlayerInitializedForGameplayServer(activeGameplayClientIds[i]);
+        }
+
+        matchFlowState.Value = (int)MatchFlowState.InGame;
+        lobbyCountdownEndServerTime.Value = 0f;
+        StartNewRound();
+    }
+
+    private void StopActiveRoundTransitionCoroutinesServer()
+    {
+        if (roundEndCoroutine != null)
+        {
+            StopCoroutine(roundEndCoroutine);
+            roundEndCoroutine = null;
+        }
+
+        if (startNewRoundCoroutine != null)
+        {
+            StopCoroutine(startNewRoundCoroutine);
+            startNewRoundCoroutine = null;
+        }
+    }
+
+    private void ResetToLobbyServer(bool clearLobbyParticipants)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        StopActiveRoundTransitionCoroutinesServer();
+        startingNewRound = false;
+        matchFlowState.Value = (int)MatchFlowState.Lobby;
+        lobbyCountdownEndServerTime.Value = 0f;
+        activeMegaBombLockdownCount.Value = 0;
+        DespawnAllRoundRuntimeObjects();
+        DespawnAllPlayersForNewRound();
+
+        readyLobbyClientIds?.Clear();
+        activeGameplayClientIds?.Clear();
+
+        if (clearLobbyParticipants)
+        {
+            lobbyParticipantClientIds?.Clear();
+        }
     }
 
     public void BeginMegaBombLockdownServer(AbilityPickup pickupToKeep = null)
@@ -1243,14 +1709,19 @@ public class GameManager : NetworkBehaviour
 
     private bool AreAllActiveRoundClientsSpawned()
     {
-        if (NetworkManager == null)
+        if (NetworkManager == null || activeGameplayClientIds == null)
         {
             return false;
         }
 
-        foreach (var client in NetworkManager.ConnectedClientsList)
+        for (int i = 0; i < activeGameplayClientIds.Count; i++)
         {
-            ulong clientId = client.ClientId;
+            ulong clientId = activeGameplayClientIds[i];
+            if (!NetworkManager.ConnectedClients.ContainsKey(clientId))
+            {
+                continue;
+            }
+
             if (eliminatedPlayersThisRound.Contains(clientId))
             {
                 continue;
@@ -1269,6 +1740,7 @@ public class GameManager : NetworkBehaviour
     {
         return IsServer &&
                IsSpawned &&
+               IsGameplaySessionActive &&
                !startingNewRound &&
                AreAllActiveRoundClientsSpawned();
     }
@@ -1280,7 +1752,22 @@ public class GameManager : NetworkBehaviour
             TryApplyClientDisplayState();
         }
 
+        if (IsClient)
+        {
+            EnsureLocalLobbyPageController();
+        }
+
         if (!IsServer || !IsSpawned || NetworkManager == null)
+        {
+            return;
+        }
+
+        if (CurrentFlowState == MatchFlowState.Countdown)
+        {
+            TickLobbyCountdownServer();
+        }
+
+        if (!IsGameplaySessionActive)
         {
             return;
         }
@@ -1378,14 +1865,19 @@ public class GameManager : NetworkBehaviour
 
     private void TrySpawnMissingPlayers()
     {
-        if (NetworkManager == null)
+        if (NetworkManager == null || !IsGameplaySessionActive || activeGameplayClientIds == null)
         {
             return;
         }
 
-        foreach (var client in NetworkManager.ConnectedClientsList)
+        for (int i = 0; i < activeGameplayClientIds.Count; i++)
         {
-            ulong clientId = client.ClientId;
+            ulong clientId = activeGameplayClientIds[i];
+            if (!NetworkManager.ConnectedClients.ContainsKey(clientId))
+            {
+                continue;
+            }
+
             if (HasSpawnForClient(clientId))
             {
                 continue;
@@ -1452,6 +1944,11 @@ public class GameManager : NetworkBehaviour
 
     public bool SpawnPlayerOnConnect(ulong clientId)
     {
+        if (!IsGameplaySessionActive || !IsGameplayParticipant(clientId) || startingNewRound)
+        {
+            return false;
+        }
+
         if (HasSpawnForClient(clientId))
         {
             return true;
@@ -1477,6 +1974,11 @@ public class GameManager : NetworkBehaviour
 
     public bool SpawnPlayerOnNewRound(ulong clientId)
     {
+        if (!IsGameplaySessionActive || !IsGameplayParticipant(clientId))
+        {
+            return false;
+        }
+
         if (HasSpawnForClient(clientId))
         {
             return true;
@@ -1882,8 +2384,34 @@ public class GameManager : NetworkBehaviour
         eliminatedPlayersThisRound.Remove(clientId);
 
         ReleaseColor(clientId);
+        UnregisterLobbyParticipantServer(clientId);
 
         RemovePlayerDisplayClientRpc(clientId);
+
+        if (NetworkManager == null || NetworkManager.ConnectedClientsList.Count == 0)
+        {
+            ResetToLobbyServer(true);
+            return;
+        }
+
+        if (IsGameplaySessionActive && ActiveGameplayParticipantCount <= 0)
+        {
+            ResetToLobbyServer(false);
+            EvaluateLobbyCountdownStateServer();
+            return;
+        }
+
+        if (!IsGameplaySessionActive)
+        {
+            EvaluateLobbyCountdownStateServer();
+            return;
+        }
+
+        if (alivePlayers.Count <= 1 && !startingNewRound && roundEndCoroutine == null)
+        {
+            startingNewRound = true;
+            roundEndCoroutine = StartCoroutine(RoundEndRoutine());
+        }
     }
 
     private void DespawnTrackedPlayerObject(ulong clientId)
@@ -2027,14 +2555,30 @@ public class GameManager : NetworkBehaviour
 
     private void StartNewRound()
     {
-        if (!IsServer) return;
+        if (!IsServer)
+        {
+            return;
+        }
 
-        StartCoroutine(StartNewRoundCoroutine());
+        if (startNewRoundCoroutine != null)
+        {
+            StopCoroutine(startNewRoundCoroutine);
+        }
+
+        startingNewRound = true;
+        startNewRoundCoroutine = StartCoroutine(StartNewRoundCoroutine());
     }
 
     private IEnumerator StartNewRoundCoroutine()
     {
         Debug.Log("[Server] Starting new round...");
+
+        if (!IsGameplaySessionActive)
+        {
+            startingNewRound = false;
+            startNewRoundCoroutine = null;
+            yield break;
+        }
 
         DespawnAllRoundRuntimeObjects();
         DespawnAllPlayersForNewRound();
@@ -2048,6 +2592,7 @@ public class GameManager : NetworkBehaviour
         {
             Debug.LogError("[GameManager] Cannot start a new round because MazeGenerator is missing.");
             startingNewRound = false;
+            startNewRoundCoroutine = null;
             yield break;
         }
 
@@ -2056,6 +2601,13 @@ public class GameManager : NetworkBehaviour
 
         // Wait for the maze to sync
         yield return new WaitForSeconds(1f); // Adjust based on synchronization speed
+
+        if (!IsGameplaySessionActive)
+        {
+            startingNewRound = false;
+            startNewRoundCoroutine = null;
+            yield break;
+        }
 
         // Safety pass: remove any late or inactive runtime objects before the next round spawns.
         DespawnAllRoundRuntimeObjects();
@@ -2066,18 +2618,26 @@ public class GameManager : NetworkBehaviour
         {
             Debug.LogError("[GameManager] NetworkManager is null while starting a new round.");
             startingNewRound = false;
+            startNewRoundCoroutine = null;
             yield break;
         }
 
-        foreach (var client in NetworkManager.ConnectedClientsList)
+        for (int i = 0; i < activeGameplayClientIds.Count; i++)
         {
-            if (!SpawnPlayerOnNewRound(client.ClientId))
+            ulong clientId = activeGameplayClientIds[i];
+            if (NetworkManager == null || !NetworkManager.ConnectedClients.ContainsKey(clientId))
             {
-                Debug.LogWarning($"[GameManager] SpawnPlayerOnNewRound failed for client {client.ClientId}. Auto-spawn retry will continue.");
+                continue;
+            }
+
+            if (!SpawnPlayerOnNewRound(clientId))
+            {
+                Debug.LogWarning($"[GameManager] SpawnPlayerOnNewRound failed for client {clientId}. Auto-spawn retry will continue.");
             }
         }
 
         startingNewRound = false;
+        startNewRoundCoroutine = null;
         Debug.Log("[Server] Round started. Players are now alive.");
     }
 
@@ -2111,7 +2671,10 @@ public class GameManager : NetworkBehaviour
 
     public void PlayerDied(ulong victimId, ulong killerId)
     {
-        if (!IsServer) return;
+        if (!IsServer || !IsGameplaySessionActive)
+        {
+            return;
+        }
 
         // Remove victim from alive list
         alivePlayers.Remove(victimId);
@@ -2121,10 +2684,10 @@ public class GameManager : NetworkBehaviour
         Debug.Log($"[Server] Player {victimId} died. Killer: {killerId}");
 
         // Check how many are still alive
-        if (alivePlayers.Count <= 1 && startingNewRound == false)
+        if (alivePlayers.Count <= 1 && !startingNewRound && roundEndCoroutine == null)
         {
             startingNewRound = true;
-            StartCoroutine(RoundEndRoutine());
+            roundEndCoroutine = StartCoroutine(RoundEndRoutine());
         }
     }
 
@@ -2132,6 +2695,14 @@ public class GameManager : NetworkBehaviour
     {
         Debug.Log("[Server] RoundEndRoutine waiting 5 seconds...");
         yield return new WaitForSeconds(5f);
+
+        roundEndCoroutine = null;
+
+        if (!IsGameplaySessionActive)
+        {
+            startingNewRound = false;
+            yield break;
+        }
 
         // Award a point only if exactly one player is still alive when the round ends.
         if (alivePlayers.Count == 1)
