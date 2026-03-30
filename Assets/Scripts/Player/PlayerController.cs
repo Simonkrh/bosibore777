@@ -65,6 +65,16 @@ public class PlayerController : NetworkBehaviour
             gameManager.PlayerDied(OwnerClientId, killerId);
         }
 
+        TankController tankController = GetComponent<TankController>();
+        if (tankController != null)
+        {
+            TankAbilityController abilityController = tankController.GetComponent<TankAbilityController>();
+            if (abilityController != null)
+            {
+                abilityController.NotifyOwnerDiedServer(tankController);
+            }
+        }
+
         PlayDeathEffectsClientRpc(deathPosition, facingDirection, deathColor, deathEffectSeed);
 
         // Despawn the player object

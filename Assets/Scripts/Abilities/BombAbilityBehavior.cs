@@ -99,6 +99,31 @@ public class BombAbilityBehavior : AbilityBehavior
         return AbilityActivationResult.ActivatedKeep;
     }
 
+    public override void NotifyOwnerDiedServer(TankController owner)
+    {
+        if (owner == null || !owner.IsServer)
+        {
+            return;
+        }
+
+        ulong ownerClientId = owner.OwnerClientId;
+        if (!TryGetActiveBomb(ownerClientId, out ActiveBombState activeBomb))
+        {
+            return;
+        }
+
+        if (!TryDetonateBomb(owner, ownerClientId, activeBomb, nextAutoDetonationSequence++))
+        {
+            return;
+        }
+
+        TankAbilityController abilityController = owner.GetComponent<TankAbilityController>();
+        if (abilityController != null)
+        {
+            abilityController.ClearEquippedAbilityServer();
+        }
+    }
+
     private BombSpawnResult TrySpawnBomb(TankController owner, ulong ownerClientId, int shotSequence)
     {
         if (bombProjectilePrefab == null)

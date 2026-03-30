@@ -14,4 +14,8 @@ public abstract class AbilityBehavior : ScriptableObject
     public virtual void NotifyInputReleasedServer(TankController owner)
     {
     }
+
+    public virtual void NotifyOwnerDiedServer(TankController owner)
+    {
+    }
 }
