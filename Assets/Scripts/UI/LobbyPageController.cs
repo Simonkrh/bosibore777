@@ -6,6 +6,19 @@ using UnityEngine.UI;
 
 public class LobbyPageController : MonoBehaviour
 {
+    private enum ButtonVisualStyle
+    {
+        Orange,
+        Green,
+        Blue,
+        Red
+    }
+
+    private const string OrangeButtonResourcePath = "Sprites/UI/Buttons/OrangeButton";
+    private const string GreenButtonResourcePath = "Sprites/UI/Buttons/GreenButton";
+    private const string BlueButtonResourcePath = "Sprites/UI/Buttons/BlueButton";
+    private const string RedButtonResourcePath = "Sprites/UI/Buttons/RedButton";
+
     [SerializeField] private GameObject contentRoot;
     [SerializeField] private TMP_Text titleLabel;
     [SerializeField] private TMP_Text statusLabel;
@@ -25,6 +38,10 @@ public class LobbyPageController : MonoBehaviour
 
     private GameManager gameManager;
     private bool suppressNameInputCallback;
+    private static Sprite orangeButtonSprite;
+    private static Sprite greenButtonSprite;
+    private static Sprite blueButtonSprite;
+    private static Sprite redButtonSprite;
 
     private void Awake()
     {
@@ -153,6 +170,7 @@ public class LobbyPageController : MonoBehaviour
         }
 
         primaryActionButton.interactable = hasLocalParticipant;
+        ButtonVisualStyle primaryActionStyle = ButtonVisualStyle.Orange;
         if (!hasLocalParticipant)
         {
             primaryActionButtonLabel.text = "Connecting...";
@@ -160,11 +178,15 @@ public class LobbyPageController : MonoBehaviour
         else if (canJoinCurrentGame)
         {
             primaryActionButtonLabel.text = "Join";
+            primaryActionStyle = ButtonVisualStyle.Blue;
         }
         else
         {
             primaryActionButtonLabel.text = isLocalReady ? "Unready" : "Ready";
+            primaryActionStyle = isLocalReady ? ButtonVisualStyle.Orange : ButtonVisualStyle.Green;
         }
+
+        ApplyButtonStyle(primaryActionButton, primaryActionStyle);
     }
 
     private string BuildStatusText(bool canJoinCurrentGame)
@@ -225,6 +247,7 @@ public class LobbyPageController : MonoBehaviour
         if (randomizeColorButton != null)
         {
             randomizeColorButton.interactable = hasLocalParticipant;
+            ApplyButtonStyle(randomizeColorButton, ButtonVisualStyle.Blue);
         }
     }
 
@@ -374,5 +397,65 @@ public class LobbyPageController : MonoBehaviour
         }
 
         gameManager.RandomizeLocalPreferredPlayerColor();
+    }
+
+    private static void ApplyButtonStyle(Button button, ButtonVisualStyle style)
+    {
+        if (button == null)
+        {
+            return;
+        }
+
+        Image targetImage = button.targetGraphic as Image;
+        if (targetImage == null)
+        {
+            targetImage = button.GetComponent<Image>();
+        }
+
+        if (targetImage == null)
+        {
+            return;
+        }
+
+        Sprite desiredSprite = ResolveButtonSprite(style);
+        if (desiredSprite != null && targetImage.sprite != desiredSprite)
+        {
+            targetImage.sprite = desiredSprite;
+        }
+    }
+
+    private static Sprite ResolveButtonSprite(ButtonVisualStyle style)
+    {
+        switch (style)
+        {
+            case ButtonVisualStyle.Green:
+                if (greenButtonSprite == null)
+                {
+                    greenButtonSprite = Resources.Load<Sprite>(GreenButtonResourcePath);
+                }
+
+                return greenButtonSprite;
+            case ButtonVisualStyle.Blue:
+                if (blueButtonSprite == null)
+                {
+                    blueButtonSprite = Resources.Load<Sprite>(BlueButtonResourcePath);
+                }
+
+                return blueButtonSprite;
+            case ButtonVisualStyle.Red:
+                if (redButtonSprite == null)
+                {
+                    redButtonSprite = Resources.Load<Sprite>(RedButtonResourcePath);
+                }
+
+                return redButtonSprite;
+            default:
+                if (orangeButtonSprite == null)
+                {
+                    orangeButtonSprite = Resources.Load<Sprite>(OrangeButtonResourcePath);
+                }
+
+                return orangeButtonSprite;
+        }
     }
 }
