@@ -37,6 +37,8 @@ public class LobbyPageController : MonoBehaviour
     private readonly Dictionary<ulong, LobbyPlayerListItem> playerListItems = new Dictionary<ulong, LobbyPlayerListItem>();
 
     private GameManager gameManager;
+    private LobbyServerSettingsOverlay serverSettingsOverlay;
+    private MenuDisplaySettings menuDisplaySettings;
     private bool suppressNameInputCallback;
     private static Sprite orangeButtonSprite;
     private static Sprite greenButtonSprite;
@@ -88,6 +90,13 @@ public class LobbyPageController : MonoBehaviour
         }
 
         playerListItems.Clear();
+        if (gameManager != null && gameManager.IsServerSettingsEditorHeldByLocalClient())
+        {
+            gameManager.ReleaseLocalServerSettingsEditor();
+        }
+
+        serverSettingsOverlay?.Dispose();
+        serverSettingsOverlay = null;
     }
 
     public void Initialize(GameManager sourceGameManager)
@@ -107,20 +116,31 @@ public class LobbyPageController : MonoBehaviour
             return;
         }
 
-        bool shouldShow =
+        bool shouldShowLobbyUi =
             gameManager != null &&
             gameManager.IsClient &&
             gameManager.ShouldShowLobbyUi &&
             NetworkManager.Singleton != null &&
             NetworkManager.Singleton.IsClient;
 
-        if (contentRoot.activeSelf != shouldShow)
+        bool regularSettingsOpen = IsRegularSettingsOpen();
+        bool serverSettingsOpen = serverSettingsOverlay != null && serverSettingsOverlay.IsOpen;
+        bool shouldShowLobbyContent = shouldShowLobbyUi && !serverSettingsOpen && !regularSettingsOpen;
+
+        if (contentRoot.activeSelf != shouldShowLobbyContent)
         {
-            contentRoot.SetActive(shouldShow);
+            contentRoot.SetActive(shouldShowLobbyContent);
         }
 
-        if (!shouldShow)
+        if (!shouldShowLobbyUi || regularSettingsOpen)
         {
+            serverSettingsOverlay?.HandleLobbyHidden();
+            return;
+        }
+
+        if (serverSettingsOpen)
+        {
+            serverSettingsOverlay?.Refresh(gameManager);
             return;
         }
 
@@ -134,6 +154,7 @@ public class LobbyPageController : MonoBehaviour
             return;
         }
 
+        EnsureServerSettingsOverlay();
         bool hasLocalClient = NetworkManager.Singleton != null;
         ulong localClientId = hasLocalClient ? NetworkManager.Singleton.LocalClientId : 0;
         bool canJoinCurrentGame = gameManager.CanLocalClientJoinCurrentGame();
@@ -187,6 +208,7 @@ public class LobbyPageController : MonoBehaviour
         }
 
         ApplyButtonStyle(primaryActionButton, primaryActionStyle);
+        serverSettingsOverlay?.Refresh(gameManager);
     }
 
     private string BuildStatusText(bool canJoinCurrentGame)
@@ -397,6 +419,26 @@ public class LobbyPageController : MonoBehaviour
         }
 
         gameManager.RandomizeLocalPreferredPlayerColor();
+    }
+
+    private void EnsureServerSettingsOverlay()
+    {
+        if (serverSettingsOverlay != null)
+        {
+            return;
+        }
+
+        serverSettingsOverlay = GetComponent<LobbyServerSettingsOverlay>();
+    }
+
+    private bool IsRegularSettingsOpen()
+    {
+        if (menuDisplaySettings == null)
+        {
+            menuDisplaySettings = FindFirstObjectByType<MenuDisplaySettings>(FindObjectsInactive.Include);
+        }
+
+        return menuDisplaySettings != null && menuDisplaySettings.IsSettingsOpen;
     }
 
     private static void ApplyButtonStyle(Button button, ButtonVisualStyle style)

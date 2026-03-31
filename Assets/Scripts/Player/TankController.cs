@@ -278,6 +278,30 @@ public class TankController : NetworkBehaviour
         return gameManager;
     }
 
+    private float GetConfiguredMoveSpeed()
+    {
+        GameManager resolvedGameManager = ResolveGameManager();
+        return resolvedGameManager != null
+            ? resolvedGameManager.GetCurrentServerSettings().PlayerMoveSpeed
+            : Mathf.Max(0f, moveSpeed);
+    }
+
+    private float GetConfiguredProjectileSpeed()
+    {
+        GameManager resolvedGameManager = ResolveGameManager();
+        return resolvedGameManager != null
+            ? resolvedGameManager.GetCurrentServerSettings().PlayerProjectileSpeed
+            : Mathf.Max(0f, projectileSpeed);
+    }
+
+    private float GetConfiguredShootCooldown()
+    {
+        GameManager resolvedGameManager = ResolveGameManager();
+        return resolvedGameManager != null
+            ? resolvedGameManager.GetCurrentServerSettings().PlayerShootCooldown
+            : Mathf.Max(0f, shootCooldown);
+    }
+
     private void Update()
     {
         if (IsOwner)
@@ -421,9 +445,10 @@ public class TankController : NetworkBehaviour
         float move = input.moveInput;
         float turn = input.rotationInput;
         float deltaTime = Time.fixedDeltaTime;
+        float resolvedMoveSpeed = GetConfiguredMoveSpeed();
 
         Transform movementTransform = rotationChild != null ? rotationChild : transform;
-        Vector2 requestedMoveVector = movementTransform.up * move * moveSpeed * deltaTime;
+        Vector2 requestedMoveVector = movementTransform.up * move * resolvedMoveSpeed * deltaTime;
         Vector2 allowedMoveVector = GetWallBlockedMoveVector(requestedMoveVector);
         rb.MovePosition(rb.position + allowedMoveVector);
 
@@ -552,7 +577,7 @@ public class TankController : NetworkBehaviour
             return;
         }
 
-        if (Time.time < lastShotTime + shootCooldown)
+        if (Time.time < lastShotTime + GetConfiguredShootCooldown())
         {
             return;
         }
@@ -694,7 +719,7 @@ public class TankController : NetworkBehaviour
             return;
         }
 
-        if (Time.time < serverLastShotTime + shootCooldown)
+        if (Time.time < serverLastShotTime + GetConfiguredShootCooldown())
         {
             return;
         }
@@ -744,7 +769,7 @@ public class TankController : NetworkBehaviour
         if (projectileRb != null)
         {
             projectileRb.interpolation = RigidbodyInterpolation2D.None;
-            projectileRb.linearVelocity = shootDirection * projectileSpeed;
+            projectileRb.linearVelocity = shootDirection * GetConfiguredProjectileSpeed();
         }
 
         GameManager resolvedGameManager = ResolveGameManager();
@@ -1541,7 +1566,7 @@ public class TankController : NetworkBehaviour
             shotSequence,
             spawnPosition2D,
             fireDirection,
-            projectileSpeed,
+            GetConfiguredProjectileSpeed(),
             visualLifetime,
             GetProjectileMaxWallBounces(),
             predictedShotVisualAlpha);
@@ -1687,13 +1712,14 @@ public class TankController : NetworkBehaviour
 
     private float GetShotLatencyCompensationDistanceFromRttMs(ulong rttMs)
     {
-        if (!enableShotLatencyCompensation || projectileSpeed <= 0f)
+        float resolvedProjectileSpeed = GetConfiguredProjectileSpeed();
+        if (!enableShotLatencyCompensation || resolvedProjectileSpeed <= 0f)
         {
             return 0f;
         }
 
         float oneWaySeconds = GetOneWayLatencySecondsFromRttMs(rttMs) * Mathf.Clamp01(shotLatencyCompensationFactor);
-        return projectileSpeed * oneWaySeconds;
+        return resolvedProjectileSpeed * oneWaySeconds;
     }
 
     private float GetProjectileLifetime()

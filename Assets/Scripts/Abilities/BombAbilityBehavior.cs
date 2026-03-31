@@ -146,7 +146,7 @@ public class BombAbilityBehavior : AbilityBehavior
 
         if (blockedByImmediateWallShot)
         {
-            TrySpawnShards(ownerClientId, owner.tankColor.Value, spawnPosition2D, shotSequence);
+            TrySpawnShards(owner, ownerClientId, owner.tankColor.Value, spawnPosition2D, shotSequence);
             PlayExplosionEffects(owner, spawnPosition2D);
             owner.TriggerBlockedShotBackfireServer();
             return BombSpawnResult.ExplodedImmediately;
@@ -158,7 +158,7 @@ public class BombAbilityBehavior : AbilityBehavior
                 spawnPosition2D,
                 spawnRotation,
                 fireDirection,
-                bombSpeed,
+                GetBombProjectileSpeed(owner),
                 Projectile.AudioProfile.Bomb,
                 out NetworkObject spawnedBomb))
         {
@@ -205,7 +205,7 @@ public class BombAbilityBehavior : AbilityBehavior
         }
 
         Vector2 detonationPosition = bombNetworkObject.transform.position;
-        bool spawnedAnyShard = TrySpawnShards(ownerClientId, activeBombState.ShooterColor, detonationPosition, shotSequence);
+        bool spawnedAnyShard = TrySpawnShards(owner, ownerClientId, activeBombState.ShooterColor, detonationPosition, shotSequence);
         if (spawnedAnyShard)
         {
             PlayExplosionEffects(owner, detonationPosition);
@@ -216,22 +216,25 @@ public class BombAbilityBehavior : AbilityBehavior
         return spawnedAnyShard;
     }
 
-    private bool TrySpawnShards(ulong shooterClientId, Color projectileColor, Vector2 detonationPosition, int sequenceBase)
+    private bool TrySpawnShards(TankController owner, ulong shooterClientId, Color projectileColor, Vector2 detonationPosition, int sequenceBase)
     {
         if (shardProjectilePrefab == null)
         {
             return false;
         }
 
+        int resolvedShardCount = GetBombShardCount(owner);
+        float resolvedShardSpeed = GetBombShardSpeed(owner);
+        float resolvedShardSpawnRadius = GetBombShardSpawnRadius(owner);
         bool spawnedAnyShard = false;
-        int count = Mathf.Max(1, shardCount);
+        int count = Mathf.Max(1, resolvedShardCount);
         for (int i = 0; i < count; i++)
         {
             // True random direction per shard; allows clustered bursts in one region.
             float angle = Random.Range(0f, 360f);
             float radians = angle * Mathf.Deg2Rad;
             Vector2 direction = new Vector2(Mathf.Cos(radians), Mathf.Sin(radians)).normalized;
-            Vector2 spawnPosition = detonationPosition + direction * Mathf.Max(0f, shardSpawnRadius);
+            Vector2 spawnPosition = detonationPosition + direction * Mathf.Max(0f, resolvedShardSpawnRadius);
             Quaternion spawnRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f);
             int shardShotSequence = unchecked(sequenceBase * Mathf.Max(1, shardSequenceStride) + i);
 
@@ -241,6 +244,7 @@ public class BombAbilityBehavior : AbilityBehavior
                     spawnPosition,
                     spawnRotation,
                     direction,
+                    resolvedShardSpeed,
                     out NetworkObject shardNetworkObject))
             {
                 continue;
@@ -251,7 +255,7 @@ public class BombAbilityBehavior : AbilityBehavior
                 DisableSolidColliders(shardNetworkObject.gameObject);
             }
 
-            ConfigureShardMotion(shardNetworkObject.gameObject, shardSpeed);
+            ConfigureShardMotion(shardNetworkObject.gameObject, resolvedShardSpeed);
 
             Projectile spawnedShardProjectile = shardNetworkObject.gameObject.GetComponent<Projectile>();
             if (spawnedShardProjectile != null)
@@ -298,7 +302,7 @@ public class BombAbilityBehavior : AbilityBehavior
 
         int autoSequenceBase = nextAutoDetonationSequence++;
         Vector2 detonationPosition = bombProjectile.transform.position;
-        bool spawnedAnyShard = TrySpawnShards(ownerClientId, activeBomb.ShooterColor, detonationPosition, autoSequenceBase);
+        bool spawnedAnyShard = TrySpawnShards(owner, ownerClientId, activeBomb.ShooterColor, detonationPosition, autoSequenceBase);
         if (spawnedAnyShard)
         {
             PlayExplosionEffects(owner, detonationPosition);
@@ -348,6 +352,7 @@ public class BombAbilityBehavior : AbilityBehavior
         Vector2 spawnPosition,
         Quaternion spawnRotation,
         Vector2 direction,
+        float launchSpeed,
         out NetworkObject spawnedProjectile)
     {
         spawnedProjectile = null;
@@ -381,7 +386,7 @@ public class BombAbilityBehavior : AbilityBehavior
         if (projectileRb != null)
         {
             projectileRb.interpolation = RigidbodyInterpolation2D.None;
-            projectileRb.linearVelocity = direction * shardSpeed;
+            projectileRb.linearVelocity = direction * Mathf.Max(0f, launchSpeed);
         }
 
         GameManager resolvedGameManager = ResolveGameManager(null);
@@ -404,6 +409,34 @@ public class BombAbilityBehavior : AbilityBehavior
 
         spawnedProjectile = projectileNetObj;
         return true;
+    }
+
+    private ServerGameSettingsState ResolveRuntimeSettings(TankController owner)
+    {
+        GameManager resolvedGameManager = ResolveGameManager(owner);
+        return resolvedGameManager != null
+            ? resolvedGameManager.GetCurrentServerSettings()
+            : ServerGameSettingsState.CreateDefaults();
+    }
+
+    private float GetBombProjectileSpeed(TankController owner)
+    {
+        return ResolveRuntimeSettings(owner).BombProjectileSpeed;
+    }
+
+    private int GetBombShardCount(TankController owner)
+    {
+        return ResolveRuntimeSettings(owner).BombShardCount;
+    }
+
+    private float GetBombShardSpeed(TankController owner)
+    {
+        return ResolveRuntimeSettings(owner).BombShardSpeed;
+    }
+
+    private float GetBombShardSpawnRadius(TankController owner)
+    {
+        return ResolveRuntimeSettings(owner).BombShardSpawnRadius;
     }
 
     private void PlayExplosionEffects(TankController owner, Vector2 detonationPosition)

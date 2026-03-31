@@ -70,6 +70,7 @@ public class LazerAbilityBehavior : AbilityBehavior
             return AbilityActivationResult.NotActivated;
         }
 
+        ServerGameSettingsState settings = ResolveRuntimeSettings(owner);
         if (!owner.TryComputeAbilityProjectileSpawn(
                 lazerProjectilePrefab,
                 extraSpawnDistance,
@@ -87,14 +88,14 @@ public class LazerAbilityBehavior : AbilityBehavior
                 spawnPosition2D,
                 spawnRotation,
                 fireDirection,
-                lazerBulletSpeed,
+                settings.LazerProjectileSpeed,
                 Projectile.AudioProfile.Lazer,
                 out NetworkObject spawnedProjectile))
         {
             return AbilityActivationResult.NotActivated;
         }
 
-        float effectiveTravelDistance = Mathf.Max(0f, lazerBulletMaxDistance);
+        float effectiveTravelDistance = Mathf.Max(0f, settings.LazerMaxDistance);
         LazerProjectileBounce bounce = spawnedProjectile.gameObject.GetComponent<LazerProjectileBounce>();
         LazerProjectileSolidVisual solidVisual = spawnedProjectile.gameObject.GetComponent<LazerProjectileSolidVisual>();
         float beamLifetime = solidVisual != null ? Mathf.Max(0f, solidVisual.BeamLifetime) : 0.5f;
@@ -134,8 +135,8 @@ public class LazerAbilityBehavior : AbilityBehavior
                 projectile.SetVisualColorServer(owner.tankColor.Value);
             }
 
-            float travelTime = lazerBulletSpeed > 0.0001f
-                ? effectiveTravelDistance / lazerBulletSpeed
+            float travelTime = settings.LazerProjectileSpeed > 0.0001f
+                ? effectiveTravelDistance / settings.LazerProjectileSpeed
                 : 0f;
             float requiredLifetime = travelTime + beamLifetime + 0.1f;
             projectile.lifetime = Mathf.Max(projectile.lifetime, requiredLifetime);
@@ -171,8 +172,9 @@ public class LazerAbilityBehavior : AbilityBehavior
         }
 
         projectilePrefab = behavior.lazerProjectilePrefab;
-        previewLength = behavior.projectedLazerLength;
-        projectileMaxDistance = behavior.lazerBulletMaxDistance;
+        ServerGameSettingsState settings = ResolveRuntimeSettings(null);
+        previewLength = settings.LazerProjectedLength;
+        projectileMaxDistance = settings.LazerMaxDistance;
         spawnOffset = behavior.extraSpawnDistance;
         previewVisualSettings = new PreviewVisualSettings
         {
@@ -210,6 +212,14 @@ public class LazerAbilityBehavior : AbilityBehavior
         cachedBehavior = definition.Behavior as LazerAbilityBehavior;
         behavior = cachedBehavior;
         return behavior != null;
+    }
+
+    private static ServerGameSettingsState ResolveRuntimeSettings(TankController owner)
+    {
+        GameManager resolvedGameManager = owner != null ? owner.ResolveGameManager() : Object.FindFirstObjectByType<GameManager>();
+        return resolvedGameManager != null
+            ? resolvedGameManager.GetCurrentServerSettings()
+            : ServerGameSettingsState.CreateDefaults();
     }
 
     private void OnValidate()

@@ -39,6 +39,15 @@ public class MenuDisplaySettings : MonoBehaviour
     private int appliedResolutionIndex = -1;
     private bool isFullscreenEnabled;
 
+    public bool IsSettingsOpen
+    {
+        get
+        {
+            GameObject targetPanel = settingsPanelRoot != null ? settingsPanelRoot : gameObject;
+            return targetPanel != null && targetPanel.activeInHierarchy;
+        }
+    }
+
     private void Awake()
     {
         BuildResolutionList();

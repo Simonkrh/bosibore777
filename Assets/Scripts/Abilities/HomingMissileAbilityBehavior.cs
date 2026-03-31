@@ -94,6 +94,7 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
             return AbilityActivationResult.ActivatedKeep;
         }
 
+        ServerGameSettingsState settings = ResolveRuntimeSettings(owner);
         if (!owner.TryComputeAbilityProjectileSpawn(
                 homingMissilePrefab,
                 extraSpawnDistance,
@@ -111,7 +112,7 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
                 spawnPosition2D,
                 spawnRotation,
                 fireDirection,
-                missileSpeed,
+                settings.HomingMissileSpeed,
                 Projectile.AudioProfile.Rocket,
                 out NetworkObject spawnedProjectile))
         {
@@ -154,13 +155,13 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
         }
 
         guidance.Configure(
-            homingDelaySeconds,
-            targetRefreshIntervalSeconds,
-            turnRateDegreesPerSecond,
-            cornerTurnRateMultiplier,
-            missileSpeed,
-            wobbleAmplitudeDegrees,
-            wobbleFrequencyHz,
+            settings.HomingMissileHomingDelaySeconds,
+            settings.HomingMissileTargetRefreshIntervalSeconds,
+            settings.HomingMissileTurnRateDegreesPerSecond,
+            settings.HomingMissileCornerTurnRateMultiplier,
+            settings.HomingMissileSpeed,
+            settings.HomingMissileWobbleAmplitudeDegrees,
+            settings.HomingMissileWobbleFrequencyHz,
             wobbleBaselineStrength,
             wobbleBuildUpPerSecond,
             wobbleDecayPerSecond,
@@ -181,6 +182,14 @@ public class HomingMissileAbilityBehavior : AbilityBehavior
             targetWarningFarDistanceTiles);
 
         return AbilityActivationResult.ActivatedKeep;
+    }
+
+    private ServerGameSettingsState ResolveRuntimeSettings(TankController owner)
+    {
+        GameManager resolvedGameManager = owner != null ? owner.ResolveGameManager() : Object.FindFirstObjectByType<GameManager>();
+        return resolvedGameManager != null
+            ? resolvedGameManager.GetCurrentServerSettings()
+            : ServerGameSettingsState.CreateDefaults();
     }
 
     private bool TryGetActiveMissile(ulong ownerClientId, out NetworkObject activeMissile)

@@ -8,6 +8,8 @@ using System;
 
 public class GameManager : NetworkBehaviour
 {
+    public const ulong NoServerSettingsEditorClientId = ulong.MaxValue;
+
     public enum MatchFlowState
     {
         Lobby = 0,
@@ -183,6 +185,14 @@ public class GameManager : NetworkBehaviour
         0,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server);
+    private readonly NetworkVariable<ServerGameSettingsState> serverGameSettings = new NetworkVariable<ServerGameSettingsState>(
+        ServerGameSettingsState.CreateDefaults(),
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
+    private readonly NetworkVariable<ulong> serverSettingsEditorClientId = new NetworkVariable<ulong>(
+        NoServerSettingsEditorClientId,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
     private bool clientDisplayStateDirty;
     private Coroutine roundEndCoroutine;
     private Coroutine startNewRoundCoroutine;
@@ -191,6 +201,8 @@ public class GameManager : NetworkBehaviour
     private string localPreferredPlayerName = PlayerProfileStore.DefaultPlayerName;
     private Color localPreferredPlayerColor = Color.white;
     private bool hasInitializedLocalPlayerProfile;
+    private float serverSettingsEditorLastHeartbeatTime = -1f;
+    private const float ServerSettingsEditorLeaseTimeoutSeconds = 5f;
 
     public bool IsMegaBombLockdownActive => activeMegaBombLockdownCount.Value > 0;
     public MatchFlowState CurrentFlowState => (MatchFlowState)matchFlowState.Value;
@@ -222,6 +234,69 @@ public class GameManager : NetworkBehaviour
     public int LobbyParticipantCount => lobbyParticipantClientIds != null ? lobbyParticipantClientIds.Count : 0;
     public int ReadyLobbyParticipantCount => readyLobbyClientIds != null ? readyLobbyClientIds.Count : 0;
     public int ActiveGameplayParticipantCount => activeGameplayClientIds != null ? activeGameplayClientIds.Count : 0;
+    public ulong ServerSettingsEditorClientId => serverSettingsEditorClientId.Value;
+
+    public ServerGameSettingsState GetCurrentServerSettings()
+    {
+        return serverGameSettings.Value;
+    }
+
+    public bool IsServerSettingsEditorHeldByLocalClient()
+    {
+        return IsClient &&
+               NetworkManager != null &&
+               serverSettingsEditorClientId.Value == NetworkManager.LocalClientId;
+    }
+
+    public void RequestAcquireServerSettingsEditor()
+    {
+        if (!IsClient || !IsSpawned)
+        {
+            return;
+        }
+
+        RequestAcquireServerSettingsEditorServerRpc();
+    }
+
+    public void ReleaseLocalServerSettingsEditor()
+    {
+        if (!IsClient || !IsSpawned)
+        {
+            return;
+        }
+
+        ReleaseServerSettingsEditorServerRpc();
+    }
+
+    public void SendServerSettingsEditorHeartbeat()
+    {
+        if (!IsClient || !IsSpawned)
+        {
+            return;
+        }
+
+        SendServerSettingsEditorHeartbeatServerRpc();
+    }
+
+    public void AdjustServerSettingsField(ServerSettingsFieldId fieldId, float delta)
+    {
+        if (!IsClient || !IsSpawned)
+        {
+            return;
+        }
+
+        AdjustServerSettingsFieldServerRpc((int)fieldId, delta);
+    }
+
+    public void ResetServerSettingsToDefaults()
+    {
+        if (!IsClient || !IsSpawned)
+        {
+            return;
+        }
+
+        ResetServerSettingsToDefaultsServerRpc();
+    }
 
     private void Awake()
     {
@@ -1286,6 +1361,9 @@ public class GameManager : NetworkBehaviour
         }
 
         activeMegaBombLockdownCount.Value = 0;
+        serverGameSettings.Value = ServerGameSettingsState.CreateDefaults();
+        serverSettingsEditorClientId.Value = NoServerSettingsEditorClientId;
+        serverSettingsEditorLastHeartbeatTime = -1f;
         nextAutoSpawnCheckTime = 0f;
         matchFlowState.Value = (int)MatchFlowState.Lobby;
         lobbyCountdownEndServerTime.Value = 0f;
@@ -1391,6 +1469,81 @@ public class GameManager : NetworkBehaviour
         }
 
         return Color.white;
+    }
+
+    public AbilityDefinition PickAbilityDefinitionForSpawn(IList<AbilityDefinition> source)
+    {
+        if (source == null || source.Count <= 0)
+        {
+            return null;
+        }
+
+        List<AbilityDefinition> configurableCandidates = new List<AbilityDefinition>();
+        AbilityDefinition megaBombDefinition = null;
+
+        for (int i = 0; i < source.Count; i++)
+        {
+            AbilityDefinition definition = source[i];
+            if (definition == null)
+            {
+                continue;
+            }
+
+            if (string.Equals(definition.Id, MegaBombAbilityBehavior.MegaBombAbilityId, StringComparison.Ordinal))
+            {
+                megaBombDefinition = definition;
+                continue;
+            }
+
+            configurableCandidates.Add(definition);
+        }
+
+        if (megaBombDefinition != null && configurableCandidates.Count <= 0)
+        {
+            return megaBombDefinition;
+        }
+
+        if (megaBombDefinition != null && UnityEngine.Random.value < ServerGameSettingsState.FixedMegaBombSpawnPercent * 0.01f)
+        {
+            return megaBombDefinition;
+        }
+
+        ServerGameSettingsState settings = serverGameSettings.Value;
+        float totalWeight = 0f;
+        for (int i = 0; i < configurableCandidates.Count; i++)
+        {
+            AbilityDefinition definition = configurableCandidates[i];
+            float weight = settings.TryGetConfiguredAbilitySpawnPercent(definition.Id, out float configuredPercent)
+                ? configuredPercent
+                : Mathf.Max(0f, definition.SpawnWeight);
+            totalWeight += Mathf.Max(0f, weight);
+        }
+
+        if (totalWeight <= 0f)
+        {
+            if (configurableCandidates.Count > 0)
+            {
+                return configurableCandidates[0];
+            }
+
+            return megaBombDefinition;
+        }
+
+        float roll = UnityEngine.Random.value * totalWeight;
+        for (int i = 0; i < configurableCandidates.Count; i++)
+        {
+            AbilityDefinition definition = configurableCandidates[i];
+            float weight = settings.TryGetConfiguredAbilitySpawnPercent(definition.Id, out float configuredPercent)
+                ? configuredPercent
+                : Mathf.Max(0f, definition.SpawnWeight);
+            roll -= Mathf.Max(0f, weight);
+            if (roll <= 0f)
+            {
+                return definition;
+            }
+        }
+
+        return configurableCandidates[configurableCandidates.Count - 1];
     }
 
     public void SetLocalPreferredPlayerName(string rawName)
@@ -1621,6 +1774,98 @@ public class GameManager : NetworkBehaviour
     }
 
     [ServerRpc(RequireOwnership = false)]
+    private void RequestAcquireServerSettingsEditorServerRpc(ServerRpcParams serverRpcParams = default)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        ulong clientId = serverRpcParams.Receive.SenderClientId;
+        TickServerSettingsEditorLeaseServer();
+
+        if (serverSettingsEditorClientId.Value != NoServerSettingsEditorClientId &&
+            serverSettingsEditorClientId.Value != clientId)
+        {
+            return;
+        }
+
+        serverSettingsEditorClientId.Value = clientId;
+        serverSettingsEditorLastHeartbeatTime = Time.unscaledTime;
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void ReleaseServerSettingsEditorServerRpc(ServerRpcParams serverRpcParams = default)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        ReleaseServerSettingsEditorLeaseServer(serverRpcParams.Receive.SenderClientId);
+    }
+
+    [ServerRpc(RequireOwnership = false, Delivery = RpcDelivery.Unreliable)]
+    private void SendServerSettingsEditorHeartbeatServerRpc(ServerRpcParams serverRpcParams = default)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        ulong clientId = serverRpcParams.Receive.SenderClientId;
+        if (serverSettingsEditorClientId.Value != clientId)
+        {
+            return;
+        }
+
+        serverSettingsEditorLastHeartbeatTime = Time.unscaledTime;
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void AdjustServerSettingsFieldServerRpc(int fieldIdValue, float delta, ServerRpcParams serverRpcParams = default)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        ulong clientId = serverRpcParams.Receive.SenderClientId;
+        if (serverSettingsEditorClientId.Value != clientId)
+        {
+            return;
+        }
+
+        if (!Enum.IsDefined(typeof(ServerSettingsFieldId), fieldIdValue))
+        {
+            return;
+        }
+
+        ServerGameSettingsState updatedSettings = serverGameSettings.Value;
+        updatedSettings.AdjustField((ServerSettingsFieldId)fieldIdValue, delta);
+        serverGameSettings.Value = updatedSettings;
+        serverSettingsEditorLastHeartbeatTime = Time.unscaledTime;
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void ResetServerSettingsToDefaultsServerRpc(ServerRpcParams serverRpcParams = default)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        ulong clientId = serverRpcParams.Receive.SenderClientId;
+        if (serverSettingsEditorClientId.Value != clientId)
+        {
+            return;
+        }
+
+        serverGameSettings.Value = ServerGameSettingsState.CreateDefaults();
+        serverSettingsEditorLastHeartbeatTime = Time.unscaledTime;
+    }
+
+    [ServerRpc(RequireOwnership = false)]
     private void SetLobbyReadyServerRpc(bool isReady, ServerRpcParams serverRpcParams = default)
     {
         if (!IsServer || !IsSpawned || CurrentFlowState == MatchFlowState.InGame)
@@ -1658,6 +1903,53 @@ public class GameManager : NetworkBehaviour
 
         RegisterLobbyParticipantServer(clientId);
         EvaluateLobbyCountdownStateServer();
+    }
+
+    private void TickServerSettingsEditorLeaseServer()
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        ulong holderClientId = serverSettingsEditorClientId.Value;
+        if (holderClientId == NoServerSettingsEditorClientId)
+        {
+            return;
+        }
+
+        if (NetworkManager == null || !NetworkManager.ConnectedClients.ContainsKey(holderClientId))
+        {
+            ReleaseServerSettingsEditorLeaseServer(holderClientId);
+            return;
+        }
+
+        if (serverSettingsEditorLastHeartbeatTime < 0f)
+        {
+            serverSettingsEditorLastHeartbeatTime = Time.unscaledTime;
+            return;
+        }
+
+        if (Time.unscaledTime - serverSettingsEditorLastHeartbeatTime > ServerSettingsEditorLeaseTimeoutSeconds)
+        {
+            ReleaseServerSettingsEditorLeaseServer(holderClientId);
+        }
+    }
+
+    private void ReleaseServerSettingsEditorLeaseServer(ulong clientId)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        if (serverSettingsEditorClientId.Value != clientId)
+        {
+            return;
+        }
+
+        serverSettingsEditorClientId.Value = NoServerSettingsEditorClientId;
+        serverSettingsEditorLastHeartbeatTime = -1f;
     }
 
     private void EnsureLocalLobbyPageController()
@@ -2061,6 +2353,8 @@ public class GameManager : NetworkBehaviour
         {
             return;
         }
+
+        TickServerSettingsEditorLeaseServer();
 
         if (CurrentFlowState == MatchFlowState.Countdown)
         {
@@ -2705,6 +2999,7 @@ public class GameManager : NetworkBehaviour
         ReleaseColor(clientId);
         RemovePlayerProfileStateServer(clientId);
         UnregisterLobbyParticipantServer(clientId);
+        ReleaseServerSettingsEditorLeaseServer(clientId);
 
         RemovePlayerDisplayClientRpc(clientId);
 

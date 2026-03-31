@@ -92,19 +92,22 @@ public class MazeGenerator : NetworkBehaviour
     
     void GenerateRandomDimensions()
     {
+        ServerGameSettingsState settings = ResolveCurrentServerSettings();
+        int resolvedMinSize = Mathf.Clamp(settings.MazeMinSize, 2, 32);
+        int resolvedMaxSize = Mathf.Clamp(settings.MazeMaxSize, resolvedMinSize, 32);
         int newWidth, newHeight;
         int attempt = 0;
         int maxAttempts = 100; // Prevents potential infinite loops
 
         do
         {
-            newWidth = Random.Range(minSize, maxSize + 1);
-            newHeight = Random.Range(minSize, maxSize + 1);
+            newWidth = Random.Range(resolvedMinSize, resolvedMaxSize + 1);
+            newHeight = Random.Range(resolvedMinSize, resolvedMaxSize + 1);
             attempt++;
 
             // Prevent width and height from being at extreme opposites
-            if (!((newWidth == maxSize && newHeight == minSize) ||
-                  (newWidth == minSize && newHeight == maxSize)))
+            if (!((newWidth == resolvedMaxSize && newHeight == resolvedMinSize) ||
+                  (newWidth == resolvedMinSize && newHeight == resolvedMaxSize)))
             {
                 break;
             }
@@ -115,8 +118,8 @@ public class MazeGenerator : NetworkBehaviour
         if (attempt == maxAttempts)
         {
             Debug.LogWarning("[MazeGenerator] Failed to generate valid dimensions within attempts. Using default values.");
-            newWidth = Mathf.Clamp(newWidth, minSize, maxSize);
-            newHeight = Mathf.Clamp(newHeight, minSize, maxSize);
+            newWidth = Mathf.Clamp(newWidth, resolvedMinSize, resolvedMaxSize);
+            newHeight = Mathf.Clamp(newHeight, resolvedMinSize, resolvedMaxSize);
         }
 
         width = newWidth;
@@ -591,6 +594,8 @@ public class MazeGenerator : NetworkBehaviour
 
     void RemoveRandomWalls()
     {
+        float resolvedWallRemovalPercentage = Mathf.Clamp01(ResolveCurrentServerSettings().MazeWallRemovalPercent);
+
         // Step 1: Collect all eligible internal walls
         List<(Vector2Int cell, int direction)> internalWalls = new List<(Vector2Int, int)>();
 
@@ -623,7 +628,7 @@ public class MazeGenerator : NetworkBehaviour
 
         // Step 3: Calculate the number of walls to remove
         int totalInternalWalls = internalWalls.Count;
-        int wallsToRemove = Mathf.RoundToInt(totalInternalWalls * wallRemovalPercentage);
+        int wallsToRemove = Mathf.RoundToInt(totalInternalWalls * resolvedWallRemovalPercentage);
 
         // Step 4: Remove the walls without creating fully open tiles
         int removedWallCount = 0;
@@ -875,6 +880,18 @@ public class MazeGenerator : NetworkBehaviour
     private static int GetScoreOrDefault(Dictionary<Vector2Int, int> scores, Vector2Int key, int fallback)
     {
         return scores.TryGetValue(key, out int value) ? value : fallback;
+    }
+
+    private ServerGameSettingsState ResolveCurrentServerSettings()
+    {
+        if (gameManager == null)
+        {
+            gameManager = FindFirstObjectByType<GameManager>();
+        }
+
+        return gameManager != null
+            ? gameManager.GetCurrentServerSettings()
+            : ServerGameSettingsState.CreateDefaults();
     }
 
     private static Vector2Int GetBestOpenNode(List<Vector2Int> openSet, Dictionary<Vector2Int, int> fScore)

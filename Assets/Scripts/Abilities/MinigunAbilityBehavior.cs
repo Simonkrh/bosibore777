@@ -59,15 +59,16 @@ public class MinigunAbilityBehavior : AbilityBehavior
             return AbilityActivationResult.ActivatedKeep;
         }
 
+        ServerGameSettingsState settings = ResolveRuntimeSettings(owner);
         runtime.Configure(
             owner,
             miniBulletPrefab,
-            spreadDegrees,
-            bulletCount,
-            firingDurationSeconds,
-            bulletSpeed,
-            chargeUpSeconds,
-            clearAfterSeconds,
+            settings.MinigunSpreadDegrees,
+            settings.MinigunBulletCount,
+            settings.MinigunFiringDurationSeconds,
+            settings.MinigunBulletSpeed,
+            settings.MinigunChargeUpSeconds,
+            settings.MinigunClearAfterSeconds,
             extraSpawnDistance,
             shotSequenceStride,
             tintProjectilesWithShooterColor,
@@ -116,6 +117,14 @@ public class MinigunAbilityBehavior : AbilityBehavior
         {
             abilityController.ClearEquippedAbilityServer();
         }
+    }
+
+    private ServerGameSettingsState ResolveRuntimeSettings(TankController owner)
+    {
+        GameManager resolvedGameManager = owner != null ? owner.ResolveGameManager() : Object.FindFirstObjectByType<GameManager>();
+        return resolvedGameManager != null
+            ? resolvedGameManager.GetCurrentServerSettings()
+            : ServerGameSettingsState.CreateDefaults();
     }
 
     private void OnValidate()

@@ -93,7 +93,8 @@ public class AbilityPickupSpawner : NetworkBehaviour
                 roundReadyAtTime = Time.time;
             }
 
-            float initialDelay = Mathf.Max(0f, initialSpawnDelaySeconds);
+            ServerGameSettingsState settings = ResolveCurrentServerSettings();
+            float initialDelay = Mathf.Max(0f, settings.AbilityInitialSpawnDelaySeconds);
             if (Time.time < roundReadyAtTime + initialDelay)
             {
                 yield return new WaitForSeconds(0.1f);
@@ -101,14 +102,14 @@ public class AbilityPickupSpawner : NetworkBehaviour
             }
 
             bool megaBombLockdownActive = resolvedGameManager != null && resolvedGameManager.IsMegaBombLockdownActive;
-            bool canSpawnMore = noLimitSpawning || activePickups.Count < Mathf.Max(0, maxActivePickups);
+            bool canSpawnMore = noLimitSpawning || activePickups.Count < Mathf.Max(0, settings.AbilityMaxActivePickups);
             if (!megaBombLockdownActive && canSpawnMore)
             {
                 TrySpawnPickup();
             }
 
-            float minInterval = Mathf.Min(minSpawnIntervalSeconds, maxSpawnIntervalSeconds);
-            float maxInterval = Mathf.Max(minSpawnIntervalSeconds, maxSpawnIntervalSeconds);
+            float minInterval = Mathf.Min(settings.AbilityMinSpawnIntervalSeconds, settings.AbilityMaxSpawnIntervalSeconds);
+            float maxInterval = Mathf.Max(settings.AbilityMinSpawnIntervalSeconds, settings.AbilityMaxSpawnIntervalSeconds);
             float nextSpawnDelay = Random.Range(minInterval, maxInterval);
             yield return new WaitForSeconds(Mathf.Max(0.1f, nextSpawnDelay));
         }
@@ -199,6 +200,16 @@ public class AbilityPickupSpawner : NetworkBehaviour
             }
         }
 
+        GameManager resolvedGameManager = ResolveGameManager();
+        if (resolvedGameManager != null)
+        {
+            AbilityDefinition pickedDefinition = resolvedGameManager.PickAbilityDefinitionForSpawn(candidates);
+            if (pickedDefinition != null)
+            {
+                return pickedDefinition;
+            }
+        }
+
         return AbilityRuntimeDatabase.PickRandomDefinition(candidates);
     }
 
@@ -260,7 +271,7 @@ public class AbilityPickupSpawner : NetworkBehaviour
 
     private bool IsBlockedByNearbyPlayer(Vector2Int candidateCell)
     {
-        int tileRadius = Mathf.Max(0, blockedTileRadiusAroundPlayers);
+        int tileRadius = Mathf.Max(0, ResolveCurrentServerSettings().AbilityBlockedTileRadius);
         if (tileRadius <= 0)
         {
             return false;
@@ -328,5 +339,13 @@ public class AbilityPickupSpawner : NetworkBehaviour
         }
 
         return false;
+    }
+
+    private ServerGameSettingsState ResolveCurrentServerSettings()
+    {
+        GameManager resolvedGameManager = ResolveGameManager();
+        return resolvedGameManager != null
+            ? resolvedGameManager.GetCurrentServerSettings()
+            : ServerGameSettingsState.CreateDefaults();
     }
 }
