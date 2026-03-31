@@ -61,11 +61,9 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
         new FieldDescriptor(Tab.General, ServerSettingsFieldId.MazeWallRemovalPercent, "Maze Openings", 0.05f, s => $"{s.MazeWallRemovalPercent * 100f:0}%"),
         new FieldDescriptor(Tab.General, ServerSettingsFieldId.PlayerMoveSpeed, "Player Move Speed", 0.1f, s => $"{s.PlayerMoveSpeed:0.00}"),
         new FieldDescriptor(Tab.General, ServerSettingsFieldId.PlayerProjectileSpeed, "Standard Shot Speed", 0.1f, s => $"{s.PlayerProjectileSpeed:0.00}"),
-        new FieldDescriptor(Tab.General, ServerSettingsFieldId.PlayerShootCooldown, "Standard Shot Cooldown", 0.05f, s => $"{s.PlayerShootCooldown:0.00}s"),
-        new FieldDescriptor(Tab.General, ServerSettingsFieldId.AbilityInitialSpawnDelaySeconds, "Ability Spawn Delay", 0.25f, s => $"{s.AbilityInitialSpawnDelaySeconds:0.00}s"),
+        new FieldDescriptor(Tab.General, ServerSettingsFieldId.AbilityInitialSpawnDelaySeconds, "Initial Spawn Delay", 0.25f, s => $"{s.AbilityInitialSpawnDelaySeconds:0.00}s"),
         new FieldDescriptor(Tab.General, ServerSettingsFieldId.AbilityMinSpawnIntervalSeconds, "Ability Min Interval", 0.25f, s => $"{s.AbilityMinSpawnIntervalSeconds:0.00}s"),
         new FieldDescriptor(Tab.General, ServerSettingsFieldId.AbilityMaxSpawnIntervalSeconds, "Ability Max Interval", 0.25f, s => $"{s.AbilityMaxSpawnIntervalSeconds:0.00}s"),
-        new FieldDescriptor(Tab.General, ServerSettingsFieldId.AbilityMaxActivePickups, "Max Active Pickups", 1f, s => s.AbilityMaxActivePickups.ToString()),
         new FieldDescriptor(Tab.General, ServerSettingsFieldId.AbilityBlockedTileRadius, "Pickup Safe Radius", 1f, s => $"{s.AbilityBlockedTileRadius} tile(s)"),
         new FieldDescriptor(Tab.Spawn, ServerSettingsFieldId.BombSpawnPercent, "Bomb", 1f, s => FormatSpawnShare(s.BombSpawnPercent), ConvertSpawnShareDeltaToServerDelta),
         new FieldDescriptor(Tab.Spawn, ServerSettingsFieldId.MinigunSpawnPercent, "Minigun", 1f, s => FormatSpawnShare(s.MinigunSpawnPercent), ConvertSpawnShareDeltaToServerDelta),
@@ -74,7 +72,6 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
         new FieldDescriptor(Tab.Bomb, ServerSettingsFieldId.BombProjectileSpeed, "Bomb Speed", 0.1f, s => $"{s.BombProjectileSpeed:0.00}"),
         new FieldDescriptor(Tab.Bomb, ServerSettingsFieldId.BombShardCount, "Explosion Shards", 2f, s => s.BombShardCount.ToString()),
         new FieldDescriptor(Tab.Bomb, ServerSettingsFieldId.BombShardSpeed, "Shard Speed", 0.1f, s => $"{s.BombShardSpeed:0.00}"),
-        new FieldDescriptor(Tab.Bomb, ServerSettingsFieldId.BombShardSpawnRadius, "Explosion Radius", 0.01f, s => $"{s.BombShardSpawnRadius:0.00}"),
         new FieldDescriptor(Tab.Minigun, ServerSettingsFieldId.MinigunSpreadDegrees, "Spread", 1f, s => $"{s.MinigunSpreadDegrees:0} deg"),
         new FieldDescriptor(Tab.Minigun, ServerSettingsFieldId.MinigunBulletCount, "Bullet Count", 1f, s => s.MinigunBulletCount.ToString()),
         new FieldDescriptor(Tab.Minigun, ServerSettingsFieldId.MinigunFiringDurationSeconds, "Firing Duration", 0.1f, s => $"{s.MinigunFiringDurationSeconds:0.0}s"),
@@ -86,11 +83,8 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
         new FieldDescriptor(Tab.Lazer, ServerSettingsFieldId.LazerMaxDistance, "Max Distance", 0.5f, s => $"{s.LazerMaxDistance:0.0}"),
         new FieldDescriptor(Tab.HomingMissile, ServerSettingsFieldId.HomingMissileSpeed, "Missile Speed", 0.1f, s => $"{s.HomingMissileSpeed:0.00}"),
         new FieldDescriptor(Tab.HomingMissile, ServerSettingsFieldId.HomingMissileHomingDelaySeconds, "Homing Delay", 0.1f, s => $"{s.HomingMissileHomingDelaySeconds:0.0}s"),
-        new FieldDescriptor(Tab.HomingMissile, ServerSettingsFieldId.HomingMissileTargetRefreshIntervalSeconds, "Refresh Interval", 0.01f, s => $"{s.HomingMissileTargetRefreshIntervalSeconds:0.00}s"),
         new FieldDescriptor(Tab.HomingMissile, ServerSettingsFieldId.HomingMissileTurnRateDegreesPerSecond, "Turn Rate", 10f, s => $"{s.HomingMissileTurnRateDegreesPerSecond:0} deg/s"),
-        new FieldDescriptor(Tab.HomingMissile, ServerSettingsFieldId.HomingMissileCornerTurnRateMultiplier, "Corner Turn Multiplier", 0.05f, s => $"{s.HomingMissileCornerTurnRateMultiplier:0.00}"),
-        new FieldDescriptor(Tab.HomingMissile, ServerSettingsFieldId.HomingMissileWobbleAmplitudeDegrees, "Wobble Amplitude", 5f, s => $"{s.HomingMissileWobbleAmplitudeDegrees:0} deg"),
-        new FieldDescriptor(Tab.HomingMissile, ServerSettingsFieldId.HomingMissileWobbleFrequencyHz, "Wobble Frequency", 0.25f, s => $"{s.HomingMissileWobbleFrequencyHz:0.00} hz")
+        new FieldDescriptor(Tab.HomingMissile, ServerSettingsFieldId.HomingMissileCornerTurnRateMultiplier, "Corner Turn Multiplier", 0.05f, s => $"{s.HomingMissileCornerTurnRateMultiplier:0.00}")
     };
 
     private readonly Dictionary<Tab, Button> tabButtons = new Dictionary<Tab, Button>();
@@ -108,6 +102,7 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
     private GameManager gameManager;
     private Tab currentTab = Tab.General;
     private bool waitingForLease;
+    private bool waitingForRelease;
     private bool isModalOpen;
     private bool missingReferencesLogged;
     private bool listenersRegistered;
@@ -141,12 +136,18 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
         if (waitingForLease && localHolder)
         {
             waitingForLease = false;
+            waitingForRelease = false;
             isModalOpen = true;
             nextHeartbeatTime = 0f;
+        }
+        else if (waitingForRelease && !localHolder)
+        {
+            waitingForRelease = false;
         }
         else if (heldByOther || !valid)
         {
             waitingForLease = false;
+            waitingForRelease = false;
             if (!localHolder)
             {
                 isModalOpen = false;
@@ -161,35 +162,49 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
 
         string holderName = ResolveHolderName(holderId);
         launcherButton.gameObject.SetActive(valid);
-        launcherStatusLabel.gameObject.SetActive(valid);
         if (!valid)
         {
+            launcherStatusLabel.gameObject.SetActive(false);
             SetModalActive(false);
             return;
         }
 
+        string launcherStatusText;
         if (heldByOther)
         {
             launcherButtonLabel.text = "Settings Locked";
-            launcherStatusLabel.text = $"{holderName} is editing now.";
+            launcherStatusText = $"{holderName} is editing now.";
             launcherButton.interactable = false;
         }
         else if (waitingForLease)
         {
             launcherButtonLabel.text = "Opening...";
-            launcherStatusLabel.text = "Requesting editor lock...";
+            launcherStatusText = "Requesting editor lock...";
+            launcherButton.interactable = false;
+        }
+        else if (waitingForRelease)
+        {
+            launcherButtonLabel.text = "Server Settings";
+            launcherStatusText = string.Empty;
             launcherButton.interactable = false;
         }
         else if (localHolder)
         {
             launcherButtonLabel.text = isModalOpen ? "Close Settings" : "Open Settings";
-            launcherStatusLabel.text = "You hold the editor lock.";
+            launcherStatusText = "You hold the editor lock.";
             launcherButton.interactable = true;
         }
         else
         {
             launcherButtonLabel.text = "Server Settings";
+            launcherStatusText = string.Empty;
             launcherButton.interactable = true;
+        }
+
+        launcherStatusLabel.gameObject.SetActive(!string.IsNullOrEmpty(launcherStatusText));
+        if (launcherStatusLabel.gameObject.activeSelf)
+        {
+            launcherStatusLabel.text = launcherStatusText;
         }
 
         bool showModal = valid && localHolder && isModalOpen;
@@ -246,8 +261,13 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
     {
         ReleaseEditorLockIfHeld();
         waitingForLease = false;
+        waitingForRelease = false;
         isModalOpen = false;
         nextHeartbeatTime = 0f;
+        if (launcherStatusLabel != null)
+        {
+            launcherStatusLabel.gameObject.SetActive(false);
+        }
         SetModalActive(false);
     }
 
@@ -406,6 +426,7 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
 
         if (gameManager.IsServerSettingsEditorHeldByLocalClient())
         {
+            waitingForRelease = false;
             if (isModalOpen)
             {
                 HandleCloseClicked();
@@ -420,6 +441,7 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
         }
 
         waitingForLease = true;
+        waitingForRelease = false;
         gameManager.RequestAcquireServerSettingsEditor();
     }
 
@@ -453,19 +475,26 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
 
     private void HandleCloseClicked()
     {
-        ReleaseEditorLockIfHeld();
+        waitingForRelease = ReleaseEditorLockIfHeld();
         waitingForLease = false;
         isModalOpen = false;
         nextHeartbeatTime = 0f;
+        if (launcherStatusLabel != null)
+        {
+            launcherStatusLabel.gameObject.SetActive(false);
+        }
         SetModalActive(false);
     }
 
-    private void ReleaseEditorLockIfHeld()
+    private bool ReleaseEditorLockIfHeld()
     {
         if (gameManager != null && gameManager.IsServerSettingsEditorHeldByLocalClient())
         {
             gameManager.ReleaseLocalServerSettingsEditor();
+            return true;
         }
+
+        return false;
     }
 
     private void SetModalActive(bool shouldBeActive)
