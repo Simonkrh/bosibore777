@@ -1805,7 +1805,7 @@ public class GameManager : NetworkBehaviour
         ReleaseServerSettingsEditorLeaseServer(serverRpcParams.Receive.SenderClientId);
     }
 
-    [ServerRpc(RequireOwnership = false, Delivery = RpcDelivery.Unreliable)]
+    [ServerRpc(RequireOwnership = false)]
     private void SendServerSettingsEditorHeartbeatServerRpc(ServerRpcParams serverRpcParams = default)
     {
         if (!IsServer || !IsSpawned)

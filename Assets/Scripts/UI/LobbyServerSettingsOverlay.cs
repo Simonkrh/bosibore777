@@ -104,11 +104,19 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
     private bool waitingForLease;
     private bool waitingForRelease;
     private bool isModalOpen;
+    private bool externalHostActive;
     private bool missingReferencesLogged;
     private bool listenersRegistered;
     private float nextHeartbeatTime;
+    private string currentLauncherButtonText = "Server Settings";
+    private string currentLauncherStatusText = string.Empty;
+    private bool currentLauncherInteractable = true;
 
     public bool IsOpen => isModalOpen;
+    public bool ShouldStayAliveWithoutLobbyUi => externalHostActive;
+    public string CurrentLauncherButtonText => currentLauncherButtonText;
+    public string CurrentLauncherStatusText => currentLauncherStatusText;
+    public bool CurrentLauncherInteractable => currentLauncherInteractable;
 
     private void Awake()
     {
@@ -116,6 +124,21 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
         {
             RegisterListeners();
         }
+    }
+
+    private void Update()
+    {
+        if (gameManager == null || !externalHostActive)
+        {
+            return;
+        }
+
+        if (!isModalOpen && !waitingForLease && !waitingForRelease)
+        {
+            return;
+        }
+
+        Refresh(gameManager);
     }
 
     public void Refresh(GameManager currentGameManager)
@@ -164,6 +187,9 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
         launcherButton.gameObject.SetActive(valid);
         if (!valid)
         {
+            currentLauncherButtonText = "Server Settings";
+            currentLauncherStatusText = string.Empty;
+            currentLauncherInteractable = false;
             launcherStatusLabel.gameObject.SetActive(false);
             SetModalActive(false);
             return;
@@ -172,35 +198,38 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
         string launcherStatusText;
         if (heldByOther)
         {
-            launcherButtonLabel.text = "Settings Locked";
-            launcherStatusText = $"{holderName} is editing now.";
-            launcherButton.interactable = false;
+            currentLauncherButtonText = "Settings Locked";
+            currentLauncherStatusText = $"{holderName} is editing now.";
+            currentLauncherInteractable = false;
         }
         else if (waitingForLease)
         {
-            launcherButtonLabel.text = "Opening...";
-            launcherStatusText = "Requesting editor lock...";
-            launcherButton.interactable = false;
+            currentLauncherButtonText = "Opening...";
+            currentLauncherStatusText = "Requesting editor lock...";
+            currentLauncherInteractable = false;
         }
         else if (waitingForRelease)
         {
-            launcherButtonLabel.text = "Server Settings";
-            launcherStatusText = string.Empty;
-            launcherButton.interactable = false;
+            currentLauncherButtonText = "Server Settings";
+            currentLauncherStatusText = string.Empty;
+            currentLauncherInteractable = false;
         }
         else if (localHolder)
         {
-            launcherButtonLabel.text = isModalOpen ? "Close Settings" : "Open Settings";
-            launcherStatusText = "You hold the editor lock.";
-            launcherButton.interactable = true;
+            currentLauncherButtonText = isModalOpen ? "Close Settings" : "Open Settings";
+            currentLauncherStatusText = "You hold the editor lock.";
+            currentLauncherInteractable = true;
         }
         else
         {
-            launcherButtonLabel.text = "Server Settings";
-            launcherStatusText = string.Empty;
-            launcherButton.interactable = true;
+            currentLauncherButtonText = "Server Settings";
+            currentLauncherStatusText = string.Empty;
+            currentLauncherInteractable = true;
         }
 
+        launcherButtonLabel.text = currentLauncherButtonText;
+        launcherStatusText = currentLauncherStatusText;
+        launcherButton.interactable = currentLauncherInteractable;
         launcherStatusLabel.gameObject.SetActive(!string.IsNullOrEmpty(launcherStatusText));
         if (launcherStatusLabel.gameObject.activeSelf)
         {
@@ -259,6 +288,7 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
 
     public void HandleLobbyHidden()
     {
+        externalHostActive = false;
         ReleaseEditorLockIfHeld();
         waitingForLease = false;
         waitingForRelease = false;
@@ -269,6 +299,22 @@ public sealed class LobbyServerSettingsOverlay : MonoBehaviour
             launcherStatusLabel.gameObject.SetActive(false);
         }
         SetModalActive(false);
+    }
+
+    public void SetExternalHostActive(bool active)
+    {
+        externalHostActive = active;
+    }
+
+    public void HandleExternalLauncherClicked()
+    {
+        HandleLauncherClicked();
+    }
+
+    public void HandleExternalHostHidden()
+    {
+        externalHostActive = false;
+        HandleCloseClicked();
     }
 
     public void Dispose()

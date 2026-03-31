@@ -134,7 +134,10 @@ public class LobbyPageController : MonoBehaviour
 
         if (!shouldShowLobbyUi || regularSettingsOpen)
         {
-            serverSettingsOverlay?.HandleLobbyHidden();
+            if (regularSettingsOpen || serverSettingsOverlay == null || !serverSettingsOverlay.ShouldStayAliveWithoutLobbyUi)
+            {
+                serverSettingsOverlay?.HandleLobbyHidden();
+            }
             return;
         }
 
