@@ -50,28 +50,36 @@ public class GameManager : NetworkBehaviour
     private struct PlayerProfileState : INetworkSerializable, IEquatable<PlayerProfileState>
     {
         public ulong ClientId;
+        public FixedString64Bytes PersistentId;
         public FixedString64Bytes DisplayName;
         public Color Color;
+        public int Score;
 
-        public PlayerProfileState(ulong clientId, string displayName, Color color)
+        public PlayerProfileState(ulong clientId, string persistentId, string displayName, Color color, int score)
         {
             ClientId = clientId;
+            PersistentId = new FixedString64Bytes(PlayerProfileStore.SanitizePlayerId(persistentId));
             DisplayName = new FixedString64Bytes(PlayerProfileStore.SanitizePlayerName(displayName));
             Color = PlayerProfileStore.SanitizePlayerColor(color);
+            Score = Mathf.Max(0, score);
         }
 
         public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
         {
             serializer.SerializeValue(ref ClientId);
+            serializer.SerializeValue(ref PersistentId);
             serializer.SerializeValue(ref DisplayName);
             serializer.SerializeValue(ref Color);
+            serializer.SerializeValue(ref Score);
         }
 
         public bool Equals(PlayerProfileState other)
         {
             return ClientId == other.ClientId &&
+                   PersistentId.Equals(other.PersistentId) &&
                    DisplayName.Equals(other.DisplayName) &&
-                   Color.Equals(other.Color);
+                   Color.Equals(other.Color) &&
+                   Score == other.Score;
         }
     }
 
@@ -154,6 +162,8 @@ public class GameManager : NetworkBehaviour
     private readonly HashSet<ulong> eliminatedPlayersThisRound = new HashSet<ulong>();
 
     private Dictionary<ulong, int> playerScores = new Dictionary<ulong, int>();
+    private readonly Dictionary<ulong, string> clientProfileIds = new Dictionary<ulong, string>();
+    private readonly Dictionary<string, int> sessionScoresByProfileId = new Dictionary<string, int>(StringComparer.Ordinal);
 
     private Dictionary<ulong, GameObject> clientIdToPlayer = new Dictionary<ulong, GameObject>();
 
@@ -198,6 +208,7 @@ public class GameManager : NetworkBehaviour
     private Coroutine startNewRoundCoroutine;
     private const float MinigunShotCrossfadeSeconds = 0.035f;
     private const float MegaBombMusicVolumeMultiplier = 0.7f;
+    private string localPersistentPlayerId = string.Empty;
     private string localPreferredPlayerName = PlayerProfileStore.DefaultPlayerName;
     private Color localPreferredPlayerColor = Color.white;
     private bool hasInitializedLocalPlayerProfile;
@@ -1367,6 +1378,7 @@ public class GameManager : NetworkBehaviour
         nextAutoSpawnCheckTime = 0f;
         matchFlowState.Value = (int)MatchFlowState.Lobby;
         lobbyCountdownEndServerTime.Value = 0f;
+        ClearSessionScoreStateServer();
         ClearLobbyParticipantListsServer();
         PopulateLobbyParticipantsFromConnectedClientsServer();
     }
@@ -1469,6 +1481,21 @@ public class GameManager : NetworkBehaviour
         }
 
         return Color.white;
+    }
+
+    public int GetPlayerScore(ulong clientId)
+    {
+        if (TryGetPlayerProfileState(clientId, out PlayerProfileState profileState))
+        {
+            return Mathf.Max(0, profileState.Score);
+        }
+
+        if (playerScores.TryGetValue(clientId, out int score))
+        {
+            return Mathf.Max(0, score);
+        }
+
+        return 0;
     }
 
     public AbilityDefinition PickAbilityDefinitionForSpawn(IList<AbilityDefinition> source)
@@ -1594,6 +1621,7 @@ public class GameManager : NetworkBehaviour
             return;
         }
 
+        localPersistentPlayerId = PlayerProfileStore.LoadOrCreatePlayerId();
         localPreferredPlayerName = PlayerProfileStore.LoadOrCreatePlayerName();
         localPreferredPlayerColor = PlayerProfileStore.LoadOrCreatePlayerColor();
         hasInitializedLocalPlayerProfile = true;
@@ -1608,12 +1636,14 @@ public class GameManager : NetworkBehaviour
         }
 
         SubmitPlayerProfileServerRpc(
+            new FixedString64Bytes(PlayerProfileStore.SanitizePlayerId(localPersistentPlayerId)),
             new FixedString64Bytes(PlayerProfileStore.SanitizePlayerName(localPreferredPlayerName)),
             PlayerProfileStore.SanitizePlayerColor(localPreferredPlayerColor));
     }
 
     [ServerRpc(RequireOwnership = false)]
     private void SubmitPlayerProfileServerRpc(
+        FixedString64Bytes persistentId,
         FixedString64Bytes displayName,
         Color color,
         ServerRpcParams serverRpcParams = default)
@@ -1623,22 +1653,28 @@ public class GameManager : NetworkBehaviour
             return;
         }
 
-        ApplyPlayerProfileServer(serverRpcParams.Receive.SenderClientId, displayName.ToString(), color);
+        ApplyPlayerProfileServer(serverRpcParams.Receive.SenderClientId, persistentId.ToString(), displayName.ToString(), color);
     }
 
-    private void ApplyPlayerProfileServer(ulong clientId, string displayName, Color color)
+    private void ApplyPlayerProfileServer(ulong clientId, string persistentId, string displayName, Color color)
     {
         if (!IsServer || !IsSpawned)
         {
             return;
         }
 
+        string sanitizedPersistentId = PlayerProfileStore.SanitizePlayerId(persistentId);
         string sanitizedName = PlayerProfileStore.SanitizePlayerName(displayName);
         Color sanitizedColor = PlayerProfileStore.SanitizePlayerColor(color);
+        int restoredScore = ResolveSessionScoreForClientServer(clientId, sanitizedPersistentId);
 
+        clientProfileIds[clientId] = sanitizedPersistentId;
         playerColors[clientId] = sanitizedColor;
-        UpsertPlayerProfileStateServer(new PlayerProfileState(clientId, sanitizedName, sanitizedColor));
+        playerScores[clientId] = restoredScore;
+        sessionScoresByProfileId[sanitizedPersistentId] = restoredScore;
+        UpsertPlayerProfileStateServer(new PlayerProfileState(clientId, sanitizedPersistentId, sanitizedName, sanitizedColor, restoredScore));
         AssignIconColorClientRpc(clientId, sanitizedColor);
+        UpdatePlayerScoreClientRpc(clientId, restoredScore);
 
         if (HasSpawnForClient(clientId))
         {
@@ -1656,8 +1692,19 @@ public class GameManager : NetworkBehaviour
         Color fallbackColor = playerColors.TryGetValue(clientId, out Color existingColor)
             ? existingColor
             : PlayerProfileStore.GenerateRandomColor();
+        int fallbackScore = playerScores.TryGetValue(clientId, out int existingScore)
+            ? Mathf.Max(0, existingScore)
+            : 0;
+        string fallbackPersistentId = clientProfileIds.TryGetValue(clientId, out string existingPersistentId)
+            ? PlayerProfileStore.SanitizePlayerId(existingPersistentId)
+            : $"client-{clientId}";
         playerColors[clientId] = fallbackColor;
-        UpsertPlayerProfileStateServer(new PlayerProfileState(clientId, PlayerProfileStore.DefaultPlayerName, fallbackColor));
+        UpsertPlayerProfileStateServer(new PlayerProfileState(
+            clientId,
+            fallbackPersistentId,
+            PlayerProfileStore.DefaultPlayerName,
+            fallbackColor,
+            fallbackScore));
     }
 
     private void UpsertPlayerProfileStateServer(PlayerProfileState profileState)
@@ -1718,6 +1765,51 @@ public class GameManager : NetworkBehaviour
         return false;
     }
 
+    private int ResolveSessionScoreForClientServer(ulong clientId, string persistentId)
+    {
+        if (playerScores.TryGetValue(clientId, out int liveScore))
+        {
+            return Mathf.Max(0, liveScore);
+        }
+
+        if (!string.IsNullOrWhiteSpace(persistentId) &&
+            sessionScoresByProfileId.TryGetValue(persistentId, out int persistedScore))
+        {
+            return Mathf.Max(0, persistedScore);
+        }
+
+        return 0;
+    }
+
+    private void SetPlayerScoreServer(ulong clientId, int score)
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        int sanitizedScore = Mathf.Max(0, score);
+        playerScores[clientId] = sanitizedScore;
+
+        if (clientProfileIds.TryGetValue(clientId, out string persistentId) &&
+            !string.IsNullOrWhiteSpace(persistentId))
+        {
+            sessionScoresByProfileId[persistentId] = sanitizedScore;
+        }
+
+        if (TryGetPlayerProfileState(clientId, out PlayerProfileState profileState))
+        {
+            UpsertPlayerProfileStateServer(new PlayerProfileState(
+                clientId,
+                profileState.PersistentId.ToString(),
+                profileState.DisplayName.ToString(),
+                profileState.Color,
+                sanitizedScore));
+        }
+
+        UpdatePlayerScoreClientRpc(clientId, sanitizedScore);
+    }
+
     private void HandlePlayerProfileStatesChanged(NetworkListEvent<PlayerProfileState> _)
     {
         if (!IsClient)
@@ -1751,6 +1843,16 @@ public class GameManager : NetworkBehaviour
                Mathf.Abs(left.g - right.g) <= 0.0001f &&
                Mathf.Abs(left.b - right.b) <= 0.0001f &&
                Mathf.Abs(left.a - right.a) <= 0.0001f;
+    }
+
+    public void AdjustPlayerScore(ulong targetClientId, int delta)
+    {
+        if (!IsClient || !IsSpawned || delta == 0)
+        {
+            return;
+        }
+
+        AdjustPlayerScoreServerRpc(targetClientId, delta);
     }
 
     public void SetLocalClientReady(bool isReady)
@@ -1863,6 +1965,29 @@ public class GameManager : NetworkBehaviour
 
         serverGameSettings.Value = ServerGameSettingsState.CreateDefaults();
         serverSettingsEditorLastHeartbeatTime = Time.unscaledTime;
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void AdjustPlayerScoreServerRpc(ulong targetClientId, int delta, ServerRpcParams serverRpcParams = default)
+    {
+        if (!IsServer || !IsSpawned || delta == 0)
+        {
+            return;
+        }
+
+        ulong requesterClientId = serverRpcParams.Receive.SenderClientId;
+        if (NetworkManager == null || !NetworkManager.ConnectedClients.ContainsKey(requesterClientId))
+        {
+            return;
+        }
+
+        if (!HasLobbyParticipant(targetClientId))
+        {
+            return;
+        }
+
+        int nextScore = Mathf.Max(0, GetPlayerScore(targetClientId) + delta);
+        SetPlayerScoreServer(targetClientId, nextScore);
     }
 
     [ServerRpc(RequireOwnership = false)]
@@ -2059,6 +2184,14 @@ public class GameManager : NetworkBehaviour
         activeGameplayClientIds?.Clear();
     }
 
+    private void ClearSessionScoreStateServer()
+    {
+        playerScores.Clear();
+        clientProfileIds.Clear();
+        sessionScoresByProfileId.Clear();
+        playerProfileStates?.Clear();
+    }
+
     private void ReplaceGameplayParticipantsWithLobbyParticipantsServer()
     {
         activeGameplayClientIds?.Clear();
@@ -2232,6 +2365,7 @@ public class GameManager : NetworkBehaviour
 
         if (clearLobbyParticipants)
         {
+            ClearSessionScoreStateServer();
             lobbyParticipantClientIds?.Clear();
         }
     }
@@ -2796,7 +2930,7 @@ public class GameManager : NetworkBehaviour
     {
         if (!playerScores.ContainsKey(clientId))
         {
-            playerScores[clientId] = 0; // Initialize score if not present
+            playerScores[clientId] = GetPlayerScore(clientId);
         }
 
         CreatePlayerDisplayClientRpc(clientId, playerScores[clientId]);
@@ -2984,10 +3118,15 @@ public class GameManager : NetworkBehaviour
             alivePlayers.Remove(clientId);
         }
 
-        if (playerScores.ContainsKey(clientId))
+        if (playerScores.TryGetValue(clientId, out int disconnectedScore) &&
+            clientProfileIds.TryGetValue(clientId, out string persistentId) &&
+            !string.IsNullOrWhiteSpace(persistentId))
         {
-            playerScores.Remove(clientId);
+            sessionScoresByProfileId[persistentId] = Mathf.Max(0, disconnectedScore);
         }
+
+        playerScores.Remove(clientId);
+        clientProfileIds.Remove(clientId);
 
         if (clientIdToPlayer.ContainsKey(clientId))
         {
@@ -3324,14 +3463,7 @@ public class GameManager : NetworkBehaviour
         {
             ulong winnerId = alivePlayers.First();
             Debug.Log($"[Server] Round has ended. Winner: {winnerId}");
-
-            if (!playerScores.ContainsKey(winnerId))
-            {
-                playerScores[winnerId] = 0;
-            }
-
-            playerScores[winnerId]++;
-            UpdatePlayerScoreClientRpc(winnerId, playerScores[winnerId]);
+            SetPlayerScoreServer(winnerId, GetPlayerScore(winnerId) + 1);
         }
 
         StartNewRound();

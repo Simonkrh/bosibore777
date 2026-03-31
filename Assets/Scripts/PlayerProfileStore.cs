@@ -3,18 +3,26 @@ using UnityEngine;
 
 public static class PlayerProfileStore
 {
+    private const string SavedProfileIdPrefKey = "PlayerProfile.PersistentId";
     private const string SavedNamePrefKey = "PlayerProfile.DisplayName";
     private const string SavedColorRedPrefKey = "PlayerProfile.Color.R";
     private const string SavedColorGreenPrefKey = "PlayerProfile.Color.G";
     private const string SavedColorBluePrefKey = "PlayerProfile.Color.B";
     private const string SavedColorAlphaPrefKey = "PlayerProfile.Color.A";
     private const string HasInitializedProfilePrefKey = "PlayerProfile.Initialized";
+    private const int MaxPlayerIdLength = 64;
     private const int MaxPlayerNameLength = 18;
 
     private static readonly System.Random random = new System.Random(
         Environment.TickCount ^ DateTime.UtcNow.Ticks.GetHashCode());
 
     public const string DefaultPlayerName = "Player";
+
+    public static string LoadOrCreatePlayerId()
+    {
+        EnsureProfileInitialized();
+        return SanitizePlayerId(PlayerPrefs.GetString(SavedProfileIdPrefKey, GeneratePlayerId()));
+    }
 
     public static string LoadOrCreatePlayerName()
     {
@@ -66,6 +74,20 @@ public static class PlayerProfileStore
         return string.IsNullOrWhiteSpace(trimmedName) ? DefaultPlayerName : trimmedName;
     }
 
+    public static string SanitizePlayerId(string rawId)
+    {
+        string trimmedId = string.IsNullOrWhiteSpace(rawId)
+            ? string.Empty
+            : rawId.Trim();
+
+        if (trimmedId.Length > MaxPlayerIdLength)
+        {
+            trimmedId = trimmedId.Substring(0, MaxPlayerIdLength).Trim();
+        }
+
+        return string.IsNullOrWhiteSpace(trimmedId) ? GeneratePlayerId() : trimmedId;
+    }
+
     public static Color SanitizePlayerColor(Color color)
     {
         return new Color(
@@ -87,12 +109,34 @@ public static class PlayerProfileStore
 
     private static void EnsureProfileInitialized()
     {
-        if (PlayerPrefs.GetInt(HasInitializedProfilePrefKey, 0) == 1)
+        bool changed = false;
+        if (PlayerPrefs.GetInt(HasInitializedProfilePrefKey, 0) != 1)
         {
-            return;
+            PlayerPrefs.SetInt(HasInitializedProfilePrefKey, 1);
+            PlayerPrefs.SetString(SavedNamePrefKey, DefaultPlayerName);
+
+            Color defaultColor = GenerateRandomColor();
+            PlayerPrefs.SetFloat(SavedColorRedPrefKey, defaultColor.r);
+            PlayerPrefs.SetFloat(SavedColorGreenPrefKey, defaultColor.g);
+            PlayerPrefs.SetFloat(SavedColorBluePrefKey, defaultColor.b);
+            PlayerPrefs.SetFloat(SavedColorAlphaPrefKey, defaultColor.a);
+            changed = true;
         }
 
-        SavePlayerName(DefaultPlayerName);
-        SavePlayerColor(GenerateRandomColor());
+        if (!PlayerPrefs.HasKey(SavedProfileIdPrefKey))
+        {
+            PlayerPrefs.SetString(SavedProfileIdPrefKey, GeneratePlayerId());
+            changed = true;
+        }
+
+        if (changed)
+        {
+            PlayerPrefs.Save();
+        }
+    }
+
+    private static string GeneratePlayerId()
+    {
+        return Guid.NewGuid().ToString("N");
     }
 }

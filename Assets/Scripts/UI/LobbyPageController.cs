@@ -304,6 +304,7 @@ public class LobbyPageController : MonoBehaviour
             activePlayerIds.Add(playerId);
 
             bool isLocalPlayer = hasLocalClient && playerId == localClientId;
+            bool canAdjustScore = hasLocalClient && gameManager.HasLobbyParticipant(localClientId);
             if (!playerListItems.TryGetValue(playerId, out LobbyPlayerListItem item) || item == null)
             {
                 item = Instantiate(playerListItemPrefab, playerListContainer);
@@ -316,11 +317,16 @@ public class LobbyPageController : MonoBehaviour
                 displayName = $"{displayName} (You)";
             }
 
+            ulong targetPlayerId = playerId;
             item.SetDisplay(
                 gameManager.GetPlayerDisplayColor(playerId),
                 displayName,
                 ResolvePlayerStatusText(playerId, isLocalPlayer),
-                isLocalPlayer);
+                gameManager.GetPlayerScore(playerId),
+                isLocalPlayer,
+                canAdjustScore,
+                () => HandleAdjustPlayerScore(targetPlayerId, -1),
+                () => HandleAdjustPlayerScore(targetPlayerId, 1));
 
             RectTransform rowTransform = item.transform as RectTransform;
             if (rowTransform != null)
@@ -422,6 +428,16 @@ public class LobbyPageController : MonoBehaviour
         }
 
         gameManager.RandomizeLocalPreferredPlayerColor();
+    }
+
+    private void HandleAdjustPlayerScore(ulong playerId, int delta)
+    {
+        if (gameManager == null)
+        {
+            return;
+        }
+
+        gameManager.AdjustPlayerScore(playerId, delta);
     }
 
     private void EnsureServerSettingsOverlay()
