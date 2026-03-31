@@ -107,6 +107,18 @@ public class PlayerDisplayManager : MonoBehaviour
         }
     }
 
+    public void SetPlayerName(ulong clientId, string playerName)
+    {
+        if (playerDisplays.TryGetValue(clientId, out PlayerDisplay display))
+        {
+            display.SetName(playerName);
+        }
+        else
+        {
+            Debug.LogWarning($"Player display for {clientId} not found.");
+        }
+    }
+
     private void RefreshDisplayLayout()
     {
         if (displayPlane == null)

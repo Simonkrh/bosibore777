@@ -38,8 +38,39 @@ public class GameManager : NetworkBehaviour
     private struct ClientDisplayState
     {
         public int Score;
+        public bool HasScore;
+        public string PlayerName;
+        public bool HasPlayerName;
         public Color IconColor;
         public bool HasIconColor;
+    }
+
+    private struct PlayerProfileState : INetworkSerializable, IEquatable<PlayerProfileState>
+    {
+        public ulong ClientId;
+        public FixedString64Bytes DisplayName;
+        public Color Color;
+
+        public PlayerProfileState(ulong clientId, string displayName, Color color)
+        {
+            ClientId = clientId;
+            DisplayName = new FixedString64Bytes(PlayerProfileStore.SanitizePlayerName(displayName));
+            Color = PlayerProfileStore.SanitizePlayerColor(color);
+        }
+
+        public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+        {
+            serializer.SerializeValue(ref ClientId);
+            serializer.SerializeValue(ref DisplayName);
+            serializer.SerializeValue(ref Color);
+        }
+
+        public bool Equals(PlayerProfileState other)
+        {
+            return ClientId == other.ClientId &&
+                   DisplayName.Equals(other.DisplayName) &&
+                   Color.Equals(other.Color);
+        }
     }
 
     private sealed class MinigunAudioSequenceState
@@ -139,6 +170,7 @@ public class GameManager : NetworkBehaviour
     private NetworkList<ulong> lobbyParticipantClientIds;
     private NetworkList<ulong> readyLobbyClientIds;
     private NetworkList<ulong> activeGameplayClientIds;
+    private NetworkList<PlayerProfileState> playerProfileStates;
     private readonly NetworkVariable<int> matchFlowState = new NetworkVariable<int>(
         (int)MatchFlowState.Lobby,
         NetworkVariableReadPermission.Everyone,
@@ -156,6 +188,9 @@ public class GameManager : NetworkBehaviour
     private Coroutine startNewRoundCoroutine;
     private const float MinigunShotCrossfadeSeconds = 0.035f;
     private const float MegaBombMusicVolumeMultiplier = 0.7f;
+    private string localPreferredPlayerName = PlayerProfileStore.DefaultPlayerName;
+    private Color localPreferredPlayerColor = Color.white;
+    private bool hasInitializedLocalPlayerProfile;
 
     public bool IsMegaBombLockdownActive => activeMegaBombLockdownCount.Value > 0;
     public MatchFlowState CurrentFlowState => (MatchFlowState)matchFlowState.Value;
@@ -197,6 +232,7 @@ public class GameManager : NetworkBehaviour
         lobbyParticipantClientIds = new NetworkList<ulong>();
         readyLobbyClientIds = new NetworkList<ulong>();
         activeGameplayClientIds = new NetworkList<ulong>();
+        playerProfileStates = new NetworkList<PlayerProfileState>();
     }
 
     private void OnEnable()
@@ -223,9 +259,14 @@ public class GameManager : NetworkBehaviour
         AudioSettingsStore.SfxVolumeChanged -= HandleSfxVolumeChanged;
         ResetAllMinigunAudioStatesLocal();
         ResetAllMegaBombMusicStatesLocal();
+        if (playerProfileStates != null)
+        {
+            playerProfileStates.OnListChanged -= HandlePlayerProfileStatesChanged;
+        }
         lobbyParticipantClientIds?.Dispose();
         readyLobbyClientIds?.Dispose();
         activeGameplayClientIds?.Dispose();
+        playerProfileStates?.Dispose();
     }
 
     private void HandleSfxVolumeChanged(float volume)
@@ -1227,9 +1268,16 @@ public class GameManager : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        if (playerProfileStates != null)
+        {
+            playerProfileStates.OnListChanged += HandlePlayerProfileStatesChanged;
+        }
+
         if (IsClient)
         {
+            InitializeLocalPlayerProfileClient();
             EnsureLocalLobbyPageController();
+            RefreshPlayerProfilesClientState();
         }
 
         if (!IsServer)
@@ -1243,6 +1291,14 @@ public class GameManager : NetworkBehaviour
         lobbyCountdownEndServerTime.Value = 0f;
         ClearLobbyParticipantListsServer();
         PopulateLobbyParticipantsFromConnectedClientsServer();
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        if (playerProfileStates != null)
+        {
+            playerProfileStates.OnListChanged -= HandlePlayerProfileStatesChanged;
+        }
     }
 
     public float GetLobbyCountdownSecondsRemaining()
@@ -1300,6 +1356,248 @@ public class GameManager : NetworkBehaviour
         return CurrentFlowState == MatchFlowState.InGame &&
                HasLobbyParticipant(localClientId) &&
                !IsGameplayParticipant(localClientId);
+    }
+
+    public string GetLocalPreferredPlayerName()
+    {
+        return localPreferredPlayerName;
+    }
+
+    public Color GetLocalPreferredPlayerColor()
+    {
+        return localPreferredPlayerColor;
+    }
+
+    public string GetPlayerDisplayName(ulong clientId)
+    {
+        if (TryGetPlayerProfileState(clientId, out PlayerProfileState profileState))
+        {
+            return profileState.DisplayName.ToString();
+        }
+
+        return PlayerProfileStore.DefaultPlayerName;
+    }
+
+    public Color GetPlayerDisplayColor(ulong clientId)
+    {
+        if (TryGetPlayerProfileState(clientId, out PlayerProfileState profileState))
+        {
+            return profileState.Color;
+        }
+
+        if (playerColors.TryGetValue(clientId, out Color color))
+        {
+            return color;
+        }
+
+        return Color.white;
+    }
+
+    public void SetLocalPreferredPlayerName(string rawName)
+    {
+        if (!IsClient || !IsSpawned)
+        {
+            return;
+        }
+
+        string sanitizedName = PlayerProfileStore.SanitizePlayerName(rawName);
+        if (string.Equals(localPreferredPlayerName, sanitizedName, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        localPreferredPlayerName = sanitizedName;
+        PlayerProfileStore.SavePlayerName(localPreferredPlayerName);
+        SubmitLocalPlayerProfileClient();
+    }
+
+    public void RandomizeLocalPreferredPlayerColor()
+    {
+        if (!IsClient || !IsSpawned)
+        {
+            return;
+        }
+
+        SetLocalPreferredPlayerColorClient(PlayerProfileStore.GenerateRandomColor());
+    }
+
+    private void SetLocalPreferredPlayerColorClient(Color color)
+    {
+        Color sanitizedColor = PlayerProfileStore.SanitizePlayerColor(color);
+        if (AreColorsEquivalent(localPreferredPlayerColor, sanitizedColor))
+        {
+            return;
+        }
+
+        localPreferredPlayerColor = sanitizedColor;
+        PlayerProfileStore.SavePlayerColor(localPreferredPlayerColor);
+        SubmitLocalPlayerProfileClient();
+    }
+
+    private void InitializeLocalPlayerProfileClient()
+    {
+        if (!IsClient || hasInitializedLocalPlayerProfile)
+        {
+            return;
+        }
+
+        localPreferredPlayerName = PlayerProfileStore.LoadOrCreatePlayerName();
+        localPreferredPlayerColor = PlayerProfileStore.LoadOrCreatePlayerColor();
+        hasInitializedLocalPlayerProfile = true;
+        SubmitLocalPlayerProfileClient();
+    }
+
+    private void SubmitLocalPlayerProfileClient()
+    {
+        if (!IsClient || !IsSpawned)
+        {
+            return;
+        }
+
+        SubmitPlayerProfileServerRpc(
+            new FixedString64Bytes(PlayerProfileStore.SanitizePlayerName(localPreferredPlayerName)),
+            PlayerProfileStore.SanitizePlayerColor(localPreferredPlayerColor));
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void SubmitPlayerProfileServerRpc(
+        FixedString64Bytes displayName,
+        Color color,
+        ServerRpcParams serverRpcParams = default)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        ApplyPlayerProfileServer(serverRpcParams.Receive.SenderClientId, displayName.ToString(), color);
+    }
+
+    private void ApplyPlayerProfileServer(ulong clientId, string displayName, Color color)
+    {
+        if (!IsServer || !IsSpawned)
+        {
+            return;
+        }
+
+        string sanitizedName = PlayerProfileStore.SanitizePlayerName(displayName);
+        Color sanitizedColor = PlayerProfileStore.SanitizePlayerColor(color);
+
+        playerColors[clientId] = sanitizedColor;
+        UpsertPlayerProfileStateServer(new PlayerProfileState(clientId, sanitizedName, sanitizedColor));
+        AssignIconColorClientRpc(clientId, sanitizedColor);
+
+        if (HasSpawnForClient(clientId))
+        {
+            AssignTankColor(clientId, sanitizedColor);
+        }
+    }
+
+    private void EnsurePlayerProfileStateServer(ulong clientId)
+    {
+        if (!IsServer || !IsSpawned || TryGetPlayerProfileState(clientId, out _))
+        {
+            return;
+        }
+
+        Color fallbackColor = playerColors.TryGetValue(clientId, out Color existingColor)
+            ? existingColor
+            : PlayerProfileStore.GenerateRandomColor();
+        playerColors[clientId] = fallbackColor;
+        UpsertPlayerProfileStateServer(new PlayerProfileState(clientId, PlayerProfileStore.DefaultPlayerName, fallbackColor));
+    }
+
+    private void UpsertPlayerProfileStateServer(PlayerProfileState profileState)
+    {
+        if (!IsServer || playerProfileStates == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < playerProfileStates.Count; i++)
+        {
+            if (playerProfileStates[i].ClientId != profileState.ClientId)
+            {
+                continue;
+            }
+
+            playerProfileStates[i] = profileState;
+            return;
+        }
+
+        playerProfileStates.Add(profileState);
+    }
+
+    private void RemovePlayerProfileStateServer(ulong clientId)
+    {
+        if (!IsServer || playerProfileStates == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < playerProfileStates.Count; i++)
+        {
+            if (playerProfileStates[i].ClientId != clientId)
+            {
+                continue;
+            }
+
+            playerProfileStates.RemoveAt(i);
+            return;
+        }
+    }
+
+    private bool TryGetPlayerProfileState(ulong clientId, out PlayerProfileState profileState)
+    {
+        if (playerProfileStates != null)
+        {
+            for (int i = 0; i < playerProfileStates.Count; i++)
+            {
+                if (playerProfileStates[i].ClientId == clientId)
+                {
+                    profileState = playerProfileStates[i];
+                    return true;
+                }
+            }
+        }
+
+        profileState = default;
+        return false;
+    }
+
+    private void HandlePlayerProfileStatesChanged(NetworkListEvent<PlayerProfileState> _)
+    {
+        if (!IsClient)
+        {
+            return;
+        }
+
+        RefreshPlayerProfilesClientState();
+    }
+
+    private void RefreshPlayerProfilesClientState()
+    {
+        if (!IsClient || playerProfileStates == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < playerProfileStates.Count; i++)
+        {
+            PlayerProfileState profileState = playerProfileStates[i];
+            StageNameForClientUi(profileState.ClientId, profileState.DisplayName.ToString());
+            StageColorForClientUi(profileState.ClientId, profileState.Color);
+        }
+
+        TryApplyClientDisplayState();
+    }
+
+    private static bool AreColorsEquivalent(Color left, Color right)
+    {
+        return Mathf.Abs(left.r - right.r) <= 0.0001f &&
+               Mathf.Abs(left.g - right.g) <= 0.0001f &&
+               Mathf.Abs(left.b - right.b) <= 0.0001f &&
+               Mathf.Abs(left.a - right.a) <= 0.0001f;
     }
 
     public void SetLocalClientReady(bool isReady)
@@ -1393,6 +1691,8 @@ public class GameManager : NetworkBehaviour
 
     private void RegisterLobbyParticipantServer(ulong clientId)
     {
+        EnsurePlayerProfileStateServer(clientId);
+
         if (lobbyParticipantClientIds == null || lobbyParticipantClientIds.Contains(clientId))
         {
             return;
@@ -1794,6 +2094,20 @@ public class GameManager : NetworkBehaviour
         }
 
         state.Score = score;
+        state.HasScore = true;
+        clientDisplayStates[clientId] = state;
+        clientDisplayStateDirty = true;
+    }
+
+    private void StageNameForClientUi(ulong clientId, string playerName)
+    {
+        if (!clientDisplayStates.TryGetValue(clientId, out ClientDisplayState state))
+        {
+            state = new ClientDisplayState();
+        }
+
+        state.PlayerName = PlayerProfileStore.SanitizePlayerName(playerName);
+        state.HasPlayerName = true;
         clientDisplayStates[clientId] = state;
         clientDisplayStateDirty = true;
     }
@@ -1845,18 +2159,26 @@ public class GameManager : NetworkBehaviour
             ulong clientId = kvp.Key;
             ClientDisplayState state = kvp.Value;
 
-            if (manager.HasPlayerDisplay(clientId))
+            if (state.HasScore)
             {
-                manager.UpdatePlayerScore(clientId, state.Score);
-            }
-            else
-            {
-                manager.CreatePlayerDisplay(clientId, state.Score);
-            }
+                if (manager.HasPlayerDisplay(clientId))
+                {
+                    manager.UpdatePlayerScore(clientId, state.Score);
+                }
+                else
+                {
+                    manager.CreatePlayerDisplay(clientId, state.Score);
+                }
 
-            if (state.HasIconColor)
-            {
-                manager.SetIconColor(clientId, state.IconColor);
+                if (state.HasPlayerName)
+                {
+                    manager.SetPlayerName(clientId, state.PlayerName);
+                }
+
+                if (state.HasIconColor)
+                {
+                    manager.SetIconColor(clientId, state.IconColor);
+                }
             }
         }
 
@@ -1904,40 +2226,26 @@ public class GameManager : NetworkBehaviour
 
     private Color AssignColor(ulong clientId)
     {
-
         if (playerColors.TryGetValue(clientId, out Color existingColor))
         {
             return existingColor;
         }
 
-        Color assignedColor;
-
-        if (availablePrimaryColors.Count > 0)
+        if (TryGetPlayerProfileState(clientId, out PlayerProfileState profileState))
         {
-            // Assign the first available primary color
-            assignedColor = availablePrimaryColors[0];
-            availablePrimaryColors.RemoveAt(0);
-        }
-        else
-        {
-            // Assign a random color
-            assignedColor = UnityEngine.Random.ColorHSV();
+            playerColors[clientId] = profileState.Color;
+            return profileState.Color;
         }
 
+        Color assignedColor = PlayerProfileStore.GenerateRandomColor();
         playerColors[clientId] = assignedColor;
-
         return assignedColor;
     }
 
     private void ReleaseColor(ulong clientId)
     {
-        if (playerColors.TryGetValue(clientId, out Color color))
+        if (playerColors.ContainsKey(clientId))
         {
-            if (primaryColors.Contains(color))
-            {
-                availablePrimaryColors.Add(color);
-            }
-
             playerColors.Remove(clientId);
         }
     }
@@ -2252,6 +2560,11 @@ public class GameManager : NetworkBehaviour
         for (int i = 0; i < count; i++)
         {
             StageScoreForClientUi(clientIds[i], scores[i]);
+
+            if (TryGetPlayerProfileState(clientIds[i], out PlayerProfileState profileState))
+            {
+                StageNameForClientUi(clientIds[i], profileState.DisplayName.ToString());
+            }
         }
 
         TryApplyClientDisplayState();
@@ -2303,6 +2616,12 @@ public class GameManager : NetworkBehaviour
         if (!IsClient) return;
 
         StageScoreForClientUi(clientId, initialScore);
+
+        if (TryGetPlayerProfileState(clientId, out PlayerProfileState profileState))
+        {
+            StageNameForClientUi(clientId, profileState.DisplayName.ToString());
+        }
+
         TryApplyClientDisplayState();
     }
 
@@ -2384,6 +2703,7 @@ public class GameManager : NetworkBehaviour
         eliminatedPlayersThisRound.Remove(clientId);
 
         ReleaseColor(clientId);
+        RemovePlayerProfileStateServer(clientId);
         UnregisterLobbyParticipantServer(clientId);
 
         RemovePlayerDisplayClientRpc(clientId);

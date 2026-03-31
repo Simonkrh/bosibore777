@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text;
 using TMPro;
 using Unity.Netcode;
 using UnityEngine;
@@ -10,20 +9,39 @@ public class LobbyPageController : MonoBehaviour
     [SerializeField] private GameObject contentRoot;
     [SerializeField] private TMP_Text titleLabel;
     [SerializeField] private TMP_Text statusLabel;
-    [SerializeField] private TMP_Text playerListLabel;
+    [SerializeField] private TMP_InputField nameInputField;
+    [SerializeField] private Image colorPreviewImage;
+    [SerializeField] private Button randomizeColorButton;
+    [SerializeField] private RectTransform playerListContainer;
+    [SerializeField] private LobbyPlayerListItem playerListItemPrefab;
+    [SerializeField] private TMP_Text emptyPlayerListLabel;
     [SerializeField] private Button primaryActionButton;
     [SerializeField] private TMP_Text primaryActionButtonLabel;
+    [SerializeField] private float playerRowHeight = 62f;
+    [SerializeField] private float playerRowSpacing = 8f;
 
     private readonly List<ulong> playerIdsBuffer = new List<ulong>();
-    private readonly StringBuilder playerListBuilder = new StringBuilder();
+    private readonly Dictionary<ulong, LobbyPlayerListItem> playerListItems = new Dictionary<ulong, LobbyPlayerListItem>();
 
     private GameManager gameManager;
+    private bool suppressNameInputCallback;
 
     private void Awake()
     {
         if (primaryActionButton != null)
         {
             primaryActionButton.onClick.AddListener(HandlePrimaryActionClicked);
+        }
+
+        if (randomizeColorButton != null)
+        {
+            randomizeColorButton.onClick.AddListener(HandleRandomizeColorClicked);
+        }
+
+        if (nameInputField != null)
+        {
+            nameInputField.characterLimit = 18;
+            nameInputField.onEndEdit.AddListener(HandleNameInputSubmitted);
         }
     }
 
@@ -33,6 +51,26 @@ public class LobbyPageController : MonoBehaviour
         {
             primaryActionButton.onClick.RemoveListener(HandlePrimaryActionClicked);
         }
+
+        if (randomizeColorButton != null)
+        {
+            randomizeColorButton.onClick.RemoveListener(HandleRandomizeColorClicked);
+        }
+
+        if (nameInputField != null)
+        {
+            nameInputField.onEndEdit.RemoveListener(HandleNameInputSubmitted);
+        }
+
+        foreach (KeyValuePair<ulong, LobbyPlayerListItem> entry in playerListItems)
+        {
+            if (entry.Value != null)
+            {
+                Destroy(entry.Value.gameObject);
+            }
+        }
+
+        playerListItems.Clear();
     }
 
     public void Initialize(GameManager sourceGameManager)
@@ -106,10 +144,8 @@ public class LobbyPageController : MonoBehaviour
             statusLabel.text = BuildStatusText(canJoinCurrentGame);
         }
 
-        if (playerListLabel != null)
-        {
-            playerListLabel.text = BuildPlayerListText(localClientId, hasLocalClient);
-        }
+        RefreshProfileEditor(hasLocalParticipant);
+        RefreshPlayerList(localClientId, hasLocalClient);
 
         if (primaryActionButton == null || primaryActionButtonLabel == null)
         {
@@ -160,54 +196,133 @@ public class LobbyPageController : MonoBehaviour
         return $"Press ready to start. {readyCount}/{participantCount} ready.";
     }
 
-    private string BuildPlayerListText(ulong localClientId, bool hasLocalClient)
+    private void RefreshProfileEditor(bool hasLocalParticipant)
     {
+        string localPlayerName = gameManager != null
+            ? gameManager.GetLocalPreferredPlayerName()
+            : PlayerProfileStore.DefaultPlayerName;
+        Color localPlayerColor = gameManager != null
+            ? gameManager.GetLocalPreferredPlayerColor()
+            : Color.white;
+
+        if (nameInputField != null)
+        {
+            nameInputField.interactable = hasLocalParticipant;
+            if (!nameInputField.isFocused &&
+                !string.Equals(nameInputField.text, localPlayerName, System.StringComparison.Ordinal))
+            {
+                suppressNameInputCallback = true;
+                nameInputField.SetTextWithoutNotify(localPlayerName);
+                suppressNameInputCallback = false;
+            }
+        }
+
+        if (colorPreviewImage != null)
+        {
+            colorPreviewImage.color = localPlayerColor;
+        }
+
+        if (randomizeColorButton != null)
+        {
+            randomizeColorButton.interactable = hasLocalParticipant;
+        }
+    }
+
+    private void RefreshPlayerList(ulong localClientId, bool hasLocalClient)
+    {
+        if (playerListContainer == null || playerListItemPrefab == null || gameManager == null)
+        {
+            if (emptyPlayerListLabel != null)
+            {
+                emptyPlayerListLabel.gameObject.SetActive(true);
+            }
+
+            return;
+        }
+
         playerIdsBuffer.Clear();
         gameManager.GetLobbyParticipantIds(playerIdsBuffer);
         playerIdsBuffer.Sort();
 
-        if (playerIdsBuffer.Count <= 0)
+        if (emptyPlayerListLabel != null)
         {
-            return "No players connected.";
+            emptyPlayerListLabel.gameObject.SetActive(playerIdsBuffer.Count <= 0);
         }
 
-        playerListBuilder.Clear();
+        HashSet<ulong> activePlayerIds = new HashSet<ulong>();
         for (int i = 0; i < playerIdsBuffer.Count; i++)
         {
             ulong playerId = playerIdsBuffer[i];
+            activePlayerIds.Add(playerId);
+
             bool isLocalPlayer = hasLocalClient && playerId == localClientId;
-
-            playerListBuilder.Append("Player ");
-            playerListBuilder.Append(playerId);
-
-            if (isLocalPlayer)
+            if (!playerListItems.TryGetValue(playerId, out LobbyPlayerListItem item) || item == null)
             {
-                playerListBuilder.Append(" (You)");
+                item = Instantiate(playerListItemPrefab, playerListContainer);
+                playerListItems[playerId] = item;
             }
 
-            playerListBuilder.Append("  ");
-            playerListBuilder.Append(ResolvePlayerStatusText(playerId, isLocalPlayer));
-
-            if (i < playerIdsBuffer.Count - 1)
+            string displayName = gameManager.GetPlayerDisplayName(playerId);
+            if (isLocalPlayer)
             {
-                playerListBuilder.AppendLine();
+                displayName = $"{displayName} (You)";
+            }
+
+            item.SetDisplay(
+                gameManager.GetPlayerDisplayColor(playerId),
+                displayName,
+                ResolvePlayerStatusText(playerId, isLocalPlayer),
+                isLocalPlayer);
+
+            RectTransform rowTransform = item.transform as RectTransform;
+            if (rowTransform != null)
+            {
+                rowTransform.anchorMin = new Vector2(0f, 1f);
+                rowTransform.anchorMax = new Vector2(1f, 1f);
+                rowTransform.pivot = new Vector2(0.5f, 1f);
+                rowTransform.anchoredPosition = new Vector2(0f, -i * (playerRowHeight + playerRowSpacing));
+                rowTransform.sizeDelta = new Vector2(0f, playerRowHeight);
             }
         }
 
-        return playerListBuilder.ToString();
+        List<ulong> stalePlayerIds = new List<ulong>();
+        foreach (KeyValuePair<ulong, LobbyPlayerListItem> entry in playerListItems)
+        {
+            if (!activePlayerIds.Contains(entry.Key))
+            {
+                if (entry.Value != null)
+                {
+                    Destroy(entry.Value.gameObject);
+                }
+
+                stalePlayerIds.Add(entry.Key);
+            }
+        }
+
+        for (int i = 0; i < stalePlayerIds.Count; i++)
+        {
+            playerListItems.Remove(stalePlayerIds[i]);
+        }
+
+        float contentHeight = playerIdsBuffer.Count <= 0
+            ? 0f
+            : (playerIdsBuffer.Count * playerRowHeight) + ((playerIdsBuffer.Count - 1) * playerRowSpacing);
+        Vector2 containerSize = playerListContainer.sizeDelta;
+        containerSize.y = contentHeight;
+        playerListContainer.sizeDelta = containerSize;
     }
 
     private string ResolvePlayerStatusText(ulong playerId, bool isLocalPlayer)
     {
         if (gameManager.IsGameplayParticipant(playerId))
         {
-            return "READY | IN GAME";
+            return "READY - IN GAME";
         }
 
         if (gameManager.CurrentFlowState == GameManager.MatchFlowState.Countdown &&
             gameManager.IsLobbyParticipantReady(playerId))
         {
-            return "READY | STARTING";
+            return "READY - STARTING";
         }
 
         if (gameManager.IsLobbyParticipantReady(playerId))
@@ -239,5 +354,25 @@ public class LobbyPageController : MonoBehaviour
         ulong localClientId = NetworkManager.Singleton.LocalClientId;
         bool nextReadyState = !gameManager.IsLobbyParticipantReady(localClientId);
         gameManager.SetLocalClientReady(nextReadyState);
+    }
+
+    private void HandleNameInputSubmitted(string rawName)
+    {
+        if (suppressNameInputCallback || gameManager == null)
+        {
+            return;
+        }
+
+        gameManager.SetLocalPreferredPlayerName(rawName);
+    }
+
+    private void HandleRandomizeColorClicked()
+    {
+        if (gameManager == null)
+        {
+            return;
+        }
+
+        gameManager.RandomizeLocalPreferredPlayerColor();
     }
 }
